@@ -42,8 +42,8 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Configure path aliases (`@/`, `@repo/db`, `@repo/ai`, `@repo/fsrs`, `@repo/shared`)
 - [x] **P0** Create `.env.example` with all required env vars (Supabase URL/key, OpenAI key, Anthropic key, Upstash Redis URL, Langfuse keys)
 - [x] **P0** Configure ESLint (strict TypeScript rules) + Prettier
-- [ ] **P1** Configure Husky + lint-staged (pre-commit: lint + format)
-- [ ] **P1** Add `docker-compose.yml` for local Redis (BullMQ development)
+- [x] **P1** Configure Husky + lint-staged (pre-commit: lint + format)
+- [x] **P1** Add `docker-compose.yml` for local Redis (BullMQ development)
 - [ ] **P1** Create Railway project for BullMQ workers (Vercel cannot host persistent processes — workers must run on Railway from day 1)
 
 **Acceptance:** `pnpm install && pnpm dev` starts the app at `localhost:3000` with a blank page. All packages build cleanly.
@@ -51,10 +51,10 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 ### 0.2 Supabase Setup
 
 - [ ] **P0** Create Supabase project (select region closest to target users)
-- [ ] **P0** Enable pgvector extension (`CREATE EXTENSION IF NOT EXISTS vector`)
-- [ ] **P0** Configure Supabase Auth — enable Email/Password + Google OAuth + GitHub OAuth + Magic Link
-- [ ] **P0** Create storage bucket `content-uploads` (private, 50 MB file size limit, allowed MIME types: PDF, PPTX, DOCX, MP3, MP4, WAV, PNG, JPG, WEBP)
-- [ ] **P0** Set up Supabase CLI for local development (`supabase init`, `supabase start`)
+- [~] **P0** Enable pgvector extension (`CREATE EXTENSION IF NOT EXISTS vector`) — SQL migration written, pending Supabase project
+- [~] **P0** Configure Supabase Auth — enable Email/Password + Google OAuth + GitHub OAuth + Magic Link — code ready, pending Supabase project
+- [~] **P0** Create storage bucket `content-uploads` (private, 50 MB file size limit, allowed MIME types: PDF, PPTX, DOCX, MP3, MP4, WAV, PNG, JPG, WEBP) — SQL migration written
+- [~] **P0** Set up Supabase CLI for local development (`supabase init`, `supabase start`) — config.toml created
 - [ ] **P1** Configure storage lifecycle policy (delete orphaned files after 30 days)
 
 **Acceptance:** Supabase dashboard accessible. Auth login flow works. File upload to storage bucket succeeds. pgvector extension confirmed via `SELECT * FROM pg_extension WHERE extname = 'vector'`.
@@ -72,9 +72,9 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Create migration: `mentor_conversations` table (§7.6) — `user_id`, `learning_object_id`, `title`, `messages JSONB`, `teaching_objective`
 - [x] **P1** Create migration: `learning_goals` + `curriculum_items` tables (§7.7)
 - [x] **P0** Add all indexes as specified in the architecture doc
-- [ ] **P0** Enable Row-Level Security on ALL tables — use Supabase CLI raw SQL migrations for RLS policies (Drizzle doesn't natively support RLS; keep schema in Drizzle, policies in `.sql` migration files via `supabase migration new`)
-- [ ] **P0** RLS policies: users can only CRUD their own data (`auth.uid() = user_id`). Concepts table is read-accessible to all authenticated users.
-- [ ] **P0** Seed script: create test user + sample learning object + sample concepts for dev
+- [x] **P0** Enable Row-Level Security on ALL tables — use Supabase CLI raw SQL migrations for RLS policies (Drizzle doesn't natively support RLS; keep schema in Drizzle, policies in `.sql` migration files via `supabase migration new`)
+- [x] **P0** RLS policies: users can only CRUD their own data (`auth.uid() = user_id`). Concepts table is read-accessible to all authenticated users.
+- [x] **P0** Seed script: create test user + sample learning object + sample concepts for dev
 
 **Acceptance:** `pnpm db:migrate` runs cleanly. `pnpm db:seed` populates test data. RLS verified: user A cannot read user B's learning objects via Supabase client.
 
@@ -107,7 +107,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 ### 0.6 CI/CD Pipeline
 
-- [ ] **P1** GitHub Actions workflow: `ci.yml` — on PR: lint → typecheck → build → test
+- [x] **P1** GitHub Actions workflow: `ci.yml` — on PR: lint → typecheck → build → test
 - [ ] **P1** Vercel project connected to repo — auto-deploy `main` branch
 - [ ] **P1** Environment variables configured in Vercel dashboard (Supabase, API keys)
 - [ ] **P2** Branch preview deployments enabled on Vercel

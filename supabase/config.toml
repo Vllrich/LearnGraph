@@ -1,0 +1,27 @@
+[project]
+id = ""
+
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+
+[auth.external.google]
+enabled = true
+
+[auth.external.github]
+enabled = true
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
