@@ -26,7 +26,7 @@ export function AppShell({ children, user }: AppShellProps) {
         <main
           className={cn(
             "min-h-screen pb-20 transition-[margin-left] duration-200 ease-in-out lg:pb-0",
-            collapsed ? "lg:ml-16" : "lg:ml-64"
+            collapsed ? "lg:ml-14" : "lg:ml-56"
           )}
         >
           {children}

@@ -4,4 +4,6 @@ import { PRIMARY_LLM, FALLBACK_LLM, EMBEDDING_MODEL } from "@repo/shared";
 
 export const anthropicModel = anthropic(PRIMARY_LLM);
 export const openaiModel = openai(FALLBACK_LLM);
-export const embeddingModel = openai.embedding(EMBEDDING_MODEL);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const embeddingModel = openai.embedding(EMBEDDING_MODEL) as any;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Source_Serif_4, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TRPCProvider } from "@/trpc/client";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -45,6 +46,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TRPCProvider>{children}</TRPCProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

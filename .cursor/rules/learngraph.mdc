@@ -9,7 +9,7 @@ alwaysApply: true
 ## Monorepo Structure
 - `apps/web` — Next.js 16 App Router application
 - `packages/db` — Drizzle ORM schema and database client
-- `packages/ai` — LLM orchestration (Vercel AI SDK)
+- `packages/ai` — LLM orchestration (Vercel AI SDK) + ingestion pipeline (`src/ingestion/`)
 - `packages/fsrs` — FSRS-5 spaced repetition engine
 - `packages/shared` — Shared types, constants, utilities
 
@@ -37,9 +37,12 @@ alwaysApply: true
 - pgvector for embeddings (1536 dimensions)
 - All tables have `created_at` timestamp with timezone
 
-## AI
+## AI & Ingestion
 - Primary: Claude Sonnet 4.5 (teaching, summarization, concept extraction)
 - Fallback: GPT-4.1-mini (flashcards, classification)
-- Embeddings: text-embedding-3-small (1536 dimensions)
-- All LLM calls must use structured output (Zod schema)
-- Mentor responses grounded in RAG-retrieved chunks
+- Embeddings: text-embedding-3-small (1536 dims) via Vercel AI SDK `embedMany`
+- All LLM calls use `generateObject` with Zod schema — never raw text completion
+- Ingestion pipeline: `packages/ai/src/ingestion/pipeline.ts` orchestrates extract → chunk → embed + summarize + concepts
+- Semantic chunking: headers → paragraphs → sentences, 512 max tokens, 100 overlap
+- Concept dedup: canonical name match + embedding cosine similarity ≥ 0.92
+- Toasts: `sonner` — import from `@/components/ui/sonner`

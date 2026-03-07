@@ -49,3 +49,9 @@ next-env.d.ts
 # OS
 .DS_Store
 Desktop.ini
+
+# playwright mcp
+.playwright-mcp/
+
+# temp screenshots
+youlearn-*.png

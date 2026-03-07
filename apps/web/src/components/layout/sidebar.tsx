@@ -5,13 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   Library,
-  MessageCircle,
   Zap,
-  Target,
   BarChart3,
-  Globe,
   LogOut,
   ChevronLeft,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -22,16 +20,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/library", label: "Library", icon: Library },
-  { href: "/mentor", label: "Mentor", icon: MessageCircle },
   { href: "/review", label: "Review", icon: Zap },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/stats", label: "Stats", icon: BarChart3 },
-  { href: "/graph", label: "Graph", icon: Globe },
+  { href: "/stats", label: "Progress", icon: BarChart3 },
 ] as const;
 
 type SidebarProps = {
@@ -64,23 +57,28 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-sidebar-border bg-sidebar-background transition-[width] duration-200 ease-in-out lg:flex",
-        collapsed ? "w-16" : "w-64"
+        "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border/40 bg-background transition-[width] duration-200 ease-in-out lg:flex",
+        collapsed ? "w-14" : "w-56"
       )}
     >
-      <div className={cn("flex h-14 items-center border-b border-sidebar-border px-4", collapsed && "justify-center px-0")}>
-        {!collapsed && (
+      {/* Logo */}
+      <div className={cn("flex h-12 items-center border-b border-border/40 px-3", collapsed && "justify-center px-0")}>
+        {!collapsed ? (
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-brand-primary" />
-            <span className="text-lg font-bold tracking-tight">LearnGraph</span>
+            <div className="flex size-6 items-center justify-center rounded-md gradient-brand">
+              <Sparkles className="size-3 text-white" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight">LearnGraph</span>
           </Link>
-        )}
-        {collapsed && (
-          <div className="h-7 w-7 rounded-lg bg-brand-primary" />
+        ) : (
+          <Link href="/" className="flex size-6 items-center justify-center rounded-md gradient-brand">
+            <Sparkles className="size-3 text-white" />
+          </Link>
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label="Main navigation">
+      {/* Nav */}
+      <nav className="flex-1 space-y-0.5 p-2" aria-label="Main navigation">
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -90,14 +88,14 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  ? "bg-primary/8 text-primary"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                 collapsed && "justify-center px-0"
               )}
             >
-              <Icon className="size-5 shrink-0" />
+              <Icon className="size-[18px] shrink-0" />
               {!collapsed && <span>{item.label}</span>}
             </Link>
           );
@@ -106,7 +104,7 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right">{item.label}</TooltipContent>
+                <TooltipContent side="right" className="text-xs">{item.label}</TooltipContent>
               </Tooltip>
             );
           }
@@ -115,39 +113,35 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
         })}
       </nav>
 
-      <div className="space-y-2 border-t border-sidebar-border p-2">
+      {/* Footer */}
+      <div className="border-t border-border/40 p-2">
         <Button
           variant="ghost"
-          size={collapsed ? "icon" : "sm"}
-          className={cn("w-full", !collapsed && "justify-start gap-3")}
+          size="sm"
+          className={cn("w-full h-8", !collapsed ? "justify-start gap-2 px-2.5" : "px-0")}
           onClick={onToggle}
         >
-          <ChevronLeft
-            className={cn("size-4 transition-transform", collapsed && "rotate-180")}
-          />
-          {!collapsed && <span className="text-sm">Collapse</span>}
+          <ChevronLeft className={cn("size-3.5 transition-transform", collapsed && "rotate-180")} />
+          {!collapsed && <span className="text-xs text-muted-foreground">Collapse</span>}
         </Button>
 
-        <Separator />
-
-        <div className={cn("flex items-center gap-3 rounded-lg px-3 py-2", collapsed && "justify-center px-0")}>
-          <Avatar className="size-7">
-            <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
+        <div className={cn("mt-1 flex items-center gap-2.5 rounded-lg px-2.5 py-2", collapsed && "justify-center px-0")}>
+          <Avatar className="size-6">
+            <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
           </Avatar>
           {!collapsed && (
-            <div className="flex-1 truncate">
-              <p className="truncate text-sm font-medium">{user?.displayName ?? "User"}</p>
-              <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+            <div className="flex-1 min-w-0">
+              <p className="truncate text-[12px] font-medium">{user?.displayName ?? "User"}</p>
             </div>
           )}
           {!collapsed && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-xs" onClick={handleLogout}>
-                  <LogOut className="size-3.5" />
+                <Button variant="ghost" size="sm" className="size-6 p-0" onClick={handleLogout}>
+                  <LogOut className="size-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Sign out</TooltipContent>
+              <TooltipContent className="text-xs">Sign out</TooltipContent>
             </Tooltip>
           )}
         </div>
