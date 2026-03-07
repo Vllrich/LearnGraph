@@ -1,0 +1,45 @@
+---
+description: LearnGraph project conventions and coding standards
+globs: **/*.{ts,tsx,css,json}
+alwaysApply: true
+---
+
+# LearnGraph Coding Standards
+
+## Monorepo Structure
+- `apps/web` — Next.js 16 App Router application
+- `packages/db` — Drizzle ORM schema and database client
+- `packages/ai` — LLM orchestration (Vercel AI SDK)
+- `packages/fsrs` — FSRS-5 spaced repetition engine
+- `packages/shared` — Shared types, constants, utilities
+
+## Tailwind v4
+- All design tokens defined via `@theme` in `globals.css`
+- NO `tailwind.config.ts` — Tailwind v4 is CSS-native
+- Use CSS custom properties for colors (`:root` / `.dark`)
+- Use `hsl(var(--token))` pattern for color values
+
+## TypeScript
+- Strict mode enabled everywhere
+- All tRPC procedure inputs validated with Zod schemas
+- Prefer `type` over `interface` for data shapes
+- Export inferred types from Drizzle: `typeof table.$inferSelect`
+
+## Components
+- Built on shadcn/ui (New York style) + Radix primitives
+- Every data-fetching component needs loading, error, and empty states
+- Use `next-themes` for dark mode (class strategy)
+- Font: Inter for UI, Source Serif 4 for AI mentor responses, JetBrains Mono for code
+
+## Data Layer
+- Drizzle ORM for schema definition and queries
+- RLS policies in raw `.sql` migration files (not Drizzle)
+- pgvector for embeddings (1536 dimensions)
+- All tables have `created_at` timestamp with timezone
+
+## AI
+- Primary: Claude Sonnet 4.5 (teaching, summarization, concept extraction)
+- Fallback: GPT-4.1-mini (flashcards, classification)
+- Embeddings: text-embedding-3-small (1536 dimensions)
+- All LLM calls must use structured output (Zod schema)
+- Mentor responses grounded in RAG-retrieved chunks
