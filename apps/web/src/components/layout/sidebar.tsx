@@ -10,7 +10,6 @@ import {
   Target,
   BarChart3,
   Globe,
-  Settings,
   LogOut,
   ChevronLeft,
 } from "lucide-react";

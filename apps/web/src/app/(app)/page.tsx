@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
 import { PageContainer } from "@/components/layout/page-container";
 import {
   Card,
@@ -16,15 +17,10 @@ import {
   BrainCircuit,
 } from "lucide-react";
 import Link from "next/link";
+import { useUser } from "@/hooks/use-user";
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const displayName =
-    user?.user_metadata?.display_name ?? user?.email?.split("@")[0] ?? "there";
+export default function DashboardPage() {
+  const { displayName } = useUser();
 
   const hour = new Date().getHours();
   const greeting =
