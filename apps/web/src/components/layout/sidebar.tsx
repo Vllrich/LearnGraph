@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
-  Library,
   Zap,
   BarChart3,
+  Globe,
   LogOut,
   ChevronLeft,
   Sparkles,
@@ -24,6 +24,7 @@ import {
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/review", label: "Review", icon: Zap },
+  { href: "/graph", label: "Graph", icon: Globe },
   { href: "/stats", label: "Progress", icon: BarChart3 },
 ] as const;
 
