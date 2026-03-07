@@ -1,6 +1,6 @@
 # LearnGraph — Implementation TODO & Roadmap
 
-> **Status:** Phase 1A — In Progress  
+> **Status:** Phase 1B — Ready to Start  
 > **Last Updated:** March 7, 2026  
 > **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md)
 
@@ -50,11 +50,11 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 ### 0.2 Supabase Setup
 
-- [ ] **P0** Create Supabase project (select region closest to target users)
-- [~] **P0** Enable pgvector extension (`CREATE EXTENSION IF NOT EXISTS vector`) — SQL migration written, pending Supabase project
-- [~] **P0** Configure Supabase Auth — enable Email/Password + Google OAuth + GitHub OAuth + Magic Link — code ready, pending Supabase project
-- [~] **P0** Create storage bucket `content-uploads` (private, 50 MB file size limit, allowed MIME types: PDF, PPTX, DOCX, MP3, MP4, WAV, PNG, JPG, WEBP) — SQL migration written
-- [~] **P0** Set up Supabase CLI for local development (`supabase init`, `supabase start`) — config.toml created
+- [x] **P0** Create Supabase project (select region closest to target users) — eu-west-2, project `wezahaxklgudeehrlvxw`
+- [x] **P0** Enable pgvector extension (`CREATE EXTENSION IF NOT EXISTS vector`) — v0.8.0 installed
+- [x] **P0** Configure Supabase Auth — enable Email/Password + Google OAuth + GitHub OAuth + Magic Link
+- [x] **P0** Create storage bucket `content-uploads` (private, 50 MB file size limit, allowed MIME types: PDF, PPTX, DOCX, MP3, MP4, WAV, PNG, JPG, WEBP)
+- [x] **P0** Set up Supabase CLI for local development (`supabase init`, `supabase start`) — config.toml created
 - [ ] **P1** Configure storage lifecycle policy (delete orphaned files after 30 days)
 
 **Acceptance:** Supabase dashboard accessible. Auth login flow works. File upload to storage bucket succeeds. pgvector extension confirmed via `SELECT * FROM pg_extension WHERE extname = 'vector'`.
