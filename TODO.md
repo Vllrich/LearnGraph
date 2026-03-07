@@ -1,6 +1,6 @@
 # LearnGraph — Implementation TODO & Roadmap
 
-> **Status:** Phase 0 — In Progress  
+> **Status:** Phase 1A — In Progress  
 > **Last Updated:** March 7, 2026  
 > **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md)
 
@@ -122,12 +122,12 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 ### 1.1 Authentication Flow
 
-- [ ] **P0** Create auth utility in `lib/supabase/` — server client (cookies) + browser client
-- [ ] **P0** Auth middleware (`middleware.ts`) — redirect unauthenticated users to `/login`, redirect authenticated users away from `/login`
-- [ ] **P0** `/login` page — email + password form, Google OAuth button, GitHub OAuth button, magic link option
-- [ ] **P0** `/signup` page — email + password + display name, OAuth options
-- [ ] **P0** `/auth/callback` route — handle OAuth redirect, set session cookies
-- [ ] **P0** Logout functionality — clear session, redirect to `/login`
+- [x] **P0** Create auth utility in `lib/supabase/` — server client (cookies) + browser client
+- [x] **P0** Auth middleware (`middleware.ts`) — redirect unauthenticated users to `/login`, redirect authenticated users away from `/login`
+- [x] **P0** `/login` page — email + password form, Google OAuth button, GitHub OAuth button, magic link option
+- [x] **P0** `/signup` page — email + password + display name, OAuth options
+- [x] **P0** `/auth/callback` route — handle OAuth redirect, set session cookies
+- [x] **P0** Logout functionality — clear session, redirect to `/login`
 - [ ] **P1** Onboarding flow after first signup — collect: display name, learning goal (free text), daily review budget (slider: 5–50 cards)
 - [ ] **P1** Store onboarding data in `users.onboarding` and `users.preferences` JSONB fields
 
@@ -139,15 +139,15 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Design System §9.1, §12
 
-- [ ] **P0** App layout (`(app)/layout.tsx`) — sidebar + main content area
-- [ ] **P0** `Sidebar` component — navigation links: Home, Library, Mentor, Review, Goals, Stats, Graph
+- [x] **P0** App layout (`(app)/layout.tsx`) — sidebar + main content area
+- [x] **P0** `Sidebar` component — navigation links: Home, Library, Mentor, Review, Goals, Stats, Graph
   - Desktop: full 256px sidebar (§5.2)
   - Tablet: collapsed icon rail, expand on hover
   - Mobile: bottom tab bar (5 primary items)
-- [ ] **P0** `PageContainer` component — max-w-7xl, responsive padding (§5.2)
-- [ ] **P0** `MobileTabBar` component — Home, Library, Review, Mentor, More
-- [ ] **P0** User avatar + dropdown in sidebar footer (settings, logout)
-- [ ] **P1** Active route highlighting in sidebar
+- [x] **P0** `PageContainer` component — max-w-7xl, responsive padding (§5.2)
+- [x] **P0** `MobileTabBar` component — Home, Library, Review, Mentor, More
+- [x] **P0** User avatar + dropdown in sidebar footer (settings, logout)
+- [x] **P1** Active route highlighting in sidebar
 - [ ] **P1** Breadcrumb component for nested pages
 
 **Acceptance:** Responsive layout correct at all breakpoints (mobile/tablet/desktop). Navigation between all stub pages works. Active state highlights correct route.
@@ -158,12 +158,12 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Design System §9.1
 
-- [ ] **P0** Dashboard layout: greeting + streak counter + daily review card + knowledge snapshot + recent content list
-- [ ] **P0** `DailyReviewCard` — shows count of due concepts, estimated time, "Start Review" CTA (static data for now)
-- [ ] **P0** `RecentContentList` — list of user's learning objects with status badges (empty state if none)
-- [ ] **P1** `KnowledgeSnapshot` — mini graph preview placeholder (static SVG for now)
-- [ ] **P1** `StreakCounter` — flame icon + day count (static for now)
-- [ ] **P1** Empty state design for new users — "Upload your first document to get started"
+- [x] **P0** Dashboard layout: greeting + streak counter + daily review card + knowledge snapshot + recent content list
+- [x] **P0** `DailyReviewCard` — shows count of due concepts, estimated time, "Start Review" CTA (static data for now)
+- [x] **P0** `RecentContentList` — list of user's learning objects with status badges (empty state if none)
+- [x] **P1** `KnowledgeSnapshot` — mini graph preview placeholder (static SVG for now)
+- [x] **P1** `StreakCounter` — flame icon + day count (static for now)
+- [x] **P1** Empty state design for new users — "Upload your first document to get started"
 
 **Acceptance:** Dashboard renders with placeholder/mock data. Empty state shows for new users. Layout matches the wireframe in Design System §9.1.
 

@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { cache } from "react";
 import { db } from "@repo/db";
+import { createClient } from "@/lib/supabase/server";
 
 export type TRPCContext = {
   db: typeof db;
@@ -8,8 +9,12 @@ export type TRPCContext = {
 };
 
 export const createTRPCContext = cache(async (): Promise<TRPCContext> => {
-  // TODO: Extract user session from Supabase Auth cookies once 1.1 Auth is implemented
-  return { db, userId: null };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return { db, userId: user?.id ?? null };
 });
 
 const t = initTRPC.context<TRPCContext>().create();
