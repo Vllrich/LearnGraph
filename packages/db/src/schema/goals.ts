@@ -16,6 +16,7 @@ export const learningGoals = pgTable("learning_goals", {
   currentLevel: text("current_level"),
   timeBudgetMinutes: integer("time_budget_minutes"),
   examDate: timestamp("exam_date", { withTimezone: true }),
+  coverImageUrl: text("cover_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
