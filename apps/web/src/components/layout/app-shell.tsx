@@ -18,11 +18,11 @@ export function AppShell({ children, user }: AppShellProps) {
         {/* Fixed top bar: logo left, user right */}
         <Topbar user={user} />
 
-        {/* Sidebar + content centered together as one unit */}
-        <div className="mx-auto flex w-full max-w-[900px] pl-12 pt-12">
-          <Sidebar user={user} />
-          <main className="min-h-screen flex-1 min-w-0 pb-20 lg:pb-0">{children}</main>
-        </div>
+        {/* Sidebar fixed to left; content centered independently */}
+        <Sidebar user={user} />
+        <main className="mx-auto w-full max-w-[1200px] min-h-screen min-w-0 overflow-x-hidden pb-20 pt-12 lg:pl-48 lg:pb-0">
+          {children}
+        </main>
 
         <MobileTabBar />
       </TooltipProvider>

@@ -55,7 +55,7 @@ export function Sidebar({ user }: SidebarProps) {
   const displayName = user?.displayName ?? user?.email?.split("@")[0] ?? "Learner";
 
   return (
-    <aside className="sticky top-12 hidden h-[calc(100vh-3rem)] w-48 shrink-0 flex-col justify-center px-4 lg:flex">
+    <aside className="fixed left-0 top-12 hidden h-[calc(100vh-3rem)] w-48 shrink-0 flex-col justify-start pt-8 px-4 lg:flex">
       {/* Student info */}
       <div className="mb-6">
         <p className="text-sm font-semibold text-foreground">{displayName}</p>

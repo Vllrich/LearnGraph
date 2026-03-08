@@ -8,8 +8,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
 type ViewMode = "grid" | "list";
 
 export default function LibraryPage() {
@@ -32,7 +30,7 @@ export default function LibraryPage() {
   );
 
   return (
-    <div className="px-6 py-6 lg:px-10">
+    <div className="px-6 pb-6 pt-16 lg:px-10 lg:pt-20">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Library</h1>
@@ -142,6 +140,7 @@ type ContentItem = {
 };
 
 function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: string) => void }) {
+  const [confirming, setConfirming] = useState(false);
   const isReady = item.status === "ready";
   const isProcessing = item.status === "processing";
 
@@ -188,25 +187,48 @@ function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: str
               </span>
             )}
           </div>
-          {isReady && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onDelete(item.id);
-                  }}
-                  className="rounded p-1 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="text-xs">Delete</TooltipContent>
-            </Tooltip>
-          )}
         </div>
       </div>
+
+      {/* Delete button — visible on hover */}
+      {!confirming ? (
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setConfirming(true);
+          }}
+          className="absolute top-2.5 right-2.5 flex size-6 items-center justify-center rounded-full bg-black/50 text-white/70 opacity-0 backdrop-blur-sm transition-all hover:bg-destructive hover:text-white group-hover:opacity-100"
+          title="Delete material"
+        >
+          <Trash2 className="size-3" />
+        </button>
+      ) : (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-background/90 backdrop-blur-sm"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-sm font-medium">Delete this material?</p>
+          <p className="text-[11px] text-muted-foreground px-6 text-center">
+            This cannot be undone.
+          </p>
+          <div className="mt-1 flex gap-2">
+            <button
+              onClick={() => setConfirming(false)}
+              className="rounded-lg border border-border/50 px-3 py-1.5 text-xs hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onDelete(item.id)}
+              className="flex items-center gap-1 rounded-lg bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="size-3" />
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -227,6 +249,7 @@ function LibraryListItem({
   item: ContentItem;
   onDelete: (id: string) => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const isReady = item.status === "ready";
   const isProcessing = item.status === "processing";
   const Icon = item.sourceType === "youtube" ? Youtube : FileText;
@@ -234,10 +257,31 @@ function LibraryListItem({
   const row = (
     <div
       className={cn(
-        "group flex items-center gap-4 px-4 py-3 transition-colors",
+        "group relative flex items-center gap-4 px-4 py-3 transition-colors",
         isReady && "cursor-pointer hover:bg-muted/30"
       )}
     >
+      {confirming ? (
+        <div
+          className="absolute inset-0 flex items-center justify-center gap-3 bg-background/90 backdrop-blur-sm px-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-sm font-medium">Delete this material?</p>
+          <button
+            onClick={() => setConfirming(false)}
+            className="rounded-lg border border-border/50 px-3 py-1.5 text-xs hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onDelete(item.id)}
+            className="flex items-center gap-1 rounded-lg bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:bg-destructive/90"
+          >
+            <Trash2 className="size-3" />
+            Delete
+          </button>
+        </div>
+      ) : null}
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/40">
         <Icon className="size-4 text-muted-foreground/50" />
       </div>
@@ -272,7 +316,7 @@ function LibraryListItem({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onDelete(item.id);
+              setConfirming(true);
             }}
             className="rounded p-1 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
           >

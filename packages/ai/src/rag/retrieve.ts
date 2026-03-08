@@ -1,4 +1,4 @@
-import { db, contentChunks } from "@repo/db";
+import { db, contentChunks, learningObjects } from "@repo/db";
 import { eq, sql, and } from "drizzle-orm";
 import { generateEmbedding } from "../ingestion/embeddings";
 import { RAG_TOP_K, RAG_VECTOR_WEIGHT, RAG_BM25_WEIGHT } from "@repo/shared";
@@ -31,13 +31,15 @@ function buildSafeTsQuery(raw: string): string {
 /**
  * Hybrid search: vector similarity (pgvector cosine) + BM25-style full-text match.
  * Weighted combination: 0.7 vector + 0.3 keyword.
+ * When learningObjectId is omitted but userId is provided, scopes to all of that user's materials.
  */
 export async function retrieveChunks(
   query: string,
   opts: {
     learningObjectId?: string;
+    userId?: string;
     topK?: number;
-  } = {},
+  } = {}
 ): Promise<RetrievedChunk[]> {
   const sanitizedQuery = query.slice(0, MAX_QUERY_LENGTH).trim();
   if (!sanitizedQuery) return [];
@@ -50,7 +52,9 @@ export async function retrieveChunks(
 
   const scopeFilter = opts.learningObjectId
     ? sql`AND c.learning_object_id = ${opts.learningObjectId}`
-    : sql``;
+    : opts.userId
+      ? sql`AND c.learning_object_id IN (SELECT id FROM learning_objects WHERE user_id = ${opts.userId} AND status = 'ready')`
+      : sql``;
 
   const results = await db.execute<{
     id: string;

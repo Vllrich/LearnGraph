@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Make dark: utilities respond to next-themes' .dark class instead of only prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ── Light Mode ── */
 :root {
   /* Brand */

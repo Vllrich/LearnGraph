@@ -29,7 +29,7 @@ export default function GoalsPage() {
   const pausedGoals = (goals ?? []).filter((g) => g.status === "paused");
 
   return (
-    <div className="px-6 py-6 lg:px-10">
+    <div className="px-6 pb-6 pt-16 lg:px-10 lg:pt-20">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Goals</h1>

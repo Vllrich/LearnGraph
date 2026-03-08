@@ -45,6 +45,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
 
   const chunks = await retrieveChunks(message, {
     learningObjectId: learningObjectId ?? undefined,
+    userId,
     topK: 5,
   });
 
@@ -81,6 +82,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
         execute: async ({ query }) => {
           const moreChunks = await retrieveChunks(query, {
             learningObjectId: learningObjectId ?? undefined,
+            userId,
             topK: 3,
           });
           return moreChunks.map((c) => ({

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { trpc } from "@/trpc/client";
 import Link from "next/link";
-import { MessageCircle, Loader2, ArrowRight, BookOpen, Plus } from "lucide-react";
+import { MessageCircle, Loader2, ArrowRight, BookOpen, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +18,7 @@ export default function MentorPage() {
   const [showPicker, setShowPicker] = useState(false);
 
   return (
-    <div className="px-6 py-6 lg:px-10">
+    <div className="px-6 pb-6 pt-16 lg:px-10 lg:pt-20">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">AI Mentor</h1>
@@ -26,10 +26,18 @@ export default function MentorPage() {
             Ask questions grounded in your learning materials
           </p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => setShowPicker(true)}>
-          <Plus className="size-3.5" />
-          New Chat
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5" asChild>
+            <Link href="/mentor/chat">
+              <Sparkles className="size-3.5" />
+              All Courses
+            </Link>
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => setShowPicker(true)}>
+            <Plus className="size-3.5" />
+            New Chat
+          </Button>
+        </div>
       </div>
 
       {/* Material picker for new chat */}

@@ -189,7 +189,7 @@ export default function HomePage() {
       <div className="flex flex-col items-center px-4 pb-6 pt-16 text-center lg:pt-20">
         {intakeStep === "idle" && (
           <>
-            <div className="flex w-full max-w-xl items-center justify-center gap-3">
+            <div className="flex w-full max-w-2xl items-center justify-center gap-3">
               <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl font-(family-name:--font-source-serif)">
                 What do you want to learn?
               </h1>
@@ -202,13 +202,13 @@ export default function HomePage() {
             </div>
 
             {error && (
-              <div className="mt-3 w-full max-w-xl rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+              <div className="mt-3 w-full max-w-2xl rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             {/* Chat input */}
-            <div className="mt-4 flex w-full max-w-xl items-center gap-2 rounded-xl border border-border/50 bg-card px-4 py-2.5 shadow-sm transition-all focus-within:border-primary/40 focus-within:shadow-md">
+            <div className="mt-4 flex w-full max-w-2xl items-center gap-2 rounded-xl border border-border/50 bg-card px-4 py-2.5 shadow-sm transition-all focus-within:border-primary/40 focus-within:shadow-md">
               <Sparkles className="size-4 text-muted-foreground/40" />
               <input
                 type="text"
@@ -252,7 +252,7 @@ export default function HomePage() {
             </div>
 
             {/* Popular topics */}
-            <div className="mt-8 w-full max-w-xl pt-4">
+            <div className="mt-8 w-full max-w-2xl pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Popular starting points
               </p>
@@ -272,11 +272,11 @@ export default function HomePage() {
 
             {/* Active courses — below popular topics */}
             {hasGoals && (
-              <div className="mt-6 w-full max-w-xl pt-16 text-left">
+              <div className="mt-6 w-full max-w-2xl pt-16 text-left">
                 <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Your Courses
                 </h2>
-                <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+                <div className="grid grid-cols-2 gap-4">
                   {activeGoals!.map((goal, idx) => {
                     const pct =
                       goal.totalItems > 0
@@ -292,7 +292,7 @@ export default function HomePage() {
                           : "Complete!";
                     const isConfirming = confirmDeleteId === goal.id;
                     return (
-                      <div key={goal.id} className="group relative shrink-0 w-78">
+                      <div key={goal.id} className="group relative">
                         <Link
                           href={`/learn/${goal.id}`}
                           className="block rounded-xl border border-border/30 bg-card overflow-hidden transition-all hover:border-primary/30 hover:shadow-md"
@@ -419,7 +419,7 @@ export default function HomePage() {
 
         {/* Conversational intake: Goal selection */}
         {intakeStep === "goal" && (
-          <div className="w-full max-w-xl text-left">
+          <div className="w-full max-w-2xl text-left">
             <button
               onClick={resetIntake}
               className="mb-4 text-xs text-muted-foreground hover:text-foreground"
@@ -452,7 +452,7 @@ export default function HomePage() {
 
         {/* Conversational intake: Level selection */}
         {intakeStep === "level" && (
-          <div className="w-full max-w-xl text-left">
+          <div className="w-full max-w-2xl text-left">
             <button
               onClick={resetIntake}
               className="mb-4 text-xs text-muted-foreground hover:text-foreground"
@@ -493,7 +493,7 @@ export default function HomePage() {
 
         {/* Generating state */}
         {intakeStep === "generating" && (
-          <div className="flex w-full max-w-xl flex-col items-center gap-4 pt-8">
+          <div className="flex w-full max-w-2xl flex-col items-center gap-4 pt-8">
             <div className="relative">
               <GraduationCap className="size-10 text-primary" />
               <Loader2 className="absolute -right-2 -top-2 size-5 animate-spin text-muted-foreground" />
@@ -510,8 +510,8 @@ export default function HomePage() {
 
       {/* Stats row */}
       {totalConcepts > 0 && intakeStep === "idle" && (
-        <div className="px-6 lg:px-10">
-          <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="px-4 lg:px-8">
+          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-4">
             <Link
               href="/review"
               className="group rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
