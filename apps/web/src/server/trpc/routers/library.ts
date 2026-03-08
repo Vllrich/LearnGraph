@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import {
-  learningObjects,
-  contentChunks,
-  concepts,
-  conceptChunkLinks,
-  questions,
-} from "@repo/db";
+import { learningObjects, contentChunks, concepts, conceptChunkLinks, questions } from "@repo/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
@@ -16,7 +10,7 @@ export const libraryRouter = createTRPCRouter({
       z.object({
         limit: z.number().int().min(1).max(100).default(50),
         offset: z.number().int().min(0).default(0),
-      }),
+      })
     )
     .query(async ({ ctx, input }) => {
       const items = await ctx.db
@@ -51,12 +45,7 @@ export const libraryRouter = createTRPCRouter({
       const [item] = await ctx.db
         .select()
         .from(learningObjects)
-        .where(
-          and(
-            eq(learningObjects.id, input.id),
-            eq(learningObjects.userId, ctx.userId),
-          ),
-        )
+        .where(and(eq(learningObjects.id, input.id), eq(learningObjects.userId, ctx.userId)))
         .limit(1);
 
       if (!item) {
@@ -85,21 +74,15 @@ export const libraryRouter = createTRPCRouter({
           bloomLevel: concepts.bloomLevel,
         })
         .from(concepts)
-        .innerJoin(
-          conceptChunkLinks,
-          eq(concepts.id, conceptChunkLinks.conceptId),
-        )
-        .innerJoin(
-          contentChunks,
-          eq(conceptChunkLinks.chunkId, contentChunks.id),
-        )
+        .innerJoin(conceptChunkLinks, eq(concepts.id, conceptChunkLinks.conceptId))
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
         .where(eq(contentChunks.learningObjectId, input.id))
         .groupBy(
           concepts.id,
           concepts.displayName,
           concepts.definition,
           concepts.difficultyLevel,
-          concepts.bloomLevel,
+          concepts.bloomLevel
         );
 
       return { ...item, chunks, concepts: conceptRows };
@@ -112,7 +95,7 @@ export const libraryRouter = createTRPCRouter({
         sourceType: z.enum(["pdf", "youtube"]),
         sourceUrl: z.string().url().optional(),
         filePath: z.string().optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const [item] = await ctx.db
@@ -139,8 +122,8 @@ export const libraryRouter = createTRPCRouter({
         .where(
           and(
             eq(learningObjects.id, input.learningObjectId),
-            eq(learningObjects.userId, ctx.userId),
-          ),
+            eq(learningObjects.userId, ctx.userId)
+          )
         )
         .limit(1);
 
@@ -170,21 +153,51 @@ export const libraryRouter = createTRPCRouter({
       const [item] = await ctx.db
         .select({ id: learningObjects.id })
         .from(learningObjects)
-        .where(
-          and(
-            eq(learningObjects.id, input.id),
-            eq(learningObjects.userId, ctx.userId),
-          ),
-        )
+        .where(and(eq(learningObjects.id, input.id), eq(learningObjects.userId, ctx.userId)))
         .limit(1);
 
       if (!item) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Content not found" });
       }
 
+      await ctx.db.delete(learningObjects).where(eq(learningObjects.id, input.id));
+
+      return { success: true };
+    }),
+
+  rateQuestion: protectedProcedure
+    .input(
+      z.object({
+        questionId: z.string().uuid(),
+        feedback: z.enum(["up", "down"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const column = input.feedback === "up" ? questions.thumbsUp : questions.thumbsDown;
+
       await ctx.db
-        .delete(learningObjects)
-        .where(eq(learningObjects.id, input.id));
+        .update(questions)
+        .set({
+          [input.feedback === "up" ? "thumbsUp" : "thumbsDown"]: sql`COALESCE(${column}, 0) + 1`,
+        })
+        .where(eq(questions.id, input.questionId));
+
+      // Auto-exclude questions with >3 thumbs down and negative net score
+      const [q] = await ctx.db
+        .select({
+          thumbsUp: questions.thumbsUp,
+          thumbsDown: questions.thumbsDown,
+        })
+        .from(questions)
+        .where(eq(questions.id, input.questionId))
+        .limit(1);
+
+      if (q && (q.thumbsDown ?? 0) >= 3 && (q.thumbsDown ?? 0) > (q.thumbsUp ?? 0) * 2) {
+        await ctx.db
+          .update(questions)
+          .set({ isExcluded: true, qualityScore: 0 })
+          .where(eq(questions.id, input.questionId));
+      }
 
       return { success: true };
     }),

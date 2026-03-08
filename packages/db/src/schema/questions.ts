@@ -29,11 +29,12 @@ export const questions = pgTable(
     conceptIds: uuid("concept_ids").array().default([]),
     groundingChunks: uuid("grounding_chunks").array().default([]),
     qualityScore: real("quality_score").default(1.0),
+    thumbsUp: integer("thumbs_up").default(0),
+    thumbsDown: integer("thumbs_down").default(0),
+    isExcluded: boolean("is_excluded").default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [
-    check("difficulty_check", sql`${table.difficulty} BETWEEN 1 AND 5`),
-  ]
+  (table) => [check("difficulty_check", sql`${table.difficulty} BETWEEN 1 AND 5`)]
 );
 
 export const userAnswers = pgTable("user_answers", {

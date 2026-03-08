@@ -3,8 +3,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Check, X, Loader2, Zap, Trophy, ChevronRight } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  X,
+  Loader2,
+  Zap,
+  Trophy,
+  ChevronRight,
+  Lightbulb,
+  ThumbsUp,
+  ThumbsDown,
+} from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 type ReviewQuestion = {
   id: string;
@@ -20,11 +32,13 @@ type ReviewQuestion = {
 export default function ReviewPage() {
   const { data, isLoading } = trpc.review.getDailyQueue.useQuery();
   const submitMutation = trpc.review.submitReview.useMutation();
+  const rateMutation = trpc.library.rateQuestion.useMutation();
   const utils = trpc.useUtils();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [sessionResults, setSessionResults] = useState<{ correct: number; total: number }>({
     correct: 0,
     total: 0,
@@ -76,6 +90,7 @@ export default function ReviewPage() {
         setCurrentIndex((i) => i + 1);
         setSelectedAnswer(null);
         setShowResult(false);
+        setShowHint(false);
       }
     },
     [
@@ -88,6 +103,28 @@ export default function ReviewPage() {
       utils,
     ]
   );
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (sessionComplete) return;
+      if (e.key === "Enter" && !showResult && selectedAnswer) {
+        e.preventDefault();
+        handleSubmit();
+      }
+      if (showResult && !submitMutation.isPending) {
+        const rating = parseInt(e.key) as 1 | 2 | 3 | 4;
+        if (rating >= 1 && rating <= 4) {
+          e.preventDefault();
+          handleRate(rating);
+        }
+      }
+      if (e.key === "h" && !showResult) {
+        setShowHint(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   if (isLoading) {
     return (
@@ -242,15 +279,41 @@ export default function ReviewPage() {
             </div>
           )}
 
+          {/* Hint */}
+          {!showResult && showHint && currentQuestion?.explanation && (
+            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Lightbulb className="size-3 text-amber-500" />
+                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  Hint
+                </span>
+              </div>
+              <p className="text-[12px] leading-relaxed text-muted-foreground/70">
+                {currentQuestion.explanation.split(".").slice(0, 1).join(".")}.
+              </p>
+            </div>
+          )}
+
           {/* Submit or result */}
           {!showResult ? (
-            <button
-              onClick={handleSubmit}
-              disabled={!selectedAnswer}
-              className="mt-5 w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-20 transition-opacity"
-            >
-              Submit
-            </button>
+            <div className="mt-5 flex gap-2">
+              {!showHint && (
+                <button
+                  onClick={() => setShowHint(true)}
+                  className="flex items-center gap-1.5 rounded-xl border border-border/30 px-4 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+                  title="Press H for hint"
+                >
+                  <Lightbulb className="size-3.5" />
+                </button>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={!selectedAnswer}
+                className="flex-1 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-20 transition-opacity"
+              >
+                Submit <span className="text-[11px] opacity-50 ml-1">Enter</span>
+              </button>
+            </div>
           ) : (
             <div className="mt-5 space-y-4">
               {/* Explanation */}
@@ -263,6 +326,31 @@ export default function ReviewPage() {
               )}
 
               {/* FSRS rating buttons */}
+              {/* Question feedback */}
+              {currentQuestion && (
+                <div className="flex items-center justify-center gap-3">
+                  <span className="text-[10px] text-muted-foreground/30">Rate this question:</span>
+                  <button
+                    onClick={() => {
+                      rateMutation.mutate({ questionId: currentQuestion.id, feedback: "up" });
+                      toast.success("Thanks for the feedback!");
+                    }}
+                    className="text-muted-foreground/30 hover:text-green-500 transition-colors"
+                  >
+                    <ThumbsUp className="size-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      rateMutation.mutate({ questionId: currentQuestion.id, feedback: "down" });
+                      toast.success("Feedback noted — we'll improve it.");
+                    }}
+                    className="text-muted-foreground/30 hover:text-red-500 transition-colors"
+                  >
+                    <ThumbsDown className="size-3" />
+                  </button>
+                </div>
+              )}
+
               <p className="text-center text-[11px] text-muted-foreground/40">
                 How well did you know this?
               </p>
@@ -283,6 +371,7 @@ export default function ReviewPage() {
                   >
                     <p className={cn("text-[12px] font-medium", color)}>{label}</p>
                     <p className="text-[10px] text-muted-foreground/40">{sublabel}</p>
+                    <p className="text-[9px] text-muted-foreground/25 mt-0.5">{rating}</p>
                   </button>
                 ))}
               </div>

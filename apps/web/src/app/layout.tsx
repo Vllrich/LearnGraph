@@ -25,8 +25,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "LearnGraph",
-  description:
-    "AI-powered learning platform — ingest, understand, practice, retain, master.",
+  description: "AI-powered learning platform — ingest, understand, practice, retain, master.",
 };
 
 export default function RootLayout({
@@ -39,13 +38,18 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${sourceSerif.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
+        <a href="#main-content" className="skip-to-main">
+          Skip to main content
+        </a>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
-          <TRPCProvider>{children}</TRPCProvider>
+          <TRPCProvider>
+            <main id="main-content">{children}</main>
+          </TRPCProvider>
           <Toaster />
         </ThemeProvider>
       </body>

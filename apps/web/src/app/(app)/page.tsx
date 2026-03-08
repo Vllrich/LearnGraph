@@ -1,11 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FileText, Youtube, Search, Loader2 } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Youtube,
+  Search,
+  Loader2,
+  Zap,
+  Flame,
+  Brain,
+  Activity,
+} from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { UploadDialog } from "@/components/library/upload-dialog";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+const MASTERY_COLORS = ["#a1a1aa", "#60a5fa", "#a78bfa", "#fbbf24", "#34d399", "#10b981"];
 
 export default function HomePage() {
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -14,11 +26,28 @@ export default function HomePage() {
     { limit: 100, offset: 0 },
     { refetchInterval: 10_000 }
   );
+  const { data: stats } = trpc.review.getStats.useQuery();
+  const { data: queue } = trpc.review.getDailyQueue.useQuery();
 
   const items = (data?.items ?? []).filter(
     (i) => !search || i.title.toLowerCase().includes(search.toLowerCase())
   );
   const hasContent = (data?.items ?? []).length > 0;
+
+  const streak = stats?.streak ?? 0;
+  const mastery = stats?.mastery;
+  const totalConcepts = mastery
+    ? Number(mastery.m0) +
+      Number(mastery.m1) +
+      Number(mastery.m2) +
+      Number(mastery.m3) +
+      Number(mastery.m4) +
+      Number(mastery.m5)
+    : 0;
+  const healthyConcepts = mastery ? Number(mastery.m4) + Number(mastery.m5) : 0;
+  const knowledgeHealth =
+    totalConcepts > 0 ? Math.round((healthyConcepts / totalConcepts) * 100) : 0;
+  const dueCount = (queue?.totalDue ?? 0) + (queue?.totalNew ?? 0);
 
   return (
     <div className="min-h-screen">
@@ -41,9 +70,75 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Content grid */}
+      {/* Dashboard with real data */}
       {(hasContent || isLoading) && (
         <div className="px-6 py-6 lg:px-10">
+          {/* Dashboard cards */}
+          {totalConcepts > 0 && (
+            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Link
+                href="/review"
+                className="group rounded-xl border border-border/30 px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <Zap className="size-4 text-green-500" />
+                  <span className="text-[11px] text-muted-foreground/50">Due Today</span>
+                </div>
+                <p className="mt-1 text-xl font-bold">{dueCount}</p>
+                {dueCount > 0 && (
+                  <p className="mt-0.5 text-[11px] text-primary group-hover:underline">
+                    Start Review
+                  </p>
+                )}
+              </Link>
+
+              <div className="rounded-xl border border-border/30 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Flame
+                    className={cn(
+                      "size-4",
+                      streak > 0 ? "text-amber-500" : "text-muted-foreground/30"
+                    )}
+                  />
+                  <span className="text-[11px] text-muted-foreground/50">Streak</span>
+                </div>
+                <p className="mt-1 text-xl font-bold">{streak}d</p>
+              </div>
+
+              <div className="rounded-xl border border-border/30 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="size-4 text-primary" />
+                  <span className="text-[11px] text-muted-foreground/50">Concepts</span>
+                </div>
+                <p className="mt-1 text-xl font-bold">{totalConcepts}</p>
+              </div>
+
+              <div className="rounded-xl border border-border/30 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="size-4 text-blue-500" />
+                  <span className="text-[11px] text-muted-foreground/50">Health</span>
+                </div>
+                <p className="mt-1 text-xl font-bold">{knowledgeHealth}%</p>
+                <div className="mt-1 flex gap-0.5">
+                  {mastery &&
+                    [mastery.m0, mastery.m1, mastery.m2, mastery.m3, mastery.m4, mastery.m5].map(
+                      (v, i) => (
+                        <div
+                          key={i}
+                          className="h-1 rounded-full"
+                          style={{
+                            backgroundColor: MASTERY_COLORS[i],
+                            width: `${totalConcepts > 0 ? (Number(v) / totalConcepts) * 100 : 0}%`,
+                            minWidth: Number(v) > 0 ? "3px" : "0",
+                          }}
+                        />
+                      )
+                    )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Top bar */}
           <div className="mb-6 flex items-center gap-3">
             <div className="relative flex-1">

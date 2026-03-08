@@ -20,8 +20,6 @@ import {
   Lightbulb,
   Route,
   Feather,
-  ThumbsUp,
-  ThumbsDown,
   Copy,
 } from "lucide-react";
 import Link from "next/link";
@@ -171,6 +169,13 @@ export default function ContentDetailPage({ params }: Props) {
 
 /* ─── Content Viewer ─── */
 
+function extractVideoId(url: string): string | null {
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  return match ? match[1] : null;
+}
+
 function ContentViewer({ data }: { data: ContentData }) {
   let keyPoints: string[] = [];
   if (data.summaryKeyPoints) {
@@ -190,8 +195,25 @@ function ContentViewer({ data }: { data: ContentData }) {
     );
   }
 
+  const videoId =
+    data.sourceType === "youtube" && data.sourceUrl ? extractVideoId(data.sourceUrl) : null;
+
   return (
     <div className="mx-auto max-w-3xl px-8 py-8 font-serif">
+      {videoId && (
+        <div className="mb-6 aspect-video w-full overflow-hidden rounded-xl">
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+            title={data.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="size-full border-0"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin allow-presentation"
+          />
+        </div>
+      )}
+
       {data.summaryTldr && (
         <p className="mb-6 font-sans text-[15px] leading-relaxed text-foreground/80">
           {data.summaryTldr}
@@ -271,14 +293,43 @@ function TabContent({
 /* ─── Chat Tab ─── */
 
 function ChatTab({ learningObjectId }: { learningObjectId: string }) {
-  const { messages, sendMessage } = useMentorChat(learningObjectId);
+  const { messages, sendMessage, loadConversation } = useMentorChat(learningObjectId);
+  const { data: conversations } = trpc.mentor.listConversations.useQuery();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const relevantConvos = (conversations ?? []).filter(
+    (c) => c.learningObjectId === learningObjectId
+  );
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  if (messages.length === 0) {
+  const handleLoadConversation = async (convId: string) => {
+    try {
+      const res = await fetch(
+        `/api/trpc/mentor.getConversation?input=${encodeURIComponent(JSON.stringify({ id: convId }))}`
+      );
+      const json = await res.json();
+      const conv = json?.result?.data;
+      if (conv?.messages) {
+        loadConversation(
+          conv.messages.map((m: { role: string; content: string; citations?: unknown[] }) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            citations: m.citations,
+          })),
+          convId
+        );
+        setShowHistory(false);
+      }
+    } catch {
+      /* silently ignore */
+    }
+  };
+
+  if (messages.length === 0 && !showHistory) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <Sparkles className="mb-3 size-5 text-muted-foreground/30" />
@@ -299,16 +350,66 @@ function ChatTab({ learningObjectId }: { learningObjectId: string }) {
             </button>
           ))}
         </div>
+        {relevantConvos.length > 0 && (
+          <button
+            onClick={() => setShowHistory(true)}
+            className="mt-4 text-[11px] text-primary/60 hover:text-primary transition-colors"
+          >
+            View past conversations ({relevantConvos.length})
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (showHistory) {
+    return (
+      <div className="px-4 py-4 space-y-1">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[12px] font-medium text-foreground/80">Past conversations</p>
+          <button
+            onClick={() => setShowHistory(false)}
+            className="text-[11px] text-muted-foreground/50 hover:text-foreground"
+          >
+            Back
+          </button>
+        </div>
+        {relevantConvos.map((conv) => (
+          <button
+            key={conv.id}
+            onClick={() => handleLoadConversation(conv.id)}
+            className="w-full rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/30"
+          >
+            <p className="truncate text-[12px] font-medium">{conv.title}</p>
+            <p className="text-[10px] text-muted-foreground/40">
+              {conv.updatedAt
+                ? new Date(conv.updatedAt).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : ""}
+            </p>
+          </button>
+        ))}
       </div>
     );
   }
 
   return (
     <div ref={scrollRef} className="space-y-4 px-4 py-4">
+      {relevantConvos.length > 0 && (
+        <button
+          onClick={() => setShowHistory(true)}
+          className="mb-2 text-[10px] text-primary/50 hover:text-primary transition-colors"
+        >
+          View past conversations
+        </button>
+      )}
       {messages.map((msg, i) => (
         <ChatBubble key={i} message={msg} />
       ))}
-      {/* Quick actions after last assistant message */}
       {messages.length > 0 &&
         messages[messages.length - 1].role === "assistant" &&
         !messages[messages.length - 1].isStreaming && (
@@ -591,10 +692,24 @@ function PlaceholderTab({ label, desc }: { label: string; desc: string }) {
 
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      const { toast } = await import("sonner");
+      toast.success("Copied to clipboard");
+    } catch {
+      /* clipboard not available */
+    }
+  };
+
   return (
-    <div className={cn("flex gap-2", isUser && "flex-row-reverse")}>
+    <div className={cn("flex gap-2", isUser && "flex-row-reverse")} role="listitem">
       {!isUser && (
-        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/60">
+        <div
+          className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/60"
+          aria-hidden
+        >
           <Sparkles className="size-3 text-foreground/50" />
         </div>
       )}
@@ -611,27 +726,31 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             <div className="prose-sm prose dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:text-foreground/90">
               <ReactMarkdown>{message.content}</ReactMarkdown>
               {message.isStreaming && (
-                <span className="inline-block h-3.5 w-0.5 animate-cursor-blink bg-foreground/50 ml-0.5" />
+                <span
+                  className="inline-block h-3.5 w-0.5 animate-cursor-blink bg-foreground/50 ml-0.5"
+                  aria-label="Typing"
+                />
               )}
             </div>
           )}
         </div>
-        {/* Feedback & citations */}
         {!isUser && !message.isStreaming && message.content && (
           <div className="mt-1 flex items-center gap-2 pl-1">
-            <button className="text-muted-foreground/30 hover:text-foreground/60 transition-colors">
-              <ThumbsUp className="size-3" />
-            </button>
-            <button className="text-muted-foreground/30 hover:text-foreground/60 transition-colors">
-              <ThumbsDown className="size-3" />
-            </button>
-            <button className="text-muted-foreground/30 hover:text-foreground/60 transition-colors">
+            <button
+              onClick={handleCopy}
+              className="text-muted-foreground/30 hover:text-foreground/60 transition-colors"
+              aria-label="Copy message"
+            >
               <Copy className="size-3" />
             </button>
             {message.citations && message.citations.length > 0 && (
               <div className="flex gap-1 ml-1">
                 {message.citations.map((cite, i) => (
-                  <span key={i} className="text-[10px] text-primary/50">
+                  <span
+                    key={i}
+                    className="text-[10px] text-primary/50"
+                    title={cite.content?.slice(0, 100)}
+                  >
                     {cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`}
                   </span>
                 ))}

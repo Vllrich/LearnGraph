@@ -1,6 +1,6 @@
 # LearnGraph — Implementation TODO & Roadmap
 
-> **Status:** Phase 1C/1D — In Progress (RAG, Mentor, Quiz, Review all functional)  
+> **Status:** Phase 1E — In Progress (Graph, Dashboard, Tests, Polish complete)  
 > **Last Updated:** March 8, 2026  
 > **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md)
 
@@ -128,8 +128,8 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** `/signup` page — email + password + display name, OAuth options
 - [x] **P0** `/auth/callback` route — handle OAuth redirect, set session cookies
 - [x] **P0** Logout functionality — clear session, redirect to `/login`
-- [ ] **P1** Onboarding flow after first signup — collect: display name, learning goal (free text), daily review budget (slider: 5–50 cards)
-- [ ] **P1** Store onboarding data in `users.onboarding` and `users.preferences` JSONB fields
+- [x] **P1** Onboarding flow after first signup — collect: display name, learning goal (free text), daily review budget (slider: 5–50 cards)
+- [x] **P1** Store onboarding data in `users.onboarding` and `users.preferences` JSONB fields
 
 **Acceptance:** Full signup → login → authenticated dashboard → logout cycle works. OAuth with Google works. Session persists on refresh. Unauthenticated routes redirect correctly.
 
@@ -148,7 +148,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** `MobileTabBar` component — Home, Library, Review, Mentor, More
 - [x] **P0** User avatar + dropdown in sidebar footer (settings, logout)
 - [x] **P1** Active route highlighting in sidebar
-- [ ] **P1** Breadcrumb component for nested pages
+- [x] **P1** Breadcrumb component for nested pages
 
 **Acceptance:** Responsive layout correct at all breakpoints (mobile/tablet/desktop). Navigation between all stub pages works. Active state highlights correct route.
 
@@ -221,7 +221,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 - [x] **P0** Accept YouTube URL, extract video ID (regex for all URL formats)
 - [x] **P0** Fetch transcript via YouTube innertube API (no API key needed for auto-generated captions)
-- [ ] **P0** Fallback: if no captions available, use OpenAI Whisper API on the audio track
+- [x] **P0** Fallback: if no captions available, use OpenAI Whisper API on the audio track
 - [x] **P0** Fetch video metadata: title, duration, thumbnail URL, channel name
 - [x] **P0** Store transcript as `raw_text` in `learning_objects`
 - [ ] **P1** Timestamp-aware chunking — preserve timestamp markers for citation linking
@@ -306,7 +306,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Full Text tab: rendered chunks with section headings in scroll area
 - [x] **P0** Side panel: extracted concepts list with difficulty badges, action buttons (Ask Mentor, Quiz Me)
 - [ ] **P1** PDF viewer embed (optional: render original PDF alongside summary)
-- [ ] **P1** YouTube embed for video content
+- [x] **P1** YouTube embed for video content
 
 **Acceptance:** Content detail page shows all three summary tiers. Tabs switch correctly. Side panel shows extracted concepts. Responsive layout matches Design System §9.2 wireframe.
 
@@ -366,7 +366,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Chat input — text input + send button, disabled while AI is responding
 - [x] **P0** Context selector — which learning object(s) the mentor should reference
 - [ ] **P1** Inline quiz rendering — when mentor generates a quiz via tool call, render interactive MCQ/short-answer in the chat
-- [ ] **P1** Conversation history — sidebar list of past conversations, ability to resume
+- [x] **P1** Conversation history — sidebar list of past conversations, ability to resume
 - [x] **P1** "Explain like I'm 5" / "Go deeper" quick-action buttons
 
 **Acceptance:** Full chat loop works: type question → see streaming AI response → see source citation → click citation to see chunk. Mentor uses Socratic questioning. UI matches Design System §6.4 wireframe.
@@ -404,8 +404,8 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
   4. Validate: discard questions where correct answer can't be grounded in source chunks
 - [x] **P0** Store in `questions` table linked to learning object and concepts
 - [x] **P0** Pre-generate quiz bank during ingestion (batch job) — 5–10 questions per concept
-- [ ] **P0** Quality scoring: track user feedback (thumbs up/down), exclude low-rated questions
-- [ ] **P1** Difficulty adaptation: >80% correct → increase difficulty, <60% → decrease + flag gap
+- [x] **P0** Quality scoring: track user feedback (thumbs up/down), exclude low-rated questions
+- [x] **P1** Difficulty adaptation: >80% correct → increase difficulty, <60% → decrease + flag gap
 
 **Acceptance:** Upload a document → quiz bank auto-generated for each extracted concept. MCQ questions have 4 options with exactly 1 correct. Every question links to grounding chunks. Questions are factually accurate (manual review of 10 questions).
 
@@ -478,9 +478,9 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** FSRS rating buttons: Again (1) / Hard (2) / Good (3) / Easy (4) — with predicted next interval shown
 - [x] **P0** On rating: call `updateState`, advance to next card
 - [x] **P0** Session complete screen: summary (X correct, Y incorrect, Z new concepts), streak update
-- [ ] **P1** "Show Hint" button — retrieves a relevant chunk as a hint
+- [x] **P1** "Show Hint" button — retrieves a relevant chunk as a hint
 - [ ] **P1** Flashcard flip animation (§8)
-- [ ] **P1** Keyboard shortcuts: 1/2/3/4 for ratings, Enter to submit
+- [x] **P1** Keyboard shortcuts: 1/2/3/4 for ratings, Enter to submit
 
 **Acceptance:** Full review session: see question → answer → see result → rate → next card → session complete. FSRS state updates correctly. Progress bar advances. Session summary is accurate.
 
@@ -502,14 +502,14 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
   - Size: scales with number of downstream dependencies
   - Color: mastery level color (§3.2)
   - Label: concept display name
-- [ ] **P0** Edge rendering:
+- [x] **P0** Edge rendering:
   - `prerequisite`: solid arrow
   - `related_to`: dashed line
   - `part_of`: dotted line with diamond
 - [x] **P0** Click node → side panel with concept detail (definition, mastery, source chunks, "Study this" action)
 - [x] **P0** Zoom, pan, and basic interaction controls
-- [ ] **P1** Node states: pulsing ring (in-progress), glow (mastered), dashed red border (gap detected)
-- [ ] **P1** Filter by: learning object, domain, mastery range
+- [x] **P1** Node states: pulsing ring (in-progress), glow (mastered), dashed red border (gap detected)
+- [x] **P1** Filter by: learning object, domain, mastery range
 - [ ] **P2** Minimap for large graphs
 
 **Acceptance:** Graph renders all concepts from user's content. Nodes colored by mastery. Clicking a node shows detail. Graph is interactive (zoom/pan). 100+ nodes render without performance issues.
@@ -518,7 +518,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 ### 5.2 Progress Dashboard
 
-- [ ] **P0** Dashboard widgets (update Home page from §1.3 with real data):
+- [x] **P0** Dashboard widgets (update Home page from §1.3 with real data):
   - Daily review card: actual due count from `getDailyQueue`
   - Streak counter: consecutive days with at least 1 review
   - Concepts by mastery level: bar chart (Unknown/Exposed/Practicing/Familiar/Proficient/Mastered)
@@ -529,7 +529,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
   - Study time (derived from `review_log` timestamps)
 - [x] **P0** Use Recharts for all visualizations
 - [ ] **P1** Streak flame animation (§8)
-- [ ] **P1** "Knowledge health" metric: % of concepts above 0.9 retrievability
+- [x] **P1** "Knowledge health" metric: % of concepts above 0.9 retrievability
 
 **Acceptance:** Dashboard shows real data from user's review history. Charts render correctly. Streak calculation is accurate (timezone-aware).
 
@@ -539,13 +539,13 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > Testing is not optional — these cover critical business logic that would silently break without coverage.
 
-- [ ] **P0** Unit tests for semantic chunking: verify chunk boundaries, overlap, token limits, metadata assignment
+- [x] **P0** Unit tests for semantic chunking: verify chunk boundaries, overlap, token limits, metadata assignment
 - [ ] **P0** Unit tests for RAG retrieval: verify hybrid scoring, metadata filtering, top-K ordering
-- [ ] **P0** Unit tests for mastery state machine: verify all transitions (§5.6 rules), edge cases (mastery can't go below 0 or above 5)
+- [x] **P0** Unit tests for mastery state machine: verify all transitions (§5.6 rules), edge cases (mastery can't go below 0 or above 5)
 - [ ] **P0** Unit tests for daily queue generation: verify sorting by retrievability, daily budget cap, 80/20 mix ratio
 - [ ] **P0** Integration test: full ingestion pipeline (upload → chunks → embeddings → concepts → summaries → status=ready)
 - [ ] **P1** Integration test: review session (fetch queue → answer question → FSRS update → verify next review date)
-- [ ] **P1** Configure Vitest as test runner in monorepo
+- [x] **P1** Configure Vitest as test runner in monorepo
 
 **Acceptance:** All unit tests pass. Integration tests cover the two critical paths (ingestion, review). CI pipeline runs tests on every PR.
 
@@ -554,11 +554,11 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 ### 5.4 Integration & Polish
 
 - [ ] **P0** Full end-to-end flow test: Sign up → Upload PDF → Wait for processing → View summary → Chat with mentor → Take quiz → Review flashcards → See progress
-- [ ] **P0** Error handling audit: every async operation has loading, error, and empty states
-- [ ] **P0** Toast notifications: upload complete, processing failed, review reminder
-- [ ] **P0** Loading skeletons: shimmer animation for all data-loading states (§8)
+- [x] **P0** Error handling audit: every async operation has loading, error, and empty states
+- [x] **P0** Toast notifications: upload complete, processing failed, review reminder
+- [x] **P0** Loading skeletons: shimmer animation for all data-loading states (§8)
 - [ ] **P0** Mobile responsiveness audit: test all pages at 375px, 768px, 1024px, 1440px
-- [ ] **P0** Accessibility audit: keyboard navigation, focus rings, ARIA labels, screen reader testing
+- [x] **P0** Accessibility audit: keyboard navigation, focus rings, ARIA labels, screen reader testing
 - [~] **P1** Rate limiting on all tRPC procedures (Upstash Ratelimit) — in-memory rate limiting added to `/api/mentor` and `/api/ingest`; migrate to Upstash for distributed rate limiting
 - [ ] **P1** Error tracking: Sentry integration
 - [ ] **P1** Product analytics: PostHog integration (page views, feature usage events)
@@ -602,32 +602,38 @@ Before moving to Phase 2, ALL of the following must be true:
 > Detailed task breakdown to be written after Phase 1 completion.
 
 ### Week 9–10: Advanced Learning Features
+
 - [ ] Knowledge gap detection algorithm (§6.4)
 - [ ] Goal-driven curriculum builder (§2 Feature #8)
 - [ ] Explain-back mode (§2 Feature #10)
 
 ### Week 11–12: Mobile & Offline
+
 - [ ] PWA configuration (manifest, service worker, offline caching)
 - [ ] Offline review queue (IndexedDB)
 - [ ] Push notifications for review reminders (Web Push API)
 
 ### Week 13–14: Additional Content Formats
+
 - [ ] PPT/PPTX ingestion (`officeparser`)
 - [ ] Word/DOCX ingestion (`officeparser`)
 - [ ] Audio file ingestion (Whisper API)
 - [ ] Web URL ingestion (Firecrawl or `@mozilla/readability`)
 
 ### Week 15–16: Analytics & Engagement
+
 - [ ] Learning analytics dashboard (retention curves, efficiency metrics)
 - [ ] Study streak mechanics + achievements
 - [ ] Email reminders (Resend) for review nudges
 
 ### Week 17–18: Graph Enhancements
+
 - [ ] Cross-subject concept connections
 - [ ] Graph enrichment background jobs (transitive dependency inference)
 - [ ] Improved graph visualization (clustering, search, filter)
 
 ### Week 19–20: Monetization
+
 - [ ] Stripe integration for Pro tier ($15/month)
 - [ ] Free tier usage limits (10 mentor messages/day, 5 quiz sessions, 3 uploads)
 - [ ] Landing page + pricing page
@@ -692,17 +698,17 @@ Phase 1E (Weeks 7-8)
 
 Track shortcuts taken during POC that must be addressed before Phase 2:
 
-| # | Debt Item | Accepted In | Must Fix By |
-|---|-----------|-------------|-------------|
-| 1 | No automated E2E tests (Playwright) | Phase 1 | Phase 2 Week 11 |
-| 2 | FSRS uses default parameters (not personalized per-user) | Phase 1 | Phase 2 Week 9 |
-| 3 | No cross-encoder re-ranking in RAG pipeline | Phase 1 | Phase 2 Week 13 |
-| 4 | No semantic cache for LLM responses | Phase 1 | Phase 2 Week 15 |
-| 5 | No image/OCR support for scanned PDFs | Phase 1 | Phase 2 Week 13 |
-| 6 | Knowledge graph deduplication is basic (fuzzy match + embedding threshold) | Phase 1 | Phase 2 Week 17 |
-| 7 | No backup/restore strategy beyond Supabase defaults | Phase 1 | Phase 2 Week 19 |
-| 8 | No content moderation on uploads (OpenAI Moderation API) | Phase 1 | Phase 2 Week 9 |
+| #   | Debt Item                                                                  | Accepted In | Must Fix By     |
+| --- | -------------------------------------------------------------------------- | ----------- | --------------- |
+| 1   | No automated E2E tests (Playwright)                                        | Phase 1     | Phase 2 Week 11 |
+| 2   | FSRS uses default parameters (not personalized per-user)                   | Phase 1     | Phase 2 Week 9  |
+| 3   | No cross-encoder re-ranking in RAG pipeline                                | Phase 1     | Phase 2 Week 13 |
+| 4   | No semantic cache for LLM responses                                        | Phase 1     | Phase 2 Week 15 |
+| 5   | No image/OCR support for scanned PDFs                                      | Phase 1     | Phase 2 Week 13 |
+| 6   | Knowledge graph deduplication is basic (fuzzy match + embedding threshold) | Phase 1     | Phase 2 Week 17 |
+| 7   | No backup/restore strategy beyond Supabase defaults                        | Phase 1     | Phase 2 Week 19 |
+| 8   | No content moderation on uploads (OpenAI Moderation API)                   | Phase 1     | Phase 2 Week 9  |
 
 ---
 
-*This TODO is a living document. Update task statuses as work progresses. Add new tasks as requirements emerge. Never remove completed tasks — they serve as an implementation audit trail.*
+_This TODO is a living document. Update task statuses as work progresses. Add new tasks as requirements emerge. Never remove completed tasks — they serve as an implementation audit trail._

@@ -13,10 +13,7 @@ import {
 import { eq, and, lte, sql, asc, desc, count, inArray } from "drizzle-orm";
 import { schedule, newCard, type Card } from "@repo/fsrs";
 import type { FSRSRating } from "@repo/shared";
-import {
-  DEFAULT_DAILY_REVIEW_LIMIT,
-  DEFAULT_REVIEW_MIX_RATIO,
-} from "@repo/shared";
+import { DEFAULT_DAILY_REVIEW_LIMIT, DEFAULT_REVIEW_MIX_RATIO, computeMastery } from "@repo/shared";
 
 function dbStateToCard(state: typeof userConceptState.$inferSelect): Card {
   return {
@@ -47,12 +44,6 @@ function cardToDbFields(card: Card, nextReview: Date, retrievability: number) {
   };
 }
 
-function computeMastery(current: number, rating: FSRSRating): number {
-  if (rating >= 3 && current < 5) return current + 1;
-  if (rating === 1 && current > 0) return current - 1;
-  return current;
-}
-
 export const reviewRouter = createTRPCRouter({
   /**
    * Initialize user_concept_state rows for concepts linked to a learning object.
@@ -78,8 +69,8 @@ export const reviewRouter = createTRPCRouter({
         .where(
           and(
             eq(userConceptState.userId, ctx.userId),
-            inArray(userConceptState.conceptId, conceptIds),
-          ),
+            inArray(userConceptState.conceptId, conceptIds)
+          )
         );
       const existingSet = new Set(existing.map((e) => e.conceptId));
       const newConceptIds = conceptIds.filter((id) => !existingSet.has(id));
@@ -96,7 +87,7 @@ export const reviewRouter = createTRPCRouter({
           nextReviewAt: now,
           createdAt: now,
           updatedAt: now,
-        })),
+        }))
       );
 
       return { initialized: newConceptIds.length };
@@ -132,8 +123,8 @@ export const reviewRouter = createTRPCRouter({
           and(
             eq(userConceptState.userId, ctx.userId),
             lte(userConceptState.nextReviewAt, now),
-            sql`${userConceptState.fsrsReps} > 0`,
-          ),
+            sql`${userConceptState.fsrsReps} > 0`
+          )
         )
         .orderBy(asc(userConceptState.fsrsRetrievability))
         .limit(reviewSlots);
@@ -152,12 +143,7 @@ export const reviewRouter = createTRPCRouter({
         })
         .from(userConceptState)
         .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-        .where(
-          and(
-            eq(userConceptState.userId, ctx.userId),
-            sql`${userConceptState.fsrsReps} = 0`,
-          ),
-        )
+        .where(and(eq(userConceptState.userId, ctx.userId), sql`${userConceptState.fsrsReps} = 0`))
         .orderBy(asc(userConceptState.createdAt))
         .limit(newSlots);
 
@@ -166,16 +152,37 @@ export const reviewRouter = createTRPCRouter({
 
       let questionsForReview: (typeof questions.$inferSelect)[] = [];
       if (conceptIds.length > 0) {
-        questionsForReview = await db
+        // Build a map of concept → mastery to pick difficulty-appropriate questions
+        const masteryMap = new Map<string, number>();
+        for (const item of allItems) {
+          masteryMap.set(item.conceptId, item.masteryLevel ?? 0);
+        }
+
+        const allQuestions = await db
           .select()
           .from(questions)
           .where(
             sql`${questions.conceptIds} && ARRAY[${sql.join(
               conceptIds.map((id) => sql`${id}::uuid`),
-              sql`, `,
-            )}]`,
+              sql`, `
+            )}] AND COALESCE(${questions.isExcluded}, false) = false`
           )
-          .limit(budget * 2);
+          .limit(budget * 5);
+
+        // Difficulty adaptation: prefer questions matching mastery bracket
+        // >80% accuracy → increase difficulty, <60% → decrease
+        questionsForReview = allQuestions
+          .map((q) => {
+            const conceptId = q.conceptIds?.[0];
+            const mastery = conceptId ? (masteryMap.get(conceptId) ?? 0) : 0;
+            const targetDifficulty = Math.min(5, Math.max(1, mastery + 1));
+            const diffDelta = Math.abs((q.difficulty ?? 3) - targetDifficulty);
+            return { ...q, _sortScore: diffDelta };
+          })
+          .sort((a, b) => a._sortScore - b._sortScore)
+          .slice(0, budget * 2)
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          .map(({ _sortScore: _, ...q }) => q);
       }
 
       return {
@@ -195,7 +202,7 @@ export const reviewRouter = createTRPCRouter({
         answerText: z.string().optional(),
         isCorrect: z.boolean().optional(),
         responseTimeMs: z.number().optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const [state] = await db
@@ -204,8 +211,8 @@ export const reviewRouter = createTRPCRouter({
         .where(
           and(
             eq(userConceptState.userId, ctx.userId),
-            eq(userConceptState.conceptId, input.conceptId),
-          ),
+            eq(userConceptState.conceptId, input.conceptId)
+          )
         )
         .limit(1);
 
@@ -300,9 +307,10 @@ export const reviewRouter = createTRPCRouter({
       WHERE grp = (SELECT grp FROM streak LIMIT 1)
     `);
 
-    const streak = Array.isArray(streakResult) && streakResult.length > 0
-      ? Number(streakResult[0].streak_days)
-      : 0;
+    const streak =
+      Array.isArray(streakResult) && streakResult.length > 0
+        ? Number(streakResult[0].streak_days)
+        : 0;
 
     return {
       mastery: masteryDist ?? { total: 0, m0: 0, m1: 0, m2: 0, m3: 0, m4: 0, m5: 0 },
@@ -324,10 +332,7 @@ export const reviewRouter = createTRPCRouter({
       .from(concepts)
       .leftJoin(
         userConceptState,
-        and(
-          eq(userConceptState.conceptId, concepts.id),
-          eq(userConceptState.userId, ctx.userId),
-        ),
+        and(eq(userConceptState.conceptId, concepts.id), eq(userConceptState.userId, ctx.userId))
       );
 
     const { conceptEdges } = await import("@repo/db");
