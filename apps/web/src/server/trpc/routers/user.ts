@@ -25,6 +25,7 @@ export const userRouter = createTRPCRouter({
     .input(
       z.object({
         displayName: z.string().min(1).max(50),
+        educationStage: z.enum(["elementary", "high_school", "university", "professional", "self_learner"]),
         learningGoal: z.string().max(500).optional(),
         dailyBudget: z.number().min(5).max(50),
         timezone: z.string().max(100),
@@ -37,7 +38,10 @@ export const userRouter = createTRPCRouter({
           displayName: input.displayName,
           timezone: input.timezone,
           onboarding: { completed: true, learningGoal: input.learningGoal },
-          preferences: { dailyReviewBudget: input.dailyBudget },
+          preferences: {
+            dailyReviewBudget: input.dailyBudget,
+            learnerProfile: { educationStage: input.educationStage },
+          },
           updatedAt: new Date(),
         })
         .where(eq(users.id, ctx.userId));
@@ -50,6 +54,9 @@ export const userRouter = createTRPCRouter({
       z.object({
         dailyReviewBudget: z.number().min(5).max(50).optional(),
         timezone: z.string().max(100).optional(),
+        learnerProfile: z.object({
+          educationStage: z.enum(["elementary", "high_school", "university", "professional", "self_learner"]),
+        }).optional(),
         notifications: z
           .object({
             emailReminders: z.boolean().optional(),
@@ -76,8 +83,12 @@ export const userRouter = createTRPCRouter({
           ? (user.preferences as Record<string, unknown>)
           : {};
 
-      const { notifications, mentorMemory, ...rest } = input;
+      const { notifications, mentorMemory, learnerProfile, ...rest } = input;
       const newPrefs = { ...currentPrefs, ...rest };
+
+      if (learnerProfile) {
+        newPrefs.learnerProfile = learnerProfile;
+      }
 
       if (notifications) {
         const existingNotifs =

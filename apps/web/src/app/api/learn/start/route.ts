@@ -8,11 +8,33 @@ import type { GoalType } from "@repo/shared";
 
 export const maxDuration = 60;
 
+const methodPreferencesSchema = z.object({
+  guidedLessons: z.number().min(0).max(100),
+  practiceTesting: z.number().min(0).max(100),
+  explainBack: z.number().min(0).max(100),
+  spacedReview: z.number().min(0).max(100),
+});
+
+const selectedTopicSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+});
+
 const startSchema = z.object({
   topic: z.string().min(1).max(500),
   goalType: z.enum(["exam_prep", "skill_building", "course_supplement", "exploration"]),
   currentLevel: z.enum(["beginner", "some_knowledge", "experienced"]),
   timeBudgetMinutes: z.number().min(5).max(480).optional(),
+  educationStage: z.enum(["elementary", "high_school", "university", "professional", "self_learner"]).optional(),
+  selectedTopics: z.array(selectedTopicSchema).optional(),
+  methodPreferences: methodPreferencesSchema.optional(),
+  focusMode: z.enum(["concept_mastery", "breadth", "exam_readiness"]).optional(),
+  sessionMinutes: z.number().min(5).max(60).optional(),
+  daysPerWeek: z.number().min(1).max(7).optional(),
+  targetDate: z.string().optional(),
+  examDate: z.string().optional(),
+  examName: z.string().max(200).optional(),
+  contextNote: z.string().max(500).optional(),
 });
 
 const COVER_STYLE: Record<GoalType, string> = {
@@ -99,12 +121,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { topic, goalType, currentLevel, timeBudgetMinutes } = parsed.data;
+  const {
+    topic, goalType, currentLevel, timeBudgetMinutes,
+    educationStage, selectedTopics, methodPreferences, focusMode,
+    sessionMinutes, daysPerWeek, targetDate, examDate, examName, contextNote,
+  } = parsed.data;
 
   try {
-    // Run curriculum generation and DALL-E image fetch in parallel (no goalId needed yet)
     const [{ goal, items }, imageB64] = await Promise.all([
-      generateCurriculum({ topic, goalType, currentLevel, userId: user.id, timeBudgetMinutes }),
+      generateCurriculum({
+        topic, goalType, currentLevel, userId: user.id, timeBudgetMinutes,
+        educationStage, selectedTopics, methodPreferences, focusMode,
+        sessionMinutes, daysPerWeek, targetDate, examDate, examName, contextNote,
+      }),
       fetchCoverImageB64(topic, goalType),
     ]);
 

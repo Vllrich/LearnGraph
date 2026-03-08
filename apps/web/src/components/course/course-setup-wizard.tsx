@@ -1,0 +1,795 @@
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Loader2,
+  GraduationCap,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Plus,
+  X,
+  GripVertical,
+  Calendar,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { trpc } from "@/trpc/client";
+import type {
+  GoalType,
+  LearnerLevel,
+  EducationStage,
+  MethodPreferences,
+  FocusMode,
+} from "@repo/shared";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const GOAL_OPTIONS: { id: GoalType; label: string; icon: string; hint: string }[] = [
+  { id: "exam_prep", label: "Exam", icon: "📝", hint: "Prepare for a test or certification" },
+  { id: "skill_building", label: "Career", icon: "💼", hint: "Build job-relevant skills" },
+  { id: "course_supplement", label: "Course", icon: "📚", hint: "Supplement a class you're taking" },
+  { id: "exploration", label: "Curious", icon: "✨", hint: "Explore out of interest" },
+];
+
+const LEVEL_OPTIONS: { id: LearnerLevel; label: string; icon: string }[] = [
+  { id: "beginner", label: "Brand new", icon: "🌱" },
+  { id: "some_knowledge", label: "Some knowledge", icon: "📖" },
+  { id: "experienced", label: "Experienced", icon: "🎓" },
+];
+
+const FOCUS_OPTIONS: { id: FocusMode; label: string; description: string }[] = [
+  { id: "concept_mastery", label: "Deep mastery", description: "Understand each concept thoroughly" },
+  { id: "breadth", label: "Broad coverage", description: "Cover a wide range of topics" },
+  { id: "exam_readiness", label: "Exam readiness", description: "Focus on what's most testable" },
+];
+
+const SESSION_OPTIONS = [5, 10, 15, 20, 30] as const;
+
+type SuggestedTopic = {
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  enabled: boolean;
+};
+
+type WizardStep = 0 | 1 | 2 | 3 | 4;
+
+type CourseSetupWizardProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  topic: string;
+};
+
+export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWizardProps) {
+  const router = useRouter();
+  const { data: profile } = trpc.user.getProfile.useQuery();
+
+  const userStage: EducationStage =
+    (profile?.preferences as Record<string, unknown> | null)?.learnerProfile
+      ? ((profile?.preferences as Record<string, unknown>).learnerProfile as { educationStage: EducationStage }).educationStage
+      : "self_learner";
+
+  // Step 0: Purpose
+  const [goalType, setGoalType] = useState<GoalType | null>(null);
+  const [examName, setExamName] = useState("");
+  const [examDate, setExamDate] = useState("");
+  const [contextNote, setContextNote] = useState("");
+
+  // Step 1: Familiarity
+  const [level, setLevel] = useState<LearnerLevel | null>(null);
+
+  // Step 2: Topics
+  const [topics, setTopics] = useState<SuggestedTopic[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [newTopicTitle, setNewTopicTitle] = useState("");
+
+  // Step 3: Preferences
+  const [sessionMinutes, setSessionMinutes] = useState(15);
+  const [daysPerWeek, setDaysPerWeek] = useState(5);
+  const [focusMode, setFocusMode] = useState<FocusMode>("concept_mastery");
+  const [methods, setMethods] = useState<MethodPreferences>({
+    guidedLessons: 25, practiceTesting: 25, explainBack: 25, spacedReview: 25,
+  });
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
+
+  // Step 4: Generating
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [step, setStep] = useState<WizardStep>(0);
+
+  // Apply defaults from education stage when goal is selected
+  useEffect(() => {
+    if (goalType && !defaultsApplied) {
+      fetchDefaults(userStage, goalType);
+      setDefaultsApplied(true);
+    }
+  }, [goalType, userStage, defaultsApplied]);
+
+  function fetchDefaults(stage: EducationStage, goal: GoalType) {
+    const defaults = getClientMethodDefaults(stage, goal);
+    setMethods(defaults.methods);
+    setSessionMinutes(defaults.sessionMinutes);
+    setDaysPerWeek(defaults.daysPerWeek);
+    setFocusMode(defaults.focusMode);
+  }
+
+  // Fetch suggested topics when entering step 2
+  const fetchTopics = useCallback(async () => {
+    if (!goalType || !level || topics.length > 0) return;
+    setTopicsLoading(true);
+    try {
+      const res = await fetch("/api/learn/suggest-topics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          goalType,
+          currentLevel: level,
+          educationStage: userStage,
+          contextNote: contextNote || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTopics(
+          (data.topics as { title: string; description: string; estimatedMinutes: number }[]).map((t) => ({
+            ...t,
+            enabled: true,
+          }))
+        );
+      }
+    } catch {
+      // Silently fail, user can still proceed
+    } finally {
+      setTopicsLoading(false);
+    }
+  }, [goalType, level, topic, userStage, contextNote, topics.length]);
+
+  useEffect(() => {
+    if (step === 2) {
+      void fetchTopics();
+    }
+  }, [step, fetchTopics]);
+
+  function toggleTopic(index: number) {
+    setTopics((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, enabled: !t.enabled } : t))
+    );
+  }
+
+  function addCustomTopic() {
+    if (!newTopicTitle.trim()) return;
+    setTopics((prev) => [
+      ...prev,
+      { title: newTopicTitle.trim(), description: "Custom topic", estimatedMinutes: 10, enabled: true },
+    ]);
+    setNewTopicTitle("");
+  }
+
+  function removeTopic(index: number) {
+    setTopics((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  const enabledTopics = topics.filter((t) => t.enabled);
+  const totalMinutes = enabledTopics.reduce((sum, t) => sum + t.estimatedMinutes, 0);
+  const estimatedSessions = Math.ceil(totalMinutes / (sessionMinutes || 15));
+  const estimatedWeeks = Math.ceil(estimatedSessions / (daysPerWeek || 5));
+
+  function updateMethod(key: keyof MethodPreferences, value: number) {
+    setMethods((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const handleGenerate = useCallback(async () => {
+    if (!goalType || !level) return;
+    setGenerating(true);
+    setError(null);
+
+    const selectedTopics = enabledTopics.length > 0
+      ? enabledTopics.map((t) => ({ title: t.title, description: t.description }))
+      : undefined;
+
+    try {
+      const res = await fetch("/api/learn/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          goalType,
+          currentLevel: level,
+          educationStage: userStage,
+          selectedTopics,
+          methodPreferences: methods,
+          focusMode,
+          sessionMinutes,
+          daysPerWeek,
+          examDate: examDate || undefined,
+          examName: examName || undefined,
+          contextNote: contextNote || undefined,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        router.push(`/learn/${data.goalId}`);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setError(errData.error ?? "Something went wrong. Please try again.");
+        setGenerating(false);
+      }
+    } catch {
+      setError("Network error. Please check your connection.");
+      setGenerating(false);
+    }
+  }, [topic, goalType, level, userStage, enabledTopics, methods, focusMode, sessionMinutes, daysPerWeek, examDate, examName, contextNote, router]);
+
+  function canGoNext(): boolean {
+    if (step === 0) return !!goalType;
+    if (step === 1) return !!level;
+    if (step === 2) return true;
+    if (step === 3) return true;
+    return false;
+  }
+
+  function goNext() {
+    if (step < 4) setStep((step + 1) as WizardStep);
+  }
+
+  function goBack() {
+    if (step > 0) setStep((step - 1) as WizardStep);
+  }
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setStep(0);
+      setGoalType(null);
+      setExamName("");
+      setExamDate("");
+      setContextNote("");
+      setLevel(null);
+      setTopics([]);
+      setTopicsLoading(false);
+      setNewTopicTitle("");
+      setDefaultsApplied(false);
+      setGenerating(false);
+      setError(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border/20 px-6 py-4">
+        <div className="flex gap-2">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-1 rounded-full transition-all",
+                i <= step ? "w-8 bg-primary" : "w-4 bg-muted-foreground/15"
+              )}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => onOpenChange(false)}
+          className="rounded-lg p-1 text-muted-foreground/50 hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-xl px-6 py-8">
+              {/* Step 0: Purpose */}
+              {step === 0 && (
+                <div className="space-y-5">
+                  <div>
+                    <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                      Great topic. What brings you to
+                    </p>
+                    <h2 className="text-xl font-semibold font-(family-name:--font-source-serif)">
+                      {topic}?
+                    </h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {GOAL_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setGoalType(opt.id)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left transition-all",
+                          goalType === opt.id
+                            ? "border-primary/50 bg-primary/5"
+                            : "border-border/30 hover:border-border/60"
+                        )}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <span>{opt.icon}</span> {opt.label}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground/50">{opt.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Conditional context fields */}
+                  {goalType === "exam_prep" && (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={examName}
+                        onChange={(e) => setExamName(e.target.value)}
+                        placeholder="Exam name (e.g., AP Biology, AWS SAA-C03)"
+                        className="w-full rounded-lg border border-border/30 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Calendar className="size-4 text-muted-foreground/40" />
+                        <input
+                          type="date"
+                          value={examDate}
+                          onChange={(e) => setExamDate(e.target.value)}
+                          className="w-full rounded-lg border border-border/30 bg-transparent px-3 py-2 text-sm text-muted-foreground focus:border-foreground/20 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {goalType === "skill_building" && (
+                    <input
+                      type="text"
+                      value={contextNote}
+                      onChange={(e) => setContextNote(e.target.value)}
+                      placeholder="Target role or skill (e.g., Backend Engineer, Data Analysis)"
+                      className="w-full rounded-lg border border-border/30 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
+                    />
+                  )}
+                  {goalType === "course_supplement" && (
+                    <input
+                      type="text"
+                      value={contextNote}
+                      onChange={(e) => setContextNote(e.target.value)}
+                      placeholder="Course name (e.g., CS 101, Organic Chemistry II)"
+                      className="w-full rounded-lg border border-border/30 bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Step 1: Familiarity */}
+              {step === 1 && (
+                <div className="space-y-5">
+                  <div>
+                    <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                      How familiar are you with
+                    </p>
+                    <h2 className="text-xl font-semibold font-(family-name:--font-source-serif)">
+                      {topic}?
+                    </h2>
+                  </div>
+
+                  <div className="space-y-2">
+                    {LEVEL_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setLevel(opt.id)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all",
+                          level === opt.id
+                            ? "border-primary/50 bg-primary/5"
+                            : "border-border/30 hover:border-border/60"
+                        )}
+                      >
+                        <span className="text-lg">{opt.icon}</span>
+                        <span className="text-sm font-medium">{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Topic Scope */}
+              {step === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                      Here's what I'd suggest covering.
+                    </p>
+                    <h2 className="text-lg font-semibold font-(family-name:--font-source-serif)">
+                      Toggle topics on or off
+                    </h2>
+                  </div>
+
+                  {topicsLoading ? (
+                    <div className="flex flex-col items-center gap-3 py-12">
+                      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground/60">Generating topic outline...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        {topics.map((t, i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              "flex items-start gap-2 rounded-lg border px-3 py-2 transition-all",
+                              t.enabled
+                                ? "border-border/30 bg-card"
+                                : "border-border/15 bg-muted/20 opacity-50"
+                            )}
+                          >
+                            <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/30" />
+                            <button
+                              onClick={() => toggleTopic(i)}
+                              className={cn(
+                                "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-all",
+                                t.enabled
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border/50"
+                              )}
+                            >
+                              {t.enabled && <Check className="size-2.5" />}
+                            </button>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-medium leading-tight">{t.title}</p>
+                              <p className="text-[11px] text-muted-foreground/50 leading-tight">
+                                {t.description}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[10px] text-muted-foreground/40">
+                              {t.estimatedMinutes}m
+                            </span>
+                            <button
+                              onClick={() => removeTopic(i)}
+                              className="mt-0.5 shrink-0 text-muted-foreground/30 hover:text-destructive"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add custom topic */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newTopicTitle}
+                          onChange={(e) => setNewTopicTitle(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && addCustomTopic()}
+                          placeholder="Add a custom topic..."
+                          className="flex-1 rounded-lg border border-border/30 bg-transparent px-3 py-2 text-[13px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
+                        />
+                        <button
+                          onClick={addCustomTopic}
+                          disabled={!newTopicTitle.trim()}
+                          className="flex size-8 items-center justify-center rounded-lg border border-border/30 text-muted-foreground transition-all hover:bg-muted/30 disabled:opacity-30"
+                        >
+                          <Plus className="size-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground/50">
+                        <span>{enabledTopics.length} topics selected</span>
+                        <span>~{totalMinutes} min total</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: Preferences & Schedule */}
+              {step === 3 && (
+                <div className="space-y-5">
+                  <div>
+                    <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                      Let's customize how you learn.
+                    </p>
+                    <h2 className="text-lg font-semibold font-(family-name:--font-source-serif)">
+                      Learning preferences
+                    </h2>
+                  </div>
+
+                  {/* Session length */}
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Session length</p>
+                    <div className="flex gap-1.5">
+                      {SESSION_OPTIONS.map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => setSessionMinutes(m)}
+                          className={cn(
+                            "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                            sessionMinutes === m
+                              ? "border-primary/50 bg-primary/10 text-primary"
+                              : "border-border/30 text-muted-foreground hover:border-border/60"
+                          )}
+                        >
+                          {m}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Focus mode */}
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Focus</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {FOCUS_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setFocusMode(opt.id)}
+                          className={cn(
+                            "rounded-xl border px-3 py-2.5 text-left transition-all",
+                            focusMode === opt.id
+                              ? "border-primary/50 bg-primary/5"
+                              : "border-border/30 hover:border-border/60"
+                          )}
+                        >
+                          <p className="text-[12px] font-medium">{opt.label}</p>
+                          <p className="text-[10px] text-muted-foreground/50">{opt.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Method mix */}
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      Method emphasis
+                    </p>
+                    <div className="space-y-2">
+                      {(
+                        [
+                          ["guidedLessons", "Guided lessons"],
+                          ["practiceTesting", "Practice testing"],
+                          ["explainBack", "Explain-back"],
+                          ["spacedReview", "Spaced review"],
+                        ] as [keyof MethodPreferences, string][]
+                      ).map(([key, label]) => (
+                        <div key={key} className="flex items-center gap-3">
+                          <span className="w-28 text-[11px] text-muted-foreground">{label}</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={methods[key]}
+                            onChange={(e) => updateMethod(key, Number(e.target.value))}
+                            className="h-1.5 flex-1 accent-primary"
+                          />
+                          <span className="w-8 text-right text-[11px] text-muted-foreground/60">
+                            {methods[key]}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Schedule */}
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Days/week</p>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => setDaysPerWeek(d)}
+                            className={cn(
+                              "flex size-7 items-center justify-center rounded-md border text-[11px] font-medium transition-all",
+                              daysPerWeek === d
+                                ? "border-primary/50 bg-primary/10 text-primary"
+                                : "border-border/30 text-muted-foreground/50 hover:border-border/60"
+                            )}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground/40">
+                      ~{estimatedSessions} sessions / ~{estimatedWeeks} week{estimatedWeeks !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Review & Generate */}
+              {step === 4 && (
+                <div className="space-y-5">
+                  {generating ? (
+                    <div className="flex flex-col items-center gap-6 py-12">
+                      <div className="relative size-24">
+                        {/* Orbiting nodes */}
+                        <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_8s_linear_infinite]">
+                          <circle cx="48" cy="8" r="5" className="fill-primary/80" />
+                          <circle cx="88" cy="48" r="4" className="fill-primary/50" />
+                          <circle cx="48" cy="88" r="5" className="fill-primary/80" />
+                          <circle cx="8" cy="48" r="4" className="fill-primary/50" />
+                        </svg>
+                        {/* Connecting arcs */}
+                        <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_4s_linear_infinite_reverse]">
+                          <circle cx="48" cy="48" r="36" fill="none" strokeWidth="1.5"
+                            className="stroke-primary/20"
+                            strokeDasharray="12 8"
+                          />
+                        </svg>
+                        {/* Inner pulsing ring */}
+                        <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_12s_linear_infinite]">
+                          <circle cx="48" cy="48" r="22" fill="none" strokeWidth="1.5"
+                            className="stroke-primary/30"
+                            strokeDasharray="6 10"
+                          />
+                        </svg>
+                        {/* Center icon */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <GraduationCap className="size-8 text-primary" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium">Building your learning path...</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Creating a personalized curriculum for {topic}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <h2 className="text-lg font-semibold font-(family-name:--font-source-serif)">
+                          Ready to start?
+                        </h2>
+                        <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                          Here's a summary of your learning plan.
+                        </p>
+                      </div>
+
+                      {error && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+                          {error}
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <SummaryRow label="Topic" value={topic} onEdit={() => onOpenChange(false)} />
+                        <SummaryRow
+                          label="Goal"
+                          value={`${GOAL_OPTIONS.find((o) => o.id === goalType)?.icon} ${GOAL_OPTIONS.find((o) => o.id === goalType)?.label}${examName ? ` — ${examName}` : ""}${contextNote ? ` — ${contextNote}` : ""}`}
+                          onEdit={() => setStep(0)}
+                        />
+                        <SummaryRow
+                          label="Level"
+                          value={`${LEVEL_OPTIONS.find((o) => o.id === level)?.icon} ${LEVEL_OPTIONS.find((o) => o.id === level)?.label}`}
+                          onEdit={() => setStep(1)}
+                        />
+                        <SummaryRow
+                          label="Topics"
+                          value={`${enabledTopics.length} subtopics · ~${totalMinutes} min total`}
+                          onEdit={() => setStep(2)}
+                        />
+                        <SummaryRow
+                          label="Schedule"
+                          value={`${sessionMinutes}min sessions · ${daysPerWeek}x/week · ~${estimatedWeeks}w`}
+                          onEdit={() => setStep(3)}
+                        />
+                        <SummaryRow
+                          label="Focus"
+                          value={FOCUS_OPTIONS.find((o) => o.id === focusMode)?.label ?? ""}
+                          onEdit={() => setStep(3)}
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleGenerate}
+                        className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+                      >
+                        Start Learning
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+        </div>
+      </div>
+
+      {/* Navigation footer */}
+      {step < 4 && (
+        <div className="shrink-0 border-t border-border/20 px-6 py-4">
+          <div className="mx-auto flex w-full max-w-xl items-center justify-between">
+            <button
+              onClick={goBack}
+              disabled={step === 0}
+              className={cn(
+                "flex items-center gap-1 text-xs text-muted-foreground transition-all",
+                step === 0 ? "invisible" : "hover:text-foreground"
+              )}
+            >
+              <ArrowLeft className="size-3" /> Back
+            </button>
+
+            <button
+              onClick={goNext}
+              disabled={!canGoNext()}
+              className={cn(
+                "flex items-center gap-1 rounded-lg px-4 py-2 text-xs font-medium transition-all",
+                canGoNext()
+                  ? "bg-foreground text-background hover:opacity-90"
+                  : "bg-muted/30 text-muted-foreground/30 cursor-not-allowed"
+              )}
+            >
+              {step === 3 ? "Review" : "Continue"} <ArrowRight className="size-3" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-border/20 px-4 py-2.5">
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/40">
+          {label}
+        </p>
+        <p className="text-[13px]">{value}</p>
+      </div>
+      <button
+        onClick={onEdit}
+        className="text-[11px] text-muted-foreground/50 hover:text-foreground"
+      >
+        Edit
+      </button>
+    </div>
+  );
+}
+
+// Client-side mirror of method defaults (avoids importing server code)
+function getClientMethodDefaults(stage: EducationStage, goalType: GoalType): {
+  methods: MethodPreferences;
+  sessionMinutes: number;
+  daysPerWeek: number;
+  focusMode: FocusMode;
+} {
+  const bases: Record<EducationStage, { methods: MethodPreferences; sessionMinutes: number; daysPerWeek: number; focusMode: FocusMode }> = {
+    elementary: { methods: { guidedLessons: 45, practiceTesting: 30, explainBack: 5, spacedReview: 20 }, sessionMinutes: 8, daysPerWeek: 5, focusMode: "concept_mastery" },
+    high_school: { methods: { guidedLessons: 30, practiceTesting: 30, explainBack: 15, spacedReview: 25 }, sessionMinutes: 15, daysPerWeek: 5, focusMode: "concept_mastery" },
+    university: { methods: { guidedLessons: 20, practiceTesting: 25, explainBack: 25, spacedReview: 30 }, sessionMinutes: 20, daysPerWeek: 5, focusMode: "breadth" },
+    professional: { methods: { guidedLessons: 15, practiceTesting: 25, explainBack: 25, spacedReview: 35 }, sessionMinutes: 10, daysPerWeek: 4, focusMode: "concept_mastery" },
+    self_learner: { methods: { guidedLessons: 25, practiceTesting: 20, explainBack: 20, spacedReview: 35 }, sessionMinutes: 15, daysPerWeek: 3, focusMode: "breadth" },
+  };
+
+  const goalOverrides: Record<GoalType, Partial<MethodPreferences> & { focusMode?: FocusMode }> = {
+    exam_prep: { practiceTesting: 35, spacedReview: 30, focusMode: "exam_readiness" },
+    skill_building: { explainBack: 30, guidedLessons: 20, focusMode: "concept_mastery" },
+    course_supplement: { guidedLessons: 30, spacedReview: 25, focusMode: "concept_mastery" },
+    exploration: { guidedLessons: 35, practiceTesting: 15, focusMode: "breadth" },
+  };
+
+  const base = bases[stage];
+  const override = goalOverrides[goalType];
+  return {
+    methods: {
+      guidedLessons: override.guidedLessons ?? base.methods.guidedLessons,
+      practiceTesting: override.practiceTesting ?? base.methods.practiceTesting,
+      explainBack: override.explainBack ?? base.methods.explainBack,
+      spacedReview: override.spacedReview ?? base.methods.spacedReview,
+    },
+    sessionMinutes: base.sessionMinutes,
+    daysPerWeek: base.daysPerWeek,
+    focusMode: override.focusMode ?? base.focusMode,
+  };
+}

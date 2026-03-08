@@ -3,10 +3,19 @@
 import { useState } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Loader2, Bell, Clock, Shield, Save, Check } from "lucide-react";
+import { ArrowLeft, Loader2, Bell, Clock, Shield, Save, Check, GraduationCap } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@repo/shared";
+import type { EducationStage } from "@repo/shared";
+
+const EDUCATION_STAGE_OPTIONS: { id: EducationStage; label: string; icon: string }[] = [
+  { id: "elementary", label: "Young Learner (5-12)", icon: "🧒" },
+  { id: "high_school", label: "High School (13-18)", icon: "🎒" },
+  { id: "university", label: "University (18-25)", icon: "🎓" },
+  { id: "professional", label: "Professional", icon: "💼" },
+  { id: "self_learner", label: "Self-Learner", icon: "🌱" },
+];
 
 export default function SettingsPage() {
   const { data: profile, isLoading } = trpc.user.getProfile.useQuery();
@@ -46,6 +55,10 @@ export default function SettingsPage() {
   const resolvedQuietStart = (notifsFromPrefs.quietHoursStart as string) ?? notifs.quietHoursStart;
   const resolvedQuietEnd = (notifsFromPrefs.quietHoursEnd as string) ?? notifs.quietHoursEnd;
 
+  const currentLearnerProfile = prefs?.learnerProfile as { educationStage: EducationStage } | undefined;
+  const [educationStage, setEducationStage] = useState<EducationStage | null>(null);
+  const effectiveStage = educationStage ?? currentLearnerProfile?.educationStage ?? "self_learner";
+
   const [weeklyGoal, setWeeklyGoal] = useState(resolvedWeeklyGoal);
   const [dailyBudget, setDailyBudget] = useState(resolvedDailyBudget);
 
@@ -60,6 +73,7 @@ export default function SettingsPage() {
   async function handleSave() {
     await updatePrefs.mutateAsync({
       dailyReviewBudget: dailyBudget,
+      learnerProfile: { educationStage: effectiveStage },
       notifications: {
         emailReminders: effectiveEmail,
         pushNotifications: effectivePush,
@@ -133,6 +147,34 @@ export default function SettingsPage() {
                   className="w-16 rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-center text-[13px] focus:border-primary/40 focus:outline-none"
                 />
               </div>
+            </div>
+          </section>
+
+          {/* Learner Profile */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <GraduationCap className="size-4 text-violet-500" />
+              Learner Profile
+            </h2>
+            <div className="space-y-2 rounded-xl border border-border/30 p-4">
+              <p className="text-[11px] text-muted-foreground/50 mb-3">
+                This shapes how courses are structured and which learning methods are emphasized.
+              </p>
+              {EDUCATION_STAGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setEducationStage(opt.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all",
+                    effectiveStage === opt.id
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border/20 hover:border-border/50"
+                  )}
+                >
+                  <span className="text-base">{opt.icon}</span>
+                  <span className="text-[13px] font-medium">{opt.label}</span>
+                </button>
+              ))}
             </div>
           </section>
 

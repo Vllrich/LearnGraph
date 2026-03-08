@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, date, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, boolean, date, timestamp, index, jsonb } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { learningObjects } from "./learning-objects";
 
@@ -17,6 +17,12 @@ export const learningGoals = pgTable("learning_goals", {
   timeBudgetMinutes: integer("time_budget_minutes"),
   examDate: timestamp("exam_date", { withTimezone: true }),
   coverImageUrl: text("cover_image_url"),
+  educationStage: text("education_stage"),
+  sessionMinutes: integer("session_minutes"),
+  daysPerWeek: integer("days_per_week"),
+  focusMode: text("focus_mode"),
+  methodPreferences: jsonb("method_preferences"),
+  contextNote: text("context_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

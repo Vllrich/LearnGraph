@@ -5,6 +5,46 @@ import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/client";
 import Image from "next/image";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import type { EducationStage } from "@repo/shared";
+
+const EDUCATION_STAGES: {
+  id: EducationStage;
+  label: string;
+  icon: string;
+  description: string;
+}[] = [
+  {
+    id: "elementary",
+    label: "Young Learner",
+    icon: "🧒",
+    description: "Fun, visual, guided activities with short sessions",
+  },
+  {
+    id: "high_school",
+    label: "High School",
+    icon: "🎒",
+    description: "Structured study, exam-focused, strategy coaching",
+  },
+  {
+    id: "university",
+    label: "University",
+    icon: "🎓",
+    description: "Course-aligned, deeper understanding, active learning",
+  },
+  {
+    id: "professional",
+    label: "Professional",
+    icon: "💼",
+    description: "Skill-building, time-efficient, real-world anchored",
+  },
+  {
+    id: "self_learner",
+    label: "Self-Learner",
+    icon: "🌱",
+    description: "Curiosity-driven, flexible pace, broad exploration",
+  },
+];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -17,12 +57,15 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState("");
+  const [educationStage, setEducationStage] = useState<EducationStage | null>(null);
   const [learningGoal, setLearningGoal] = useState("");
   const [dailyBudget, setDailyBudget] = useState(20);
 
   function handleComplete() {
+    if (!educationStage) return;
     updateMutation.mutate({
       displayName: displayName.trim(),
+      educationStage,
       learningGoal: learningGoal.trim(),
       dailyBudget,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -61,21 +104,34 @@ export default function OnboardingPage() {
 
         {step === 1 && (
           <div className="space-y-4">
-            <h1 className="text-xl font-medium">What do you want to learn?</h1>
+            <h1 className="text-xl font-medium">Tell us about yourself</h1>
             <p className="text-[13px] text-muted-foreground/60">
-              This helps us tailor your experience. You can change it later.
+              This shapes how we teach you. You can change it later in settings.
             </p>
-            <textarea
-              value={learningGoal}
-              onChange={(e) => setLearningGoal(e.target.value)}
-              placeholder="e.g., Machine learning fundamentals, organic chemistry, Spanish..."
-              rows={3}
-              maxLength={500}
-              className="w-full resize-none rounded-xl border border-border/30 bg-transparent px-4 py-3 text-[14px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
-            />
+            <div className="space-y-2">
+              {EDUCATION_STAGES.map((stage) => (
+                <button
+                  key={stage.id}
+                  onClick={() => setEducationStage(stage.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    educationStage === stage.id
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border/30 hover:border-border/60"
+                  )}
+                >
+                  <span className="text-lg">{stage.icon}</span>
+                  <div>
+                    <p className="text-[13px] font-medium">{stage.label}</p>
+                    <p className="text-[11px] text-muted-foreground/60">{stage.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => setStep(2)}
-              className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+              disabled={!educationStage}
+              className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-20 transition-opacity"
             >
               Continue
             </button>
@@ -89,6 +145,35 @@ export default function OnboardingPage() {
         )}
 
         {step === 2 && (
+          <div className="space-y-4">
+            <h1 className="text-xl font-medium">What do you want to learn?</h1>
+            <p className="text-[13px] text-muted-foreground/60">
+              This helps us tailor your experience. You can change it later.
+            </p>
+            <textarea
+              value={learningGoal}
+              onChange={(e) => setLearningGoal(e.target.value)}
+              placeholder="e.g., Machine learning fundamentals, organic chemistry, Spanish..."
+              rows={3}
+              maxLength={500}
+              className="w-full resize-none rounded-xl border border-border/30 bg-transparent px-4 py-3 text-[14px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
+            />
+            <button
+              onClick={() => setStep(3)}
+              className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+            >
+              Continue
+            </button>
+            <button
+              onClick={() => setStep(1)}
+              className="w-full text-[12px] text-muted-foreground/50 hover:text-foreground"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {step === 3 && (
           <div className="space-y-4">
             <h1 className="text-xl font-medium">Daily review budget</h1>
             <p className="text-[13px] text-muted-foreground/60">
@@ -120,7 +205,7 @@ export default function OnboardingPage() {
               {updateMutation.isPending ? "Setting up..." : "Get Started"}
             </button>
             <button
-              onClick={() => setStep(1)}
+              onClick={() => setStep(2)}
               className="w-full text-[12px] text-muted-foreground/50 hover:text-foreground"
             >
               Back
@@ -130,7 +215,7 @@ export default function OnboardingPage() {
 
         {/* Progress dots */}
         <div className="mt-8 flex justify-center gap-2">
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
               className={`size-1.5 rounded-full transition-colors ${

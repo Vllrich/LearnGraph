@@ -37,6 +37,28 @@ export type GoalType = "exam_prep" | "skill_building" | "course_supplement" | "e
 
 export type LearnerLevel = "beginner" | "some_knowledge" | "experienced";
 
+export type EducationStage =
+  | "elementary"
+  | "high_school"
+  | "university"
+  | "professional"
+  | "self_learner";
+
+export type MethodPreferences = {
+  guidedLessons: number;
+  practiceTesting: number;
+  explainBack: number;
+  spacedReview: number;
+};
+
+export type LearnerProfile = {
+  educationStage: EducationStage;
+  preferredSessionMinutes?: number;
+  preferredMethods?: LearningMethod[];
+};
+
+export type FocusMode = "concept_mastery" | "breadth" | "exam_readiness";
+
 export type LearningMethod =
   | "guided_lesson"
   | "practice_testing"
