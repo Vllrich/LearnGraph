@@ -14,10 +14,24 @@ export type SourceType =
   | "youtube"
   | "audio"
   | "pptx"
+  | "docx"
   | "url"
+  | "image"
   | "code"
   | "text"
   | "ai_generated";
+
+export const UPLOADABLE_SOURCE_TYPES = [
+  "pdf",
+  "youtube",
+  "pptx",
+  "docx",
+  "audio",
+  "url",
+  "image",
+] as const;
+
+export type UploadableSourceType = (typeof UPLOADABLE_SOURCE_TYPES)[number];
 
 export type GoalType = "exam_prep" | "skill_building" | "course_supplement" | "exploration";
 

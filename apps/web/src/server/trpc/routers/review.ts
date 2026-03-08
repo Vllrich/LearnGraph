@@ -10,8 +10,11 @@ import {
   conceptChunkLinks,
   contentChunks,
   users,
+  learningObjects,
+  learningGoals,
+  curriculumItems,
 } from "@repo/db";
-import { eq, and, lte, sql, asc, desc, count, inArray } from "drizzle-orm";
+import { eq, and, lte, sql, asc, desc, count, inArray, gte } from "drizzle-orm";
 import { schedule, newCard, type Card } from "@repo/fsrs";
 import type { FSRSRating } from "@repo/shared";
 import { DEFAULT_DAILY_REVIEW_LIMIT, DEFAULT_REVIEW_MIX_RATIO, computeMastery } from "@repo/shared";
@@ -327,7 +330,171 @@ export const reviewRouter = createTRPCRouter({
     };
   }),
 
+  /**
+   * Practice exam: timed set of random questions from the user's studied content.
+   * No hints, no immediate feedback — simulates real exam conditions.
+   */
+  getPracticeExam: protectedProcedure
+    .input(
+      z.object({
+        questionCount: z.number().min(5).max(100).default(20),
+        timeLimitMinutes: z.number().min(5).max(240).default(60),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const examQuestions = await db
+        .select({
+          id: questions.id,
+          questionType: questions.questionType,
+          questionText: questions.questionText,
+          options: questions.options,
+          correctAnswer: questions.correctAnswer,
+          explanation: questions.explanation,
+          difficulty: questions.difficulty,
+          conceptIds: questions.conceptIds,
+        })
+        .from(questions)
+        .innerJoin(learningObjects, eq(questions.learningObjectId, learningObjects.id))
+        .where(
+          and(
+            eq(learningObjects.userId, ctx.userId),
+            sql`COALESCE(${questions.isExcluded}, false) = false`
+          )
+        )
+        .orderBy(sql`RANDOM()`)
+        .limit(input.questionCount);
+
+      return {
+        questions: examQuestions,
+        timeLimitMinutes: input.timeLimitMinutes,
+        totalQuestions: examQuestions.length,
+      };
+    }),
+
+  /**
+   * Error log: wrong answers grouped by concept — the "mistake tracker"
+   * that drives targeted drill generation.
+   */
+  getErrorLog: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(200).default(50) }).optional())
+    .query(async ({ ctx }) => {
+      const errors = await db
+        .select({
+          answerId: userAnswers.id,
+          answerText: userAnswers.answerText,
+          answeredAt: userAnswers.createdAt,
+          questionText: questions.questionText,
+          questionType: questions.questionType,
+          correctAnswer: questions.correctAnswer,
+          explanation: questions.explanation,
+          difficulty: questions.difficulty,
+          conceptIds: questions.conceptIds,
+        })
+        .from(userAnswers)
+        .innerJoin(questions, eq(userAnswers.questionId, questions.id))
+        .where(and(eq(userAnswers.userId, ctx.userId), eq(userAnswers.isCorrect, false)))
+        .orderBy(desc(userAnswers.createdAt))
+        .limit(200);
+
+      const conceptIds = [...new Set(errors.flatMap((e) => e.conceptIds ?? []))];
+      let conceptMap = new Map<string, string>();
+      if (conceptIds.length > 0) {
+        const conceptRows = await db
+          .select({ id: concepts.id, name: concepts.displayName })
+          .from(concepts)
+          .where(inArray(concepts.id, conceptIds));
+        conceptMap = new Map(conceptRows.map((c) => [c.id, c.name]));
+      }
+
+      const byConceptAcc: Record<string, { name: string; errors: typeof errors; count: number }> =
+        {};
+      for (const err of errors) {
+        const cId = err.conceptIds?.[0] ?? "uncategorized";
+        const name = conceptMap.get(cId) ?? "Uncategorized";
+        if (!byConceptAcc[cId]) byConceptAcc[cId] = { name, errors: [], count: 0 };
+        byConceptAcc[cId].errors.push(err);
+        byConceptAcc[cId].count++;
+      }
+
+      const byConcept = Object.entries(byConceptAcc)
+        .map(([conceptId, data]) => ({ conceptId, ...data }))
+        .sort((a, b) => b.count - a.count);
+
+      return { totalErrors: errors.length, byConcept };
+    }),
+
+  /**
+   * Exam readiness: mastery distribution + readiness score for all studied concepts.
+   * Used for exam_prep goals to show how prepared the user is.
+   */
+  getExamReadiness: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select()
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) return null;
+
+      const items = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.goalId, input.goalId))
+        .orderBy(asc(curriculumItems.sequenceOrder));
+
+      const completedCount = items.filter((i) => i.status === "completed").length;
+
+      const allStates = await db
+        .select({
+          conceptId: userConceptState.conceptId,
+          masteryLevel: userConceptState.masteryLevel,
+          fsrsRetrievability: userConceptState.fsrsRetrievability,
+          conceptName: concepts.displayName,
+        })
+        .from(userConceptState)
+        .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+        .where(and(eq(userConceptState.userId, ctx.userId), gte(userConceptState.fsrsReps, 1)));
+
+      const totalStudied = allStates.length;
+      const mastered = allStates.filter((s) => (s.masteryLevel ?? 0) >= 3).length;
+      const weak = allStates
+        .filter((s) => (s.masteryLevel ?? 0) <= 1)
+        .map((s) => ({ conceptId: s.conceptId, name: s.conceptName, mastery: s.masteryLevel }));
+
+      const readinessScore = totalStudied > 0 ? Math.round((mastered / totalStudied) * 100) : 0;
+
+      const examDate = goal.examDate;
+      const daysUntilExam = examDate
+        ? Math.max(0, Math.ceil((examDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+        : null;
+
+      return {
+        readinessScore,
+        totalConcepts: totalStudied,
+        masteredConcepts: mastered,
+        weakConcepts: weak.slice(0, 10),
+        curriculumProgress: {
+          completed: completedCount,
+          total: items.length,
+          percent: items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0,
+        },
+        daysUntilExam,
+        examDate: examDate?.toISOString() ?? null,
+      };
+    }),
+
   getGraphData: protectedProcedure.query(async ({ ctx }) => {
+    const { conceptEdges } = await import("@repo/db");
+
+    // Get all concepts the user has encountered (via their learning objects)
+    const userLOIds = await db
+      .select({ id: learningObjects.id })
+      .from(learningObjects)
+      .where(eq(learningObjects.userId, ctx.userId));
+    const loIdSet = new Set(userLOIds.map((r) => r.id));
+
     const nodes = await db
       .select({
         id: concepts.id,
@@ -343,7 +510,33 @@ export const reviewRouter = createTRPCRouter({
         and(eq(userConceptState.conceptId, concepts.id), eq(userConceptState.userId, ctx.userId))
       );
 
-    const { conceptEdges } = await import("@repo/db");
+    // Build concept → learning object mapping for cross-source coloring
+    const loIdArr = Array.from(loIdSet);
+    const conceptLOLinks =
+      loIdArr.length > 0
+        ? await db
+            .select({
+              conceptId: conceptChunkLinks.conceptId,
+              loId: contentChunks.learningObjectId,
+            })
+            .from(conceptChunkLinks)
+            .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+            .where(inArray(contentChunks.learningObjectId, loIdArr))
+        : [];
+
+    const conceptToLOs = new Map<string, string[]>();
+    for (const link of conceptLOLinks) {
+      const existing = conceptToLOs.get(link.conceptId) ?? [];
+      if (!existing.includes(link.loId)) existing.push(link.loId);
+      conceptToLOs.set(link.conceptId, existing);
+    }
+
+    const enrichedNodes = nodes.map((n) => ({
+      ...n,
+      learningObjectIds: conceptToLOs.get(n.id) ?? [],
+      isCrossSource: (conceptToLOs.get(n.id) ?? []).length > 1,
+    }));
+
     const edges = await db
       .select({
         id: conceptEdges.id,
@@ -354,6 +547,6 @@ export const reviewRouter = createTRPCRouter({
       })
       .from(conceptEdges);
 
-    return { nodes, edges };
+    return { nodes: enrichedNodes, edges };
   }),
 });

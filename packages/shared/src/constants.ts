@@ -22,8 +22,48 @@ export const ALLOWED_MIME_TYPES = [
   "audio/mpeg",
   "audio/mp4",
   "audio/wav",
-  "video/mp4",
+  "audio/x-m4a",
+  "audio/webm",
   "image/png",
   "image/jpeg",
   "image/webp",
 ] as const;
+
+export const FILE_SOURCE_TYPE_MAP: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "audio/mpeg": "audio",
+  "audio/mp4": "audio",
+  "audio/wav": "audio",
+  "audio/x-m4a": "audio",
+  "audio/webm": "audio",
+  "image/png": "image",
+  "image/jpeg": "image",
+  "image/webp": "image",
+};
+
+export const SOURCE_TYPE_LABELS: Record<string, string> = {
+  pdf: "PDF Document",
+  youtube: "YouTube Video",
+  pptx: "PowerPoint",
+  docx: "Word Document",
+  audio: "Audio",
+  url: "Web Article",
+  image: "Image",
+};
+
+export const SOURCE_TYPE_ACCEPT: Record<string, Record<string, string[]>> = {
+  file: {
+    "application/pdf": [".pdf"],
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+    "audio/mpeg": [".mp3"],
+    "audio/mp4": [".m4a"],
+    "audio/wav": [".wav"],
+    "audio/webm": [".webm"],
+    "image/png": [".png"],
+    "image/jpeg": [".jpg", ".jpeg"],
+    "image/webp": [".webp"],
+  },
+};

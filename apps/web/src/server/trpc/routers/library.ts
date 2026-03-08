@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { learningObjects, contentChunks, concepts, conceptChunkLinks, questions } from "@repo/db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, ne, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const libraryRouter = createTRPCRouter({
@@ -92,7 +92,7 @@ export const libraryRouter = createTRPCRouter({
     .input(
       z.object({
         title: z.string().min(1).max(500),
-        sourceType: z.enum(["pdf", "youtube"]),
+        sourceType: z.enum(["pdf", "youtube", "docx", "pptx", "audio", "url", "image"]),
         sourceUrl: z.string().url().optional(),
         filePath: z.string().optional(),
       })
@@ -163,6 +163,97 @@ export const libraryRouter = createTRPCRouter({
       await ctx.db.delete(learningObjects).where(eq(learningObjects.id, input.id));
 
       return { success: true };
+    }),
+
+  relatedContent: protectedProcedure
+    .input(z.object({ learningObjectId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Find concepts in this learning object
+      const loConcepts = await ctx.db
+        .select({ conceptId: conceptChunkLinks.conceptId })
+        .from(conceptChunkLinks)
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+        .where(eq(contentChunks.learningObjectId, input.learningObjectId));
+
+      const conceptIds = [...new Set(loConcepts.map((c) => c.conceptId))];
+      if (conceptIds.length === 0) return [];
+
+      // Find other learning objects that share these concepts
+      const relatedRows = await ctx.db
+        .select({
+          loId: contentChunks.learningObjectId,
+          conceptId: conceptChunkLinks.conceptId,
+        })
+        .from(conceptChunkLinks)
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+        .innerJoin(learningObjects, eq(contentChunks.learningObjectId, learningObjects.id))
+        .where(
+          and(
+            inArray(conceptChunkLinks.conceptId, conceptIds),
+            ne(contentChunks.learningObjectId, input.learningObjectId),
+            eq(learningObjects.userId, ctx.userId)
+          )
+        );
+
+      // Aggregate: count shared concepts per related LO
+      const loSharedCounts = new Map<string, Set<string>>();
+      for (const row of relatedRows) {
+        const existing = loSharedCounts.get(row.loId) ?? new Set();
+        existing.add(row.conceptId);
+        loSharedCounts.set(row.loId, existing);
+      }
+
+      const relatedLoIds = [...loSharedCounts.entries()]
+        .sort((a, b) => b[1].size - a[1].size)
+        .slice(0, 10)
+        .map(([id]) => id);
+
+      if (relatedLoIds.length === 0) return [];
+
+      const relatedLOs = await ctx.db
+        .select({
+          id: learningObjects.id,
+          title: learningObjects.title,
+          sourceType: learningObjects.sourceType,
+          summaryTldr: learningObjects.summaryTldr,
+        })
+        .from(learningObjects)
+        .where(inArray(learningObjects.id, relatedLoIds));
+
+      return relatedLOs.map((lo) => ({
+        ...lo,
+        sharedConceptCount: loSharedCounts.get(lo.id)?.size ?? 0,
+      }));
+    }),
+
+  getConnectionCount: protectedProcedure
+    .input(z.object({ learningObjectId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Count how many concepts from this LO also appear in other LOs
+      const loConcepts = await ctx.db
+        .select({ conceptId: conceptChunkLinks.conceptId })
+        .from(conceptChunkLinks)
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+        .where(eq(contentChunks.learningObjectId, input.learningObjectId));
+
+      const conceptIds = [...new Set(loConcepts.map((c) => c.conceptId))];
+      if (conceptIds.length === 0) return { connections: 0 };
+
+      const crossLinks = await ctx.db
+        .select({ loId: contentChunks.learningObjectId })
+        .from(conceptChunkLinks)
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+        .innerJoin(learningObjects, eq(contentChunks.learningObjectId, learningObjects.id))
+        .where(
+          and(
+            inArray(conceptChunkLinks.conceptId, conceptIds),
+            ne(contentChunks.learningObjectId, input.learningObjectId),
+            eq(learningObjects.userId, ctx.userId)
+          )
+        );
+
+      const uniqueLOs = new Set(crossLinks.map((r) => r.loId));
+      return { connections: uniqueLOs.size };
     }),
 
   rateQuestion: protectedProcedure

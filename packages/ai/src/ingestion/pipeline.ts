@@ -1,7 +1,12 @@
 import { db, learningObjects, contentChunks } from "@repo/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { extractPdfText } from "./pdf";
 import { fetchYoutubeTranscript } from "./youtube";
+import { extractDocxText } from "./docx";
+import { extractPptxText } from "./pptx";
+import { transcribeAudio } from "./audio";
+import { extractWebUrl } from "./web-url";
+import { extractImageContent } from "./image";
 import { semanticChunk } from "./chunker";
 import { generateEmbeddings } from "./embeddings";
 import { summarizeContent } from "./summarize";
@@ -14,6 +19,7 @@ export type PipelineInput = {
   sourceType: SourceType;
   fileBuffer?: Buffer;
   sourceUrl?: string;
+  fileName?: string;
 };
 
 /**
@@ -35,7 +41,7 @@ export async function runIngestionPipeline(input: PipelineInput): Promise<void> 
   };
 
   try {
-    // Step 1: Extract text
+    // Step 1: Extract text based on source type
     let rawText: string;
     let title: string | null = null;
     let metadata: Record<string, unknown> = {};
@@ -57,6 +63,31 @@ export async function runIngestionPipeline(input: PipelineInput): Promise<void> 
         channelName: result.channelName,
         thumbnailUrl: result.thumbnailUrl,
       };
+    } else if (sourceType === "docx" && fileBuffer) {
+      const result = await extractDocxText(fileBuffer);
+      rawText = result.text;
+      title = result.title;
+      metadata = { format: "docx" };
+    } else if (sourceType === "pptx" && fileBuffer) {
+      const result = await extractPptxText(fileBuffer);
+      rawText = result.text;
+      title = result.title;
+      metadata = { slideCount: result.slideCount, format: "pptx" };
+    } else if (sourceType === "audio" && fileBuffer) {
+      const result = await transcribeAudio(fileBuffer, input.fileName ?? "audio.mp3");
+      rawText = result.text;
+      title = result.title;
+      metadata = { durationSeconds: result.durationSeconds, format: "audio" };
+    } else if (sourceType === "url" && sourceUrl) {
+      const result = await extractWebUrl(sourceUrl);
+      rawText = result.text;
+      title = result.title;
+      metadata = { siteName: result.siteName, originalUrl: result.url, format: "web" };
+    } else if (sourceType === "image" && fileBuffer) {
+      const result = await extractImageContent(fileBuffer, input.fileName ?? "image.png");
+      rawText = result.text;
+      title = result.title;
+      metadata = { format: "image" };
     } else {
       throw new Error(`Unsupported source type: ${sourceType}`);
     }
@@ -99,7 +130,7 @@ export async function runIngestionPipeline(input: PipelineInput): Promise<void> 
     const chunkIds = insertedChunks.map((c) => c.id);
 
     // Step 3: Run embeddings, summarization, and concept extraction in parallel
-    const [embeddings, summary] = await Promise.all([
+    const [embeddings, summary, conceptIds] = await Promise.all([
       generateEmbeddings(chunks.map((c) => c.content)),
       summarizeContent(rawText, title ?? "Untitled"),
       extractAndStoreConcepts(chunks, learningObjectId, chunkIds),
@@ -112,7 +143,24 @@ export async function runIngestionPipeline(input: PipelineInput): Promise<void> 
       )
     );
 
-    // Step 5: Store summaries
+    // Step 5: Count cross-source connections for the notification
+    let crossSourceCount = 0;
+    if (conceptIds.length > 0) {
+      const crossLinks = await db.execute<{ cnt: number }>(
+        sql`SELECT COUNT(DISTINCT cc2.learning_object_id)::int AS cnt
+            FROM concept_chunk_links ccl
+            JOIN content_chunks cc2 ON ccl.chunk_id = cc2.id
+            WHERE ccl.concept_id = ANY(ARRAY[${sql.join(
+              conceptIds.map((id) => sql`${id}::uuid`),
+              sql`, `
+            )}])
+            AND cc2.learning_object_id != ${learningObjectId}`
+      );
+      const rows = Array.isArray(crossLinks) ? crossLinks : [];
+      crossSourceCount = rows.length > 0 ? Number(rows[0].cnt) : 0;
+    }
+
+    // Step 6: Store summaries + connection count
     await db
       .update(learningObjects)
       .set({
@@ -120,11 +168,16 @@ export async function runIngestionPipeline(input: PipelineInput): Promise<void> 
         summaryKeyPoints: JSON.stringify(summary.keyPoints),
         summaryDeep: summary.deepSummary,
         status: "ready",
+        metadata: {
+          ...metadata,
+          crossSourceConnections: crossSourceCount,
+          conceptCount: conceptIds.length,
+        },
         updatedAt: new Date(),
       })
       .where(eq(learningObjects.id, learningObjectId));
 
-    // Step 6: Generate quiz bank (non-blocking — failure here doesn't fail the pipeline)
+    // Step 7: Generate quiz bank (non-blocking — failure here doesn't fail the pipeline)
     try {
       await generateQuizForLearningObject(learningObjectId);
     } catch (quizErr) {

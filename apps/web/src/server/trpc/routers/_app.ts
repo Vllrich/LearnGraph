@@ -5,6 +5,7 @@ import { mentorRouter } from "./mentor";
 import { reviewRouter } from "./review";
 import { userRouter } from "./user";
 import { goalsRouter } from "./goals";
+import { exportRouter } from "./export";
 
 export const appRouter = createTRPCRouter({
   health: healthRouter,
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   review: reviewRouter,
   user: userRouter,
   goals: goalsRouter,
+  export: exportRouter,
 });
 
 export type AppRouter = typeof appRouter;

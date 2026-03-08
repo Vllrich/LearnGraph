@@ -8,11 +8,15 @@ import { eq, and } from "drizzle-orm";
 
 export const maxDuration = 300;
 
+const FILE_SOURCE_TYPES = ["pdf", "docx", "pptx", "audio", "image"] as const;
+const URL_SOURCE_TYPES = ["youtube", "url"] as const;
+
 const ingestSchema = z.object({
   learningObjectId: z.string().uuid(),
-  sourceType: z.enum(["pdf", "youtube"]),
+  sourceType: z.enum([...FILE_SOURCE_TYPES, ...URL_SOURCE_TYPES]),
   filePath: z.string().max(500).optional(),
   sourceUrl: z.string().url().max(2048).optional(),
+  fileName: z.string().max(500).optional(),
 });
 
 const ingestRateMap = new Map<string, { count: number; resetAt: number }>();
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
   if (rateEntry && now <= rateEntry.resetAt && rateEntry.count >= INGEST_RATE_MAX) {
     return NextResponse.json(
       { error: "Too many uploads. Please wait before uploading more." },
-      { status: 429, headers: { "Retry-After": "60" } },
+      { status: 429, headers: { "Retry-After": "60" } }
     );
   }
   if (!rateEntry || now > rateEntry.resetAt) {
@@ -47,21 +51,16 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid input", details: parsed.error.flatten() },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
-  const { learningObjectId, sourceType, filePath, sourceUrl } = parsed.data;
+  const { learningObjectId, sourceType, filePath, sourceUrl, fileName } = parsed.data;
 
   const [owned] = await db
     .select({ id: learningObjects.id })
     .from(learningObjects)
-    .where(
-      and(
-        eq(learningObjects.id, learningObjectId),
-        eq(learningObjects.userId, user.id),
-      ),
-    )
+    .where(and(eq(learningObjects.id, learningObjectId), eq(learningObjects.userId, user.id)))
     .limit(1);
 
   if (!owned) {
@@ -70,16 +69,12 @@ export async function POST(req: NextRequest) {
 
   let fileBuffer: Buffer | undefined;
 
-  if (sourceType === "pdf" && filePath) {
-    const { data, error } = await supabase.storage
-      .from("content-uploads")
-      .download(filePath);
+  const isFileType = (FILE_SOURCE_TYPES as readonly string[]).includes(sourceType);
+  if (isFileType && filePath) {
+    const { data, error } = await supabase.storage.from("content-uploads").download(filePath);
 
     if (error || !data) {
-      return NextResponse.json(
-        { error: "Failed to download file from storage" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "Failed to download file from storage" }, { status: 500 });
     }
 
     fileBuffer = Buffer.from(await data.arrayBuffer());
@@ -91,7 +86,8 @@ export async function POST(req: NextRequest) {
       sourceType,
       fileBuffer,
       sourceUrl,
-    }),
+      fileName,
+    })
   );
 
   return NextResponse.json({ status: "processing" });

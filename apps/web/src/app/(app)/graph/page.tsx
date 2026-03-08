@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo } from "react";
 import { trpc } from "@/trpc/client";
-import { ArrowLeft, Loader2, ZoomIn, ZoomOut, Maximize2, X, Filter } from "lucide-react";
+import { ArrowLeft, Loader2, ZoomIn, ZoomOut, Maximize2, X, Filter, Link2 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ type GraphNode = {
   x: number;
   y: number;
   learningObjectIds?: string[];
+  isCrossSource?: boolean;
 };
 
 type GraphLink = {
@@ -49,6 +50,7 @@ export default function GraphPage() {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [filterMastery, setFilterMastery] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [highlightCrossSource, setHighlightCrossSource] = useState(false);
 
   const allNodes = useMemo(
     () =>
@@ -60,6 +62,8 @@ export default function GraphPage() {
         difficulty: n.difficulty,
         mastery: n.mastery ?? 0,
         val: (n.difficulty ?? 3) * 2,
+        learningObjectIds: n.learningObjectIds ?? [],
+        isCrossSource: n.isCrossSource ?? false,
       })),
     [data?.nodes]
   );
@@ -84,6 +88,17 @@ export default function GraphPage() {
     (node: GraphNode, ctx: CanvasRenderingContext2D) => {
       const r = Math.sqrt(node.val) * 3;
       const color = MASTERY_COLORS[node.mastery] ?? MASTERY_COLORS[0];
+      const isCross = node.isCrossSource && (node.learningObjectIds?.length ?? 0) > 1;
+
+      // Cross-source highlight: golden ring
+      if (highlightCrossSource && isCross) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = "#f59e0b";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.stroke();
+      }
 
       // Mastered: outer glow
       if (node.mastery >= 5) {
@@ -95,7 +110,7 @@ export default function GraphPage() {
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
+      ctx.fillStyle = highlightCrossSource && !isCross ? `${color}40` : color;
       ctx.fill();
 
       // In-progress (Practicing/Familiar): pulsing ring
@@ -127,7 +142,7 @@ export default function GraphPage() {
       ctx.textAlign = "center";
       ctx.fillText(node.name, node.x, node.y + r + 5);
     },
-    [selectedNode]
+    [selectedNode, highlightCrossSource]
   );
 
   const linkCanvasObject = useCallback((link: GraphLink, ctx: CanvasRenderingContext2D) => {
@@ -234,6 +249,16 @@ export default function GraphPage() {
         </span>
         <div className="flex-1" />
         <div className="flex gap-1">
+          <button
+            onClick={() => setHighlightCrossSource((v) => !v)}
+            className={cn(
+              "flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50",
+              highlightCrossSource && "bg-amber-500/10 text-amber-500"
+            )}
+            title="Highlight cross-source connections"
+          >
+            <Link2 className="size-3.5" />
+          </button>
           <button
             onClick={() => setShowFilters((f) => !f)}
             className={cn(
@@ -392,6 +417,14 @@ export default function GraphPage() {
                 <div>
                   <span className="text-muted-foreground/40">Domain</span>
                   <p className="font-medium mt-0.5">{selectedNode.domain}</p>
+                </div>
+              )}
+              {(selectedNode.learningObjectIds?.length ?? 0) > 1 && (
+                <div>
+                  <span className="text-muted-foreground/40">Sources</span>
+                  <p className="font-medium mt-0.5 text-amber-500">
+                    {selectedNode.learningObjectIds?.length} docs
+                  </p>
                 </div>
               )}
             </div>

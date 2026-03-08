@@ -4,13 +4,14 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
-import { Target, BarChart3, Globe, LogOut } from "lucide-react";
+import { Target, BarChart3, Globe, LogOut, Download } from "lucide-react";
 import Link from "next/link";
 
 const LINKS = [
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/graph", label: "Knowledge Graph", icon: Globe },
+  { href: "/export", label: "Export Data", icon: Download },
 ] as const;
 
 export default function MorePage() {
