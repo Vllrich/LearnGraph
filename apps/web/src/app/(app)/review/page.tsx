@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type TouchEvent as ReactTouchEvent } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import {
@@ -19,8 +19,12 @@ import {
   MessageSquare,
   Send,
   Sparkles,
+  RotateCcw,
+  Brain,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import type { QueueMode } from "@repo/shared";
 
@@ -35,6 +39,16 @@ type ReviewQuestion = {
   conceptIds: string[] | null;
 };
 
+const MASTERY_LABELS = ["Unseen", "Exposed", "Familiar", "Practiced", "Solid", "Mastered"];
+const MASTERY_COLORS = [
+  "bg-[hsl(var(--mastery-0))]",
+  "bg-[hsl(var(--mastery-1))]",
+  "bg-[hsl(var(--mastery-2))]",
+  "bg-[hsl(var(--mastery-3))]",
+  "bg-[hsl(var(--mastery-4))]",
+  "bg-[hsl(var(--mastery-5))]",
+];
+
 const MODE_OPTIONS: { id: QueueMode; label: string; icon: typeof Zap; desc: string }[] = [
   { id: "standard", label: "Standard", icon: Zap, desc: "Full daily queue" },
   { id: "quick_5", label: "Quick 5", icon: Timer, desc: "5-card micro session" },
@@ -42,8 +56,11 @@ const MODE_OPTIONS: { id: QueueMode; label: string; icon: typeof Zap; desc: stri
 ];
 
 export default function ReviewPage() {
+  const searchParams = useSearchParams();
+  const conceptParam = searchParams.get("concept");
+
   const [mode, setMode] = useState<QueueMode>("standard");
-  const [modeChosen, setModeChosen] = useState(false);
+  const [modeChosen, setModeChosen] = useState(!!conceptParam);
 
   const { data, isLoading } = trpc.review.getDailyQueue.useQuery({ mode }, { enabled: modeChosen });
   const submitMutation = trpc.review.submitReview.useMutation();
@@ -86,9 +103,31 @@ export default function ReviewPage() {
   }, [currentIndex]);
 
   const allQuestions = (data?.questions ?? []) as ReviewQuestion[];
+  const allItems = data?.items ?? [];
+  const hasQuestionsForReview = allQuestions.length > 0;
+
+  // Self-rating mode: items exist but no quiz questions available
+  const [selfRateIndex, setSelfRateIndex] = useState(0);
+  const [selfRateFlipped, setSelfRateFlipped] = useState(false);
+  const [selfRateExiting, setSelfRateExiting] = useState<"left" | "right" | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchDeltaRef = useRef(0);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const useSelfRating = !hasQuestionsForReview && allItems.length > 0 && modeChosen;
   const currentQuestion = allQuestions[currentIndex];
-  const totalQuestions = allQuestions.length;
-  const progress = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0;
+  const shuffledOptions = useMemo(() => {
+    const opts = Array.isArray(currentQuestion?.options) ? [...(currentQuestion.options as string[])] : [];
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [opts[i], opts[j]] = [opts[j]!, opts[i]!];
+    }
+    return opts;
+  }, [currentQuestion?.id]);
+  const currentSelfRateItem = allItems[selfRateIndex];
+  const totalQuestions = useSelfRating ? allItems.length : allQuestions.length;
+  const currentIdx = useSelfRating ? selfRateIndex : currentIndex;
+  const progress = totalQuestions > 0 ? (currentIdx / totalQuestions) * 100 : 0;
 
   const isExplainBackEligible =
     currentQuestion && data?.explainBackEligible?.includes(currentQuestion.conceptIds?.[0] ?? "");
@@ -165,6 +204,81 @@ export default function ReviewPage() {
     }
   }, [currentQuestion, explainBackText, explainBackMutation, activityMutation]);
 
+  // Self-rating flashcard handlers (must be before early returns)
+  const handleSelfRate = useCallback(
+    async (rating: 1 | 2 | 3 | 4) => {
+      if (!currentSelfRateItem || submitMutation.isPending) return;
+      const direction = rating >= 3 ? "right" : "left";
+      setSelfRateExiting(direction);
+
+      await submitMutation.mutateAsync({
+        conceptId: currentSelfRateItem.conceptId,
+        rating,
+        responseTimeMs: Date.now() - startTimeRef.current,
+      });
+      activityMutation.mutate({ type: "review" });
+      setSessionResults((prev) => ({
+        correct: prev.correct + (rating >= 3 ? 1 : 0),
+        total: prev.total + 1,
+      }));
+
+      setTimeout(() => {
+        setSelfRateFlipped(false);
+        setSelfRateExiting(null);
+        if (cardRef.current) cardRef.current.style.transform = "";
+        if (selfRateIndex + 1 >= allItems.length) {
+          setSessionComplete(true);
+          utils.review.getDailyQueue.invalidate();
+          utils.review.getStats.invalidate();
+          utils.gamification.getStreakAndXp.invalidate();
+        } else {
+          setSelfRateIndex((i) => i + 1);
+        }
+      }, 280);
+    },
+    [currentSelfRateItem, submitMutation, activityMutation, selfRateIndex, allItems.length, utils]
+  );
+
+  const handleTouchStart = useCallback((e: ReactTouchEvent) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchDeltaRef.current = 0;
+  }, []);
+
+  const handleTouchMove = useCallback((e: ReactTouchEvent) => {
+    if (!touchStartRef.current || !cardRef.current) return;
+    const dx = e.touches[0].clientX - touchStartRef.current.x;
+    touchDeltaRef.current = dx;
+    const rotate = dx * 0.06;
+    const opacity = Math.max(0.5, 1 - Math.abs(dx) / 400);
+    cardRef.current.style.transform = `translateX(${dx}px) rotate(${rotate}deg)`;
+    cardRef.current.style.opacity = `${opacity}`;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!cardRef.current) return;
+    const dx = touchDeltaRef.current;
+    const threshold = 100;
+
+    if (!selfRateFlipped) {
+      cardRef.current.style.transition = "transform 0.25s ease, opacity 0.25s ease";
+      cardRef.current.style.transform = "";
+      cardRef.current.style.opacity = "1";
+      setTimeout(() => {
+        if (cardRef.current) cardRef.current.style.transition = "";
+      }, 260);
+    } else if (Math.abs(dx) > threshold) {
+      handleSelfRate(dx > 0 ? 4 : 1);
+    } else {
+      cardRef.current.style.transition = "transform 0.25s ease, opacity 0.25s ease";
+      cardRef.current.style.transform = "";
+      cardRef.current.style.opacity = "1";
+      setTimeout(() => {
+        if (cardRef.current) cardRef.current.style.transition = "";
+      }, 260);
+    }
+    touchStartRef.current = null;
+  }, [selfRateFlipped, handleSelfRate]);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (sessionComplete || explainBackMode) return;
@@ -239,7 +353,7 @@ export default function ReviewPage() {
     );
   }
 
-  if (!data || allQuestions.length === 0) {
+  if (!data || (allQuestions.length === 0 && allItems.length === 0)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-center px-6">
         <div className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-green-500/10">
@@ -467,9 +581,173 @@ export default function ReviewPage() {
     );
   }
 
-  const options = Array.isArray(currentQuestion?.options)
-    ? (currentQuestion.options as string[])
-    : [];
+  if (useSelfRating && !sessionComplete && currentSelfRateItem) {
+    const item = currentSelfRateItem;
+    const mastery = item.masteryLevel ?? 0;
+
+    return (
+      <div className="flex h-dvh flex-col bg-background">
+        <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border/30 px-4">
+          <Link href="/" className="text-muted-foreground/60 hover:text-foreground transition-colors">
+            <ArrowLeft className="size-4" />
+          </Link>
+          <div className="flex-1">
+            <div className="mx-auto max-w-md">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground/50 tabular-nums">
+                  {selfRateIndex + 1} / {allItems.length}
+                </span>
+                <div className="h-1 flex-1 rounded-full bg-muted/40">
+                  <div
+                    className="h-full rounded-full bg-green-500 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500">
+            Self-Rate
+          </span>
+        </header>
+
+        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-4">
+          {/* Flip card */}
+          <div
+            className="w-full max-w-md"
+            style={{ perspective: "1200px" }}
+          >
+            <div
+              ref={cardRef}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onClick={() => !selfRateFlipped && setSelfRateFlipped(true)}
+              className={cn(
+                "relative w-full cursor-pointer select-none transition-all duration-500",
+                selfRateExiting === "left" && "translate-x-[-120%] -rotate-12 opacity-0",
+                selfRateExiting === "right" && "translate-x-[120%] rotate-12 opacity-0",
+              )}
+              style={{
+                transformStyle: "preserve-3d",
+                ...(selfRateFlipped && !selfRateExiting ? { transform: "rotateY(180deg)" } : {}),
+              }}
+            >
+              {/* Front face */}
+              <div
+                className="rounded-2xl border border-border/40 bg-card shadow-sm p-6 min-h-[320px] flex flex-col"
+                style={{ backfaceVisibility: "hidden" }}
+              >
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2">
+                    {item.domain && (
+                      <span className="rounded-full bg-primary/8 px-2.5 py-0.5 text-[10px] font-medium text-primary/70">
+                        {item.domain}
+                      </span>
+                    )}
+                    <span className={cn(
+                      "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white",
+                      MASTERY_COLORS[mastery] ?? MASTERY_COLORS[0],
+                    )}>
+                      <Brain className="size-2.5" />
+                      {MASTERY_LABELS[mastery]}
+                    </span>
+                  </div>
+                  {item.conceptDifficulty != null && (
+                    <span className="text-[10px] text-muted-foreground/40">
+                      Lvl {item.conceptDifficulty}/5
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                  <BookOpen className="size-5 text-muted-foreground/20 mb-3" />
+                  <h2 className="text-xl font-semibold leading-tight tracking-tight">
+                    {item.conceptName}
+                  </h2>
+                  <p className="mt-3 text-[13px] text-muted-foreground/40 leading-relaxed max-w-xs">
+                    What do you know about this concept?
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-1.5 mt-4 text-muted-foreground/30">
+                  <RotateCcw className="size-3" />
+                  <span className="text-[11px]">Tap to flip</span>
+                </div>
+              </div>
+
+              {/* Back face */}
+              <div
+                className="absolute inset-0 rounded-2xl border border-border/40 bg-card shadow-sm p-6 min-h-[320px] flex flex-col"
+                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-1.5 text-primary/60">
+                    <Lightbulb className="size-3.5" />
+                    <span className="text-[11px] font-medium">Definition</span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelfRateFlipped(false); }}
+                    className="text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+                  >
+                    <RotateCcw className="size-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 flex flex-col justify-center">
+                  <h3 className="text-[15px] font-semibold mb-3">{item.conceptName}</h3>
+                  <p className="text-[13px] leading-relaxed text-muted-foreground/70">
+                    {item.conceptDefinition ?? "No definition available for this concept yet."}
+                  </p>
+                </div>
+
+                <p className="text-center text-[10px] text-muted-foreground/30 mt-3 md:hidden">
+                  Swipe right = knew it · Swipe left = didn&apos;t
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Rating buttons (visible after flip) */}
+          <div
+            className={cn(
+              "w-full max-w-md mt-5 transition-all duration-300",
+              selfRateFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
+            )}
+          >
+            <p className="text-center text-[11px] text-muted-foreground/40 mb-2.5">
+              How well did you know this?
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {(
+                [
+                  { rating: 1, label: "Again", sublabel: "<1d", color: "text-red-500", border: "hover:border-red-500/40" },
+                  { rating: 2, label: "Hard", sublabel: "~3d", color: "text-orange-500", border: "hover:border-orange-500/40" },
+                  { rating: 3, label: "Good", sublabel: "~7d", color: "text-blue-500", border: "hover:border-blue-500/40" },
+                  { rating: 4, label: "Easy", sublabel: "~14d", color: "text-green-500", border: "hover:border-green-500/40" },
+                ] as const
+              ).map(({ rating, label, sublabel, color, border }) => (
+                <button
+                  key={rating}
+                  onClick={() => handleSelfRate(rating)}
+                  disabled={submitMutation.isPending}
+                  className={cn(
+                    "rounded-xl border border-border/30 py-3 text-center transition-all hover:bg-muted/20 active:scale-95",
+                    border,
+                  )}
+                >
+                  <p className={cn("text-[13px] font-medium", color)}>{label}</p>
+                  <p className="text-[10px] text-muted-foreground/40">{sublabel}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const options = shuffledOptions;
 
   return (
     <div className="flex h-screen flex-col bg-background">

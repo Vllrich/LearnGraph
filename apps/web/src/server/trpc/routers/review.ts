@@ -643,30 +643,15 @@ export const reviewRouter = createTRPCRouter({
   getGraphData: protectedProcedure.query(async ({ ctx }) => {
     const { conceptEdges } = await import("@repo/db");
 
-    // Get all concepts the user has encountered (via their learning objects)
-    const userLOIds = await db
-      .select({ id: learningObjects.id })
+    const userLOs = await db
+      .select({ id: learningObjects.id, title: learningObjects.title, sourceType: learningObjects.sourceType })
       .from(learningObjects)
       .where(eq(learningObjects.userId, ctx.userId));
-    const loIdSet = new Set(userLOIds.map((r) => r.id));
+    const loIdSet = new Set(userLOs.map((r) => r.id));
 
-    const nodes = await db
-      .select({
-        id: concepts.id,
-        name: concepts.displayName,
-        definition: concepts.definition,
-        domain: concepts.domain,
-        difficulty: concepts.difficultyLevel,
-        mastery: userConceptState.masteryLevel,
-      })
-      .from(concepts)
-      .leftJoin(
-        userConceptState,
-        and(eq(userConceptState.conceptId, concepts.id), eq(userConceptState.userId, ctx.userId))
-      );
-
-    // Build concept → learning object mapping for cross-source coloring
     const loIdArr = Array.from(loIdSet);
+
+    // Build concept → learning object mapping (scoped to user's content)
     const conceptLOLinks =
       loIdArr.length > 0
         ? await db
@@ -686,13 +671,37 @@ export const reviewRouter = createTRPCRouter({
       conceptToLOs.set(link.conceptId, existing);
     }
 
+    // Only fetch concepts that belong to the user's learning objects
+    const userConceptIds = Array.from(conceptToLOs.keys());
+    if (userConceptIds.length === 0) {
+      return { nodes: [], edges: [], sources: userLOs.map((lo) => ({ id: lo.id, title: lo.title, sourceType: lo.sourceType })) };
+    }
+
+    const nodes = await db
+      .select({
+        id: concepts.id,
+        name: concepts.displayName,
+        definition: concepts.definition,
+        domain: concepts.domain,
+        difficulty: concepts.difficultyLevel,
+        mastery: userConceptState.masteryLevel,
+        retrievability: userConceptState.fsrsRetrievability,
+      })
+      .from(concepts)
+      .leftJoin(
+        userConceptState,
+        and(eq(userConceptState.conceptId, concepts.id), eq(userConceptState.userId, ctx.userId))
+      )
+      .where(inArray(concepts.id, userConceptIds));
+
     const enrichedNodes = nodes.map((n) => ({
       ...n,
       learningObjectIds: conceptToLOs.get(n.id) ?? [],
       isCrossSource: (conceptToLOs.get(n.id) ?? []).length > 1,
     }));
 
-    const edges = await db
+    const userConceptIdSet = new Set(userConceptIds);
+    const allEdges = await db
       .select({
         id: conceptEdges.id,
         source: conceptEdges.sourceId,
@@ -700,8 +709,21 @@ export const reviewRouter = createTRPCRouter({
         type: conceptEdges.edgeType,
         confidence: conceptEdges.confidence,
       })
-      .from(conceptEdges);
+      .from(conceptEdges)
+      .where(
+        and(
+          inArray(conceptEdges.sourceId, userConceptIds),
+          inArray(conceptEdges.targetId, userConceptIds)
+        )
+      );
+    const edges = allEdges.filter((e) => userConceptIdSet.has(e.source) && userConceptIdSet.has(e.target));
 
-    return { nodes: enrichedNodes, edges };
+    const sources = userLOs.map((lo) => ({
+      id: lo.id,
+      title: lo.title,
+      sourceType: lo.sourceType,
+    }));
+
+    return { nodes: enrichedNodes, edges, sources };
   }),
 });

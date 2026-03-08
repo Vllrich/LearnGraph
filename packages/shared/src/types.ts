@@ -103,4 +103,6 @@ export type NotificationPreferences = {
 
 export type GraphViewMode = "mastery" | "retrievability" | "domain";
 
+export type GraphLayoutMode = "force" | "hierarchical" | "clusters" | "cardtree";
+
 export type QueueMode = "standard" | "quick_5" | "interleaved";
