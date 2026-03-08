@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMentorChat, type ChatMessage } from "@/hooks/use-mentor-chat";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 
 const HIDDEN_PATHS = ["/mentor", "/mentor/chat"];
@@ -98,13 +99,17 @@ export function FloatingMentor() {
                 </span>
               )}
             </span>
-            <Link
-              href={expandHref}
-              className="flex size-6 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors"
-              title="Open full mentor"
-            >
-              <Maximize2 className="size-3.5" />
-            </Link>
+            <Tooltip delayDuration={500}>
+              <TooltipTrigger asChild>
+                <Link
+                  href={expandHref}
+                  className="flex size-6 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Maximize2 className="size-3.5" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Open full mentor</TooltipContent>
+            </Tooltip>
             <button
               onClick={() => setOpen(false)}
               className="flex size-6 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors"
@@ -194,6 +199,13 @@ export function FloatingMentor() {
   );
 }
 
+function buildCitationHref(cite: { learningObjectId?: string; pageNumber: number | null }) {
+  if (!cite.learningObjectId) return null;
+  const params = new URLSearchParams({ tab: "fulltext" });
+  if (cite.pageNumber) params.set("page", String(cite.pageNumber));
+  return `/library/${cite.learningObjectId}?${params}`;
+}
+
 function CompactBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
@@ -223,19 +235,46 @@ function CompactBubble({ message }: { message: ChatMessage }) {
           )}
         </div>
         {!isUser && !message.isStreaming && message.citations && message.citations.length > 0 && (
-          <div className="mt-0.5 flex gap-1 pl-1">
-            {message.citations.map((cite, i) => (
-              <span
-                key={i}
-                className="text-[9px] text-primary/50"
-                title={cite.content?.slice(0, 100)}
-              >
-                {cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`}
-              </span>
-            ))}
+          <div className="mt-0.5 flex flex-wrap gap-1 pl-1">
+            {dedupeCitations(message.citations).map((cite, i) => {
+              const href = buildCitationHref(cite);
+              const label = cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`;
+              const excerpt = cite.content?.slice(0, 120);
+              return (
+                <Tooltip key={i} delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    {href ? (
+                      <Link
+                        href={href}
+                        className="rounded bg-primary/10 px-1 py-0.5 text-[9px] text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        {label}
+                      </Link>
+                    ) : (
+                      <span className="cursor-default text-[9px] text-primary/50">{label}</span>
+                    )}
+                  </TooltipTrigger>
+                  {excerpt && (
+                    <TooltipContent side="top" sideOffset={6}>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">{excerpt}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function dedupeCitations(citations: NonNullable<ChatMessage["citations"]>) {
+  const seen = new Set<string>();
+  return citations.filter((c) => {
+    const key = `${c.learningObjectId ?? ""}:${c.pageNumber ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

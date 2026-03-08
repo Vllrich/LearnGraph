@@ -6,6 +6,7 @@ type Citation = {
   chunkId: string;
   content: string;
   pageNumber: number | null;
+  learningObjectId?: string;
 };
 
 export type ChatMessage = {

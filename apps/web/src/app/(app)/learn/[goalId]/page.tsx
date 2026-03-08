@@ -18,9 +18,12 @@ import {
   Minimize2,
   Target,
   Calendar,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { GoalType, LearnerLevel } from "@repo/shared";
 
@@ -80,6 +83,7 @@ export default function LearnSessionPage() {
   const [conceptResults, setConceptResults] = useState<ConceptResult[]>([]);
   const [previousConcepts, setPreviousConcepts] = useState<string[]>([]);
   const [focusMode, setFocusMode] = useState(false);
+  const [showDotRail, setShowDotRail] = useState(true);
 
   const items = goalData?.items ?? [];
   const currentItem = items[conceptIndex];
@@ -626,8 +630,8 @@ export default function LearnSessionPage() {
         <div className="overflow-y-auto px-2 py-3" style={{ maxHeight: "calc(100vh - 52px)" }}>
           {items.map((item, i) => {
             const isCurrent = i === conceptIndex;
-            const isCompleted = item.status === "completed" || i < conceptIndex;
-            const isLocked = i > conceptIndex && item.status !== "completed";
+            const isCompleted = item.status === "completed";
+            const isLocked = !isCompleted && i !== conceptIndex;
 
             return (
               <button
@@ -757,7 +761,76 @@ export default function LearnSessionPage() {
             {progressPercent}%
           </button>
         </div>
-        <Progress value={progressPercent} className="h-1 rounded-none" />
+        {showDotRail ? (
+          <div className="relative border-t border-border/20 px-4 py-1.5">
+            <div className="mx-auto flex max-w-3xl items-center gap-0.5">
+              {items.map((item, i) => {
+                const isCompleted = item.status === "completed";
+                const isCurrent = i === conceptIndex;
+                return (
+                  <Tooltip key={item.id} delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => !streaming && jumpToChapter(i)}
+                        disabled={streaming}
+                        className={cn(
+                          "h-1.5 min-w-1 flex-1 rounded-full transition-all",
+                          isCompleted
+                            ? "bg-primary/60 hover:bg-primary"
+                            : isCurrent
+                              ? "animate-pulse bg-primary"
+                              : "bg-muted-foreground/20 hover:bg-muted-foreground/40"
+                        )}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>
+                      <p className="font-medium">
+                        {i + 1}. {item.title}
+                      </p>
+                      {isCompleted && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">Completed</p>
+                      )}
+                      {isCurrent && (
+                        <p className="mt-0.5 text-[11px] text-primary">Currently learning</p>
+                      )}
+                      {item.estimatedMinutes && !isCompleted && !isCurrent && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          ~{item.estimatedMinutes} min
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+            <Tooltip delayDuration={500}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setShowDotRail(false)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/30 hover:text-muted-foreground/70"
+                >
+                  <ChevronUp className="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Hide overview</TooltipContent>
+            </Tooltip>
+          </div>
+        ) : (
+          <div className="group relative">
+            <Progress value={progressPercent} className="h-1 rounded-none" />
+            <Tooltip delayDuration={500}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setShowDotRail(true)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/50"
+                >
+                  <ChevronDown className="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Show chapter overview</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">

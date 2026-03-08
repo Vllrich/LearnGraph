@@ -44,6 +44,7 @@ const chatSchema = z.object({
               chunkId: z.string(),
               content: z.string().max(500),
               pageNumber: z.number().nullable(),
+              learningObjectId: z.string().optional(),
             }),
           )
           .optional(),
@@ -112,6 +113,7 @@ export async function POST(req: NextRequest) {
     chunkId: c.id,
     content: c.content.slice(0, 200),
     pageNumber: c.pageNumber,
+    learningObjectId: c.learningObjectId,
   }));
 
   const encoder = new TextEncoder();

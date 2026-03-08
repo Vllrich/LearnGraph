@@ -241,6 +241,43 @@ export default function MentorChatPage() {
   );
 }
 
+function buildCitationHref(cite: { learningObjectId?: string; pageNumber: number | null }) {
+  if (!cite.learningObjectId) return null;
+  const params = new URLSearchParams({ tab: "fulltext" });
+  if (cite.pageNumber) params.set("page", String(cite.pageNumber));
+  return `/library/${cite.learningObjectId}?${params}`;
+}
+
+function InlineSourceLinks({
+  text,
+  citations,
+}: {
+  text: string;
+  citations?: ChatMessage["citations"];
+}) {
+  if (!citations?.length) return <ReactMarkdown>{text}</ReactMarkdown>;
+
+  const citationByPage = new Map<number, (typeof citations)[number]>();
+  for (const c of citations) {
+    if (c.pageNumber && !citationByPage.has(c.pageNumber)) {
+      citationByPage.set(c.pageNumber, c);
+    }
+  }
+
+  const replaced = text.replace(
+    /\[Source:\s*page\s*(\d+)\]/gi,
+    (_, pageNum) => {
+      const p = Number(pageNum);
+      const cite = citationByPage.get(p);
+      const href = cite ? buildCitationHref(cite) : null;
+      if (href) return `[Source: page ${p}](${href})`;
+      return `[Source: page ${p}]`;
+    }
+  );
+
+  return <ReactMarkdown>{replaced}</ReactMarkdown>;
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
@@ -275,7 +312,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             <p className="text-[13px] leading-relaxed">{message.content}</p>
           ) : (
             <div className="prose-sm prose dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:text-foreground/90">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+              <InlineSourceLinks text={message.content} citations={message.citations} />
               {message.isStreaming && (
                 <span
                   className="inline-block h-3.5 w-0.5 animate-cursor-blink bg-foreground/50 ml-0.5"
@@ -295,16 +332,28 @@ function ChatBubble({ message }: { message: ChatMessage }) {
               <Copy className="size-3" />
             </button>
             {message.citations && message.citations.length > 0 && (
-              <div className="flex gap-1 ml-1">
-                {message.citations.map((cite, i) => (
-                  <span
-                    key={i}
-                    className="text-[10px] text-primary/50"
-                    title={cite.content?.slice(0, 100)}
-                  >
-                    {cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`}
-                  </span>
-                ))}
+              <div className="flex flex-wrap gap-1 ml-1">
+                {dedupeCitations(message.citations).map((cite, i) => {
+                  const href = buildCitationHref(cite);
+                  return href ? (
+                    <Link
+                      key={i}
+                      href={href}
+                      className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/20 transition-colors"
+                      title={cite.content?.slice(0, 100)}
+                    >
+                      {cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`}
+                    </Link>
+                  ) : (
+                    <span
+                      key={i}
+                      className="text-[10px] text-primary/50"
+                      title={cite.content?.slice(0, 100)}
+                    >
+                      {cite.pageNumber ? `p.${cite.pageNumber}` : `[${i + 1}]`}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -312,4 +361,14 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       </div>
     </div>
   );
+}
+
+function dedupeCitations(citations: NonNullable<ChatMessage["citations"]>) {
+  const seen = new Set<string>();
+  return citations.filter((c) => {
+    const key = `${c.learningObjectId ?? ""}:${c.pageNumber ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
