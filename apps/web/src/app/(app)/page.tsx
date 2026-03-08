@@ -23,14 +23,48 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import type { GoalType, LearnerLevel } from "@repo/shared";
 
-const POPULAR_TOPICS = [
-  { title: "Python", subtitle: "Beginner friendly" },
-  { title: "Machine Learning", subtitle: "Core concepts" },
-  { title: "Calculus", subtitle: "Exam prep" },
-  { title: "JavaScript", subtitle: "Web development" },
-  { title: "Statistics", subtitle: "Data science" },
-  { title: "AWS Cloud", subtitle: "Certification" },
-];
+const POPULAR_TOPICS: Record<string, { title: string; subtitle: string }[]> = {
+  Programming: [
+    { title: "Python", subtitle: "Beginner friendly" },
+    { title: "JavaScript", subtitle: "Web development" },
+    { title: "TypeScript", subtitle: "Type-safe JS" },
+    { title: "Rust", subtitle: "Systems programming" },
+    { title: "SQL", subtitle: "Databases" },
+    { title: "Go", subtitle: "Cloud native" },
+  ],
+  "AI & Data": [
+    { title: "Machine Learning", subtitle: "Core concepts" },
+    { title: "Deep Learning", subtitle: "Neural networks" },
+    { title: "Statistics", subtitle: "Data science" },
+    { title: "Data Analysis", subtitle: "Pandas & NumPy" },
+    { title: "LLMs & Prompting", subtitle: "Generative AI" },
+    { title: "Computer Vision", subtitle: "Image models" },
+  ],
+  Technology: [
+    { title: "AWS Cloud", subtitle: "Certification" },
+    { title: "Docker & K8s", subtitle: "DevOps" },
+    { title: "System Design", subtitle: "Architecture" },
+    { title: "Networking", subtitle: "TCP/IP & DNS" },
+    { title: "Linux", subtitle: "Command line" },
+    { title: "Git", subtitle: "Version control" },
+  ],
+  Science: [
+    { title: "Calculus", subtitle: "Exam prep" },
+    { title: "Linear Algebra", subtitle: "Foundations" },
+    { title: "Physics", subtitle: "Mechanics & more" },
+    { title: "Chemistry", subtitle: "Core concepts" },
+    { title: "Biology", subtitle: "Life sciences" },
+    { title: "Probability", subtitle: "Theory & practice" },
+  ],
+  Business: [
+    { title: "Product Management", subtitle: "PM fundamentals" },
+    { title: "Marketing", subtitle: "Growth & strategy" },
+    { title: "Finance", subtitle: "Basics & valuation" },
+    { title: "Entrepreneurship", subtitle: "Build a startup" },
+    { title: "Economics", subtitle: "Micro & macro" },
+    { title: "Leadership", subtitle: "People & teams" },
+  ],
+};
 
 const GOAL_OPTIONS: { id: GoalType; label: string; icon: string }[] = [
   { id: "exam_prep", label: "Exam", icon: "📝" },
@@ -78,6 +112,7 @@ export default function HomePage() {
   const [chatInput, setChatInput] = useState("");
   const [intakeStep, setIntakeStep] = useState<IntakeStep>("idle");
   const [selectedTopic, setSelectedTopic] = useState("");
+  const [activeTopicTab, setActiveTopicTab] = useState<string>(Object.keys(POPULAR_TOPICS)[0]!);
   const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
   const [generating, setGenerating] = useState(false);
   const router = useRouter();
@@ -251,8 +286,25 @@ export default function HomePage() {
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Popular starting points
               </p>
+              {/* Category tabs */}
+              <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+                {Object.keys(POPULAR_TOPICS).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTopicTab(tab)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium transition-all",
+                      activeTopicTab === tab
+                        ? "border border-primary/40 bg-primary/10 text-primary"
+                        : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {POPULAR_TOPICS.map((topic) => (
+                {(POPULAR_TOPICS[activeTopicTab] ?? []).map((topic) => (
                   <button
                     key={topic.title}
                     onClick={() => startPopularTopic(topic.title)}
