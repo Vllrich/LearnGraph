@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "../models";
+import { openaiModel } from "../models";
 import { retrieveChunks } from "../rag";
 import { db, questions, concepts, conceptChunkLinks, contentChunks } from "@repo/db";
 import { eq, inArray } from "drizzle-orm";
@@ -14,7 +14,7 @@ const questionSchema = z.object({
       correctAnswer: z.string(),
       explanation: z.string(),
       difficulty: z.number().min(1).max(5),
-    }),
+    })
   ),
 });
 
@@ -25,7 +25,7 @@ const questionSchema = z.object({
 export async function generateQuizForConcepts(
   learningObjectId: string,
   conceptIds: string[],
-  questionsPerConcept = 3,
+  questionsPerConcept = 3
 ): Promise<number> {
   if (conceptIds.length === 0) return 0;
 
@@ -50,7 +50,7 @@ export async function generateQuizForConcepts(
 
     try {
       const { object } = await generateObject({
-        model: anthropicModel,
+        model: openaiModel,
         schema: questionSchema,
         prompt: `Generate ${questionsPerConcept} quiz questions about the concept "${concept.displayName}" (${concept.definition ?? "no definition"}).
 
@@ -98,9 +98,7 @@ Requirements:
  * Generate quiz questions for all concepts linked to a learning object.
  * Called after ingestion completes.
  */
-export async function generateQuizForLearningObject(
-  learningObjectId: string,
-): Promise<number> {
+export async function generateQuizForLearningObject(learningObjectId: string): Promise<number> {
   const links = await db
     .selectDistinct({ conceptId: conceptChunkLinks.conceptId })
     .from(conceptChunkLinks)

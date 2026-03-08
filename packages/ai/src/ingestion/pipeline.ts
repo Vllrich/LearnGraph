@@ -20,9 +20,7 @@ export type PipelineInput = {
  * Full ingestion pipeline: extract → chunk → embed + summarize + extract concepts.
  * Updates learning_objects status throughout.
  */
-export async function runIngestionPipeline(
-  input: PipelineInput,
-): Promise<void> {
+export async function runIngestionPipeline(input: PipelineInput): Promise<void> {
   const { learningObjectId, sourceType, fileBuffer, sourceUrl } = input;
 
   const updateStatus = async (status: string, error?: string) => {
@@ -41,12 +39,14 @@ export async function runIngestionPipeline(
     let rawText: string;
     let title: string | null = null;
     let metadata: Record<string, unknown> = {};
+    let pageOffsets: Map<number, number> | undefined;
 
     if (sourceType === "pdf" && fileBuffer) {
       const result = await extractPdfText(fileBuffer);
       rawText = result.text;
       title = result.title;
       metadata = { pageCount: result.pageCount };
+      pageOffsets = result.pageOffsets;
     } else if (sourceType === "youtube" && sourceUrl) {
       const result = await fetchYoutubeTranscript(sourceUrl);
       rawText = result.text;
@@ -62,9 +62,7 @@ export async function runIngestionPipeline(
     }
 
     if (rawText.length < 100) {
-      throw new Error(
-        "Extracted text is too short. The document may be empty or unreadable.",
-      );
+      throw new Error("Extracted text is too short. The document may be empty or unreadable.");
     }
 
     await db
@@ -78,7 +76,7 @@ export async function runIngestionPipeline(
       .where(eq(learningObjects.id, learningObjectId));
 
     // Step 2: Semantic chunking
-    const chunks = semanticChunk(rawText);
+    const chunks = semanticChunk(rawText, { pageNumbers: pageOffsets });
 
     if (chunks.length === 0) {
       throw new Error("No chunks produced from document.");
@@ -94,7 +92,7 @@ export async function runIngestionPipeline(
           sectionTitle: c.sectionTitle,
           pageNumber: c.pageNumber,
           tokenCount: c.tokenCount,
-        })),
+        }))
       )
       .returning({ id: contentChunks.id });
 
@@ -110,11 +108,8 @@ export async function runIngestionPipeline(
     // Step 4: Store embeddings on chunks
     await Promise.all(
       embeddings.map((emb, i) =>
-        db
-          .update(contentChunks)
-          .set({ embedding: emb })
-          .where(eq(contentChunks.id, chunkIds[i])),
-      ),
+        db.update(contentChunks).set({ embedding: emb }).where(eq(contentChunks.id, chunkIds[i]))
+      )
     );
 
     // Step 5: Store summaries
@@ -135,12 +130,11 @@ export async function runIngestionPipeline(
     } catch (quizErr) {
       console.error(
         `Quiz generation failed for ${learningObjectId}:`,
-        quizErr instanceof Error ? quizErr.message : quizErr,
+        quizErr instanceof Error ? quizErr.message : quizErr
       );
     }
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown processing error";
+    const message = error instanceof Error ? error.message : "Unknown processing error";
     console.error(`Pipeline failed for ${learningObjectId}:`, message);
     await updateStatus("failed", message);
   }

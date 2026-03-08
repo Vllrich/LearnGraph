@@ -4,7 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
+  BookOpen,
+  MessageCircle,
   Zap,
+  Target,
   BarChart3,
   Globe,
   LogOut,
@@ -15,15 +18,14 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/library", label: "Library", icon: BookOpen },
+  { href: "/mentor", label: "Mentor", icon: MessageCircle },
   { href: "/review", label: "Review", icon: Zap },
+  { href: "/goals", label: "Goals", icon: Target },
   { href: "/graph", label: "Graph", icon: Globe },
   { href: "/stats", label: "Progress", icon: BarChart3 },
 ] as const;
@@ -63,7 +65,12 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
       )}
     >
       {/* Logo */}
-      <div className={cn("flex h-12 items-center border-b border-border/40 px-3", collapsed && "justify-center px-0")}>
+      <div
+        className={cn(
+          "flex h-12 items-center border-b border-border/40 px-3",
+          collapsed && "justify-center px-0"
+        )}
+      >
         {!collapsed ? (
           <Link href="/" className="flex items-center gap-2">
             <div className="flex size-6 items-center justify-center rounded-md gradient-brand">
@@ -72,7 +79,10 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
             <span className="text-sm font-semibold tracking-tight">LearnGraph</span>
           </Link>
         ) : (
-          <Link href="/" className="flex size-6 items-center justify-center rounded-md gradient-brand">
+          <Link
+            href="/"
+            className="flex size-6 items-center justify-center rounded-md gradient-brand"
+          >
             <Sparkles className="size-3 text-white" />
           </Link>
         )}
@@ -105,7 +115,9 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">{item.label}</TooltipContent>
+                <TooltipContent side="right" className="text-xs">
+                  {item.label}
+                </TooltipContent>
               </Tooltip>
             );
           }
@@ -126,7 +138,12 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
           {!collapsed && <span className="text-xs text-muted-foreground">Collapse</span>}
         </Button>
 
-        <div className={cn("mt-1 flex items-center gap-2.5 rounded-lg px-2.5 py-2", collapsed && "justify-center px-0")}>
+        <div
+          className={cn(
+            "mt-1 flex items-center gap-2.5 rounded-lg px-2.5 py-2",
+            collapsed && "justify-center px-0"
+          )}
+        >
           <Avatar className="size-6">
             <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
           </Avatar>

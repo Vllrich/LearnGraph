@@ -9,6 +9,7 @@ import {
   concepts,
   conceptChunkLinks,
   contentChunks,
+  users,
 } from "@repo/db";
 import { eq, and, lte, sql, asc, desc, count, inArray } from "drizzle-orm";
 import { schedule, newCard, type Card } from "@repo/fsrs";
@@ -290,9 +291,16 @@ export const reviewRouter = createTRPCRouter({
       .orderBy(desc(reviewLog.createdAt))
       .limit(50);
 
+    const [userRow] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, ctx.userId))
+      .limit(1);
+    const tz = userRow?.timezone ?? "UTC";
+
     const streakResult = await db.execute<{ streak_days: number }>(sql`
       WITH daily_reviews AS (
-        SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') as review_date
+        SELECT DISTINCT DATE(created_at AT TIME ZONE ${tz}) as review_date
         FROM review_log
         WHERE user_id = ${ctx.userId}
         ORDER BY review_date DESC
