@@ -16,7 +16,20 @@ export type SourceType =
   | "pptx"
   | "url"
   | "code"
-  | "text";
+  | "text"
+  | "ai_generated";
+
+export type GoalType = "exam_prep" | "skill_building" | "course_supplement" | "exploration";
+
+export type LearnerLevel = "beginner" | "some_knowledge" | "experienced";
+
+export type LearningMethod =
+  | "guided_lesson"
+  | "practice_testing"
+  | "explain_back"
+  | "spaced_review"
+  | "interleaved_practice"
+  | "reflection";
 
 export type LearningObjectStatus = "processing" | "ready" | "failed";
 
@@ -33,19 +46,8 @@ export const FSRS_RATING_LABELS = {
 
 export type QuestionType = "mcq" | "short_answer" | "explain_back" | "fill_blank";
 
-export type EdgeType =
-  | "prerequisite"
-  | "part_of"
-  | "related_to"
-  | "applied_in"
-  | "contrasts_with";
+export type EdgeType = "prerequisite" | "part_of" | "related_to" | "applied_in" | "contrasts_with";
 
-export type BloomLevel =
-  | "remember"
-  | "understand"
-  | "apply"
-  | "analyze"
-  | "evaluate"
-  | "create";
+export type BloomLevel = "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create";
 
 export type SubscriptionTier = "free" | "pro" | "team";

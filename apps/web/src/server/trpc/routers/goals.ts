@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, learningGoals } from "@repo/db";
-import { eq, and, desc } from "drizzle-orm";
+import { db, learningGoals, curriculumItems } from "@repo/db";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const goalsRouter = createTRPCRouter({
@@ -13,12 +13,62 @@ export const goalsRouter = createTRPCRouter({
       .orderBy(desc(learningGoals.createdAt));
   }),
 
+  getActive: protectedProcedure.query(async ({ ctx }) => {
+    const goals = await db
+      .select()
+      .from(learningGoals)
+      .where(and(eq(learningGoals.userId, ctx.userId), eq(learningGoals.status, "active")))
+      .orderBy(desc(learningGoals.createdAt));
+
+    const result = await Promise.all(
+      goals.map(async (goal) => {
+        const items = await db
+          .select()
+          .from(curriculumItems)
+          .where(eq(curriculumItems.goalId, goal.id))
+          .orderBy(asc(curriculumItems.sequenceOrder));
+
+        const completed = items.filter((i) => i.status === "completed").length;
+        const nextItem = items.find((i) => i.status !== "completed");
+
+        return { ...goal, totalItems: items.length, completedItems: completed, nextItem };
+      })
+    );
+
+    return result;
+  }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select()
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.id), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const items = await db
+        .select()
+        .from(curriculumItems)
+        .where(eq(curriculumItems.goalId, goal.id))
+        .orderBy(asc(curriculumItems.sequenceOrder));
+
+      return { ...goal, items };
+    }),
+
   create: protectedProcedure
     .input(
       z.object({
         title: z.string().min(1).max(500),
         description: z.string().max(2000).optional(),
         targetDate: z.string().optional(),
+        goalType: z
+          .enum(["exam_prep", "skill_building", "course_supplement", "exploration"])
+          .optional(),
+        currentLevel: z.enum(["beginner", "some_knowledge", "experienced"]).optional(),
+        timeBudgetMinutes: z.number().min(5).max(480).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -29,11 +79,35 @@ export const goalsRouter = createTRPCRouter({
           title: input.title,
           description: input.description,
           targetDate: input.targetDate,
+          goalType: input.goalType,
+          currentLevel: input.currentLevel,
+          timeBudgetMinutes: input.timeBudgetMinutes,
           status: "active",
         })
         .returning();
 
       return goal;
+    }),
+
+  completeCurriculumItem: protectedProcedure
+    .input(z.object({ itemId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [item] = await db
+        .select({ id: curriculumItems.id, goalId: curriculumItems.goalId })
+        .from(curriculumItems)
+        .innerJoin(learningGoals, eq(curriculumItems.goalId, learningGoals.id))
+        .where(and(eq(curriculumItems.id, input.itemId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!item) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [updated] = await db
+        .update(curriculumItems)
+        .set({ status: "completed", completedAt: new Date() })
+        .where(eq(curriculumItems.id, input.itemId))
+        .returning();
+
+      return updated;
     }),
 
   update: protectedProcedure

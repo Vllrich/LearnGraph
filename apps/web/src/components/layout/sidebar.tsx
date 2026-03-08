@@ -13,7 +13,10 @@ import {
   LogOut,
   ChevronLeft,
   Sparkles,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,6 +42,7 @@ type SidebarProps = {
 export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -128,15 +132,36 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
 
       {/* Footer */}
       <div className="border-t border-border/40 p-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn("w-full h-8", !collapsed ? "justify-start gap-2 px-2.5" : "px-0")}
-          onClick={onToggle}
-        >
-          <ChevronLeft className={cn("size-3.5 transition-transform", collapsed && "rotate-180")} />
-          {!collapsed && <span className="text-xs text-muted-foreground">Collapse</span>}
-        </Button>
+        <div className={cn("flex gap-1", collapsed ? "flex-col items-center" : "items-center")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("h-8", !collapsed ? "flex-1 justify-start gap-2 px-2.5" : "w-8 px-0")}
+            onClick={onToggle}
+          >
+            <ChevronLeft
+              className={cn("size-3.5 transition-transform", collapsed && "rotate-180")}
+            />
+            {!collapsed && <span className="text-xs text-muted-foreground">Collapse</span>}
+          </Button>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-8 shrink-0 p-0"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side={collapsed ? "right" : "top"} className="text-xs">
+              Toggle theme
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
         <div
           className={cn(

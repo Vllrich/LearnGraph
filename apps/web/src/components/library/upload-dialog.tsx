@@ -15,27 +15,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  Upload,
-  FileText,
-  Youtube,
-  X,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+import { Upload, FileText, Youtube, X, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from "@repo/shared";
 import { toast } from "sonner";
 
 type UploadDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultTab?: "file" | "url";
 };
 
 type UploadState = "idle" | "uploading" | "processing" | "done" | "error";
 
-export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
-  const [tab, setTab] = useState<"file" | "youtube">("file");
+export function UploadDialog({ open, onOpenChange, defaultTab }: UploadDialogProps) {
+  const [tab, setTab] = useState<"file" | "youtube">(defaultTab === "url" ? "youtube" : "file");
   const [file, setFile] = useState<File | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -58,7 +51,7 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       if (!nextOpen && uploadState !== "uploading") reset();
       onOpenChange(nextOpen);
     },
-    [onOpenChange, reset, uploadState],
+    [onOpenChange, reset, uploadState]
   );
 
   const onDrop = useCallback((accepted: File[]) => {
@@ -92,7 +85,9 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
 
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const fileId = crypto.randomUUID();
@@ -136,7 +131,8 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
 
   const handleUploadYoutube = async () => {
     if (!youtubeUrl.trim()) return;
-    const ytRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const ytRegex =
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
     if (!ytRegex.test(youtubeUrl)) {
       setErrorMessage("Please enter a valid YouTube URL.");
       return;
@@ -156,7 +152,11 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       const ingestRes = await fetch("/api/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ learningObjectId: item.id, sourceType: "youtube", sourceUrl: youtubeUrl.trim() }),
+        body: JSON.stringify({
+          learningObjectId: item.id,
+          sourceType: "youtube",
+          sourceUrl: youtubeUrl.trim(),
+        }),
       });
       if (!ingestRes.ok) {
         const body = await ingestRes.json().catch(() => ({}));
@@ -192,7 +192,10 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
           {(["file", "youtube"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); reset(); }}
+              onClick={() => {
+                setTab(t);
+                reset();
+              }}
               className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 tab === t
                   ? "bg-background text-foreground shadow-sm"
@@ -231,7 +234,10 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                       </p>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                      }}
                       className="ml-2 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       <X className="size-4" />
@@ -263,14 +269,31 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                 <div className="space-y-2">
                   <Progress value={uploadProgress} className="h-1.5" />
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {uploadState === "uploading" && <><Loader2 className="size-3.5 animate-spin" /> Uploading...</>}
-                    {uploadState === "processing" && <><CheckCircle2 className="size-3.5 text-success" /> Processing in background...</>}
+                    {uploadState === "uploading" && (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" /> Uploading...
+                      </>
+                    )}
+                    {uploadState === "processing" && (
+                      <>
+                        <CheckCircle2 className="size-3.5 text-success" /> Processing in
+                        background...
+                      </>
+                    )}
                   </div>
                 </div>
               )}
 
-              <Button onClick={handleUploadFile} disabled={!file || isUploading} className="w-full rounded-xl">
-                {isUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
+              <Button
+                onClick={handleUploadFile}
+                disabled={!file || isUploading}
+                className="w-full rounded-xl"
+              >
+                {isUploading ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 size-4" />
+                )}
                 {isUploading ? "Uploading..." : "Upload PDF"}
               </Button>
             </div>
@@ -279,12 +302,17 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
           {tab === "youtube" && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="youtube-url" className="text-sm">YouTube URL</Label>
+                <Label htmlFor="youtube-url" className="text-sm">
+                  YouTube URL
+                </Label>
                 <Input
                   id="youtube-url"
                   placeholder="https://youtube.com/watch?v=..."
                   value={youtubeUrl}
-                  onChange={(e) => { setYoutubeUrl(e.target.value); setErrorMessage(""); }}
+                  onChange={(e) => {
+                    setYoutubeUrl(e.target.value);
+                    setErrorMessage("");
+                  }}
                   disabled={isUploading}
                   className="rounded-xl"
                 />
@@ -301,14 +329,30 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                 <div className="space-y-2">
                   <Progress value={uploadProgress} className="h-1.5" />
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {uploadState === "uploading" && <><Loader2 className="size-3.5 animate-spin" /> Processing...</>}
-                    {uploadState === "processing" && <><CheckCircle2 className="size-3.5 text-success" /> Fetching transcript...</>}
+                    {uploadState === "uploading" && (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" /> Processing...
+                      </>
+                    )}
+                    {uploadState === "processing" && (
+                      <>
+                        <CheckCircle2 className="size-3.5 text-success" /> Fetching transcript...
+                      </>
+                    )}
                   </div>
                 </div>
               )}
 
-              <Button onClick={handleUploadYoutube} disabled={!youtubeUrl.trim() || isUploading} className="w-full rounded-xl">
-                {isUploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Youtube className="mr-2 size-4" />}
+              <Button
+                onClick={handleUploadYoutube}
+                disabled={!youtubeUrl.trim() || isUploading}
+                className="w-full rounded-xl"
+              >
+                {isUploading ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Youtube className="mr-2 size-4" />
+                )}
                 {isUploading ? "Processing..." : "Add Video"}
               </Button>
             </div>

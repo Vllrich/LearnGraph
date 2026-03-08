@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  integer,
-  date,
-  timestamp,
-  index,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, boolean, date, timestamp, index } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { learningObjects } from "./learning-objects";
 
@@ -20,6 +12,10 @@ export const learningGoals = pgTable("learning_goals", {
   targetDate: date("target_date"),
   status: text("status").default("active"),
   targetConcepts: uuid("target_concepts").array().default([]),
+  goalType: text("goal_type"),
+  currentLevel: text("current_level"),
+  timeBudgetMinutes: integer("time_budget_minutes"),
+  examDate: timestamp("exam_date", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -34,17 +30,15 @@ export const curriculumItems = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     conceptIds: uuid("concept_ids").array().default([]),
-    learningObjectId: uuid("learning_object_id").references(
-      () => learningObjects.id
-    ),
+    learningObjectId: uuid("learning_object_id").references(() => learningObjects.id),
     estimatedMinutes: integer("estimated_minutes"),
     status: text("status").default("pending"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    learningMethod: text("learning_method"),
+    aiGenerated: boolean("ai_generated").default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [
-    index("idx_curriculum_goal").on(table.goalId, table.sequenceOrder),
-  ]
+  (table) => [index("idx_curriculum_goal").on(table.goalId, table.sequenceOrder)]
 );
 
 export type LearningGoal = typeof learningGoals.$inferSelect;
