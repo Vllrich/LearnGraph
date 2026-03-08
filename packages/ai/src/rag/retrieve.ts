@@ -12,6 +12,22 @@ export type RetrievedChunk = {
   score: number;
 };
 
+const MAX_QUERY_LENGTH = 1000;
+
+/**
+ * Sanitize a user query into safe tsquery tokens.
+ * Strips all non-word characters, limits length, and joins with &.
+ */
+function buildSafeTsQuery(raw: string): string {
+  return raw
+    .slice(0, MAX_QUERY_LENGTH)
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && w.length <= 64)
+    .slice(0, 20)
+    .join(" & ");
+}
+
 /**
  * Hybrid search: vector similarity (pgvector cosine) + BM25-style full-text match.
  * Weighted combination: 0.7 vector + 0.3 keyword.
@@ -23,15 +39,14 @@ export async function retrieveChunks(
     topK?: number;
   } = {},
 ): Promise<RetrievedChunk[]> {
-  const topK = opts.topK ?? RAG_TOP_K;
-  const queryEmbedding = await generateEmbedding(query);
+  const sanitizedQuery = query.slice(0, MAX_QUERY_LENGTH).trim();
+  if (!sanitizedQuery) return [];
+
+  const topK = Math.min(opts.topK ?? RAG_TOP_K, 20);
+  const queryEmbedding = await generateEmbedding(sanitizedQuery);
   const vecLiteral = `[${queryEmbedding.join(",")}]`;
 
-  const tsQuery = query
-    .replace(/[^\w\s]/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .join(" & ");
+  const tsQuery = buildSafeTsQuery(sanitizedQuery);
 
   const scopeFilter = opts.learningObjectId
     ? sql`AND c.learning_object_id = ${opts.learningObjectId}`

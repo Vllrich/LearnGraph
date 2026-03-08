@@ -58,8 +58,8 @@ export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border/40 bg-background transition-[width] duration-200 ease-in-out lg:flex",
-        collapsed ? "w-14" : "w-56"
+        "fixed inset-y-3 left-3 z-30 hidden flex-col rounded-xl border border-border/50 bg-card shadow-sm transition-[width] duration-200 ease-in-out lg:flex",
+        collapsed ? "w-12" : "w-52"
       )}
     >
       {/* Logo */}

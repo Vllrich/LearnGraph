@@ -6,6 +6,7 @@ import { semanticChunk } from "./chunker";
 import { generateEmbeddings } from "./embeddings";
 import { summarizeContent } from "./summarize";
 import { extractAndStoreConcepts } from "./concepts";
+import { generateQuizForLearningObject } from "../quiz/generate";
 import type { SourceType } from "@repo/shared";
 
 export type PipelineInput = {
@@ -127,6 +128,16 @@ export async function runIngestionPipeline(
         updatedAt: new Date(),
       })
       .where(eq(learningObjects.id, learningObjectId));
+
+    // Step 6: Generate quiz bank (non-blocking — failure here doesn't fail the pipeline)
+    try {
+      await generateQuizForLearningObject(learningObjectId);
+    } catch (quizErr) {
+      console.error(
+        `Quiz generation failed for ${learningObjectId}:`,
+        quizErr instanceof Error ? quizErr.message : quizErr,
+      );
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown processing error";

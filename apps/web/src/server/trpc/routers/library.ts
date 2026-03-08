@@ -5,6 +5,7 @@ import {
   contentChunks,
   concepts,
   conceptChunkLinks,
+  questions,
 } from "@repo/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -127,6 +128,40 @@ export const libraryRouter = createTRPCRouter({
         .returning();
 
       return item;
+    }),
+
+  getQuestions: protectedProcedure
+    .input(z.object({ learningObjectId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [owned] = await ctx.db
+        .select({ id: learningObjects.id })
+        .from(learningObjects)
+        .where(
+          and(
+            eq(learningObjects.id, input.learningObjectId),
+            eq(learningObjects.userId, ctx.userId),
+          ),
+        )
+        .limit(1);
+
+      if (!owned) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return ctx.db
+        .select({
+          id: questions.id,
+          questionType: questions.questionType,
+          questionText: questions.questionText,
+          options: questions.options,
+          correctAnswer: questions.correctAnswer,
+          explanation: questions.explanation,
+          difficulty: questions.difficulty,
+          conceptIds: questions.conceptIds,
+        })
+        .from(questions)
+        .where(eq(questions.learningObjectId, input.learningObjectId))
+        .orderBy(questions.difficulty);
     }),
 
   delete: protectedProcedure

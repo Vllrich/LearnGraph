@@ -11,9 +11,13 @@ export const maxDuration = 300;
 const ingestSchema = z.object({
   learningObjectId: z.string().uuid(),
   sourceType: z.enum(["pdf", "youtube"]),
-  filePath: z.string().optional(),
-  sourceUrl: z.string().url().optional(),
+  filePath: z.string().max(500).optional(),
+  sourceUrl: z.string().url().max(2048).optional(),
 });
+
+const ingestRateMap = new Map<string, { count: number; resetAt: number }>();
+const INGEST_RATE_WINDOW_MS = 60_000;
+const INGEST_RATE_MAX = 5;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -23,6 +27,20 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const now = Date.now();
+  const rateEntry = ingestRateMap.get(user.id);
+  if (rateEntry && now <= rateEntry.resetAt && rateEntry.count >= INGEST_RATE_MAX) {
+    return NextResponse.json(
+      { error: "Too many uploads. Please wait before uploading more." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  }
+  if (!rateEntry || now > rateEntry.resetAt) {
+    ingestRateMap.set(user.id, { count: 1, resetAt: now + INGEST_RATE_WINDOW_MS });
+  } else {
+    rateEntry.count++;
   }
 
   const parsed = ingestSchema.safeParse(await req.json());

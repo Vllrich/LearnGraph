@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { TRPCError } from "@trpc/server";
 import {
   db,
   userConceptState,
@@ -8,13 +7,15 @@ import {
   questions,
   userAnswers,
   concepts,
+  conceptChunkLinks,
+  contentChunks,
 } from "@repo/db";
-import { eq, and, lte, sql, asc, desc, count } from "drizzle-orm";
-import { schedule, getRetrievability, newCard, type Card } from "@repo/fsrs";
+import { eq, and, lte, sql, asc, desc, count, inArray } from "drizzle-orm";
+import { schedule, newCard, type Card } from "@repo/fsrs";
 import type { FSRSRating } from "@repo/shared";
 import {
   DEFAULT_DAILY_REVIEW_LIMIT,
-  RETRIEVABILITY_THRESHOLD,
+  DEFAULT_REVIEW_MIX_RATIO,
 } from "@repo/shared";
 
 function dbStateToCard(state: typeof userConceptState.$inferSelect): Card {
@@ -53,12 +54,67 @@ function computeMastery(current: number, rating: FSRSRating): number {
 }
 
 export const reviewRouter = createTRPCRouter({
+  /**
+   * Initialize user_concept_state rows for concepts linked to a learning object.
+   * Called when a user first views content — sets mastery to 1 (Exposed).
+   * Uses ON CONFLICT DO NOTHING to avoid overwriting existing state.
+   */
+  initConceptStates: protectedProcedure
+    .input(z.object({ learningObjectId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const linkedConcepts = await db
+        .selectDistinct({ conceptId: conceptChunkLinks.conceptId })
+        .from(conceptChunkLinks)
+        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+        .where(eq(contentChunks.learningObjectId, input.learningObjectId));
+
+      if (linkedConcepts.length === 0) return { initialized: 0 };
+
+      const conceptIds = linkedConcepts.map((c) => c.conceptId);
+
+      const existing = await db
+        .select({ conceptId: userConceptState.conceptId })
+        .from(userConceptState)
+        .where(
+          and(
+            eq(userConceptState.userId, ctx.userId),
+            inArray(userConceptState.conceptId, conceptIds),
+          ),
+        );
+      const existingSet = new Set(existing.map((e) => e.conceptId));
+      const newConceptIds = conceptIds.filter((id) => !existingSet.has(id));
+
+      if (newConceptIds.length === 0) return { initialized: 0 };
+
+      const now = new Date();
+      await db.insert(userConceptState).values(
+        newConceptIds.map((conceptId) => ({
+          userId: ctx.userId,
+          conceptId,
+          masteryLevel: 1,
+          fsrsState: "new" as const,
+          nextReviewAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+
+      return { initialized: newConceptIds.length };
+    }),
+
+  /**
+   * Daily review queue: 80% due reviews (sorted by lowest retrievability)
+   * + 20% new concepts (never reviewed, sorted by creation date).
+   */
   getDailyQueue: protectedProcedure
     .input(z.object({ limit: z.number().min(1).max(50).optional() }).optional())
-    .query(async ({ ctx }) => {
-      const limit = ctx.userId ? (DEFAULT_DAILY_REVIEW_LIMIT) : 20;
+    .query(async ({ ctx, input }) => {
+      const budget = input?.limit ?? DEFAULT_DAILY_REVIEW_LIMIT;
+      const reviewSlots = Math.ceil(budget * DEFAULT_REVIEW_MIX_RATIO.review);
+      const newSlots = budget - reviewSlots;
       const now = new Date();
 
+      // Due reviews: concepts with a past nextReviewAt, sorted by lowest retrievability
       const dueItems = await db
         .select({
           id: userConceptState.id,
@@ -76,12 +132,37 @@ export const reviewRouter = createTRPCRouter({
           and(
             eq(userConceptState.userId, ctx.userId),
             lte(userConceptState.nextReviewAt, now),
+            sql`${userConceptState.fsrsReps} > 0`,
           ),
         )
         .orderBy(asc(userConceptState.fsrsRetrievability))
-        .limit(limit);
+        .limit(reviewSlots);
 
-      const conceptIds = dueItems.map((d) => d.conceptId);
+      // New concepts: never reviewed (reps=0), enrolled via initConceptStates
+      const newItems = await db
+        .select({
+          id: userConceptState.id,
+          conceptId: userConceptState.conceptId,
+          masteryLevel: userConceptState.masteryLevel,
+          fsrsRetrievability: userConceptState.fsrsRetrievability,
+          nextReviewAt: userConceptState.nextReviewAt,
+          conceptName: concepts.displayName,
+          conceptDefinition: concepts.definition,
+          conceptDifficulty: concepts.difficultyLevel,
+        })
+        .from(userConceptState)
+        .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+        .where(
+          and(
+            eq(userConceptState.userId, ctx.userId),
+            sql`${userConceptState.fsrsReps} = 0`,
+          ),
+        )
+        .orderBy(asc(userConceptState.createdAt))
+        .limit(newSlots);
+
+      const allItems = [...dueItems, ...newItems];
+      const conceptIds = allItems.map((d) => d.conceptId);
 
       let questionsForReview: (typeof questions.$inferSelect)[] = [];
       if (conceptIds.length > 0) {
@@ -94,13 +175,14 @@ export const reviewRouter = createTRPCRouter({
               sql`, `,
             )}]`,
           )
-          .limit(limit * 2);
+          .limit(budget * 2);
       }
 
       return {
-        items: dueItems,
+        items: allItems,
         questions: questionsForReview,
         totalDue: dueItems.length,
+        totalNew: newItems.length,
       };
     }),
 

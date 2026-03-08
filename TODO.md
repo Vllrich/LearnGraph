@@ -1,7 +1,7 @@
 # LearnGraph — Implementation TODO & Roadmap
 
-> **Status:** Phase 1B — Complete (P0 items done)  
-> **Last Updated:** March 7, 2026  
+> **Status:** Phase 1C/1D — In Progress (RAG, Mentor, Quiz, Review all functional)  
+> **Last Updated:** March 8, 2026  
 > **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md)
 
 ---
@@ -320,11 +320,11 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 ### 3.1 RAG Retrieval Pipeline
 
-- [ ] **P0** Implement hybrid search: vector similarity (pgvector) + BM25 keyword matching (Postgres full-text search)
-- [ ] **P0** Retrieval function: `retrieveChunks(query, userId, learningObjectId?, topK=5)`
-- [ ] **P0** Metadata filtering: optionally scope retrieval to a specific learning object or section
-- [ ] **P0** Relevance scoring: combine vector score + BM25 score (weighted: 0.7 vector + 0.3 BM25)
-- [ ] **P0** Return chunks with source metadata (doc title, section, page number) for citation
+- [x] **P0** Implement hybrid search: vector similarity (pgvector) + BM25 keyword matching (Postgres full-text search)
+- [x] **P0** Retrieval function: `retrieveChunks(query, userId, learningObjectId?, topK=5)`
+- [x] **P0** Metadata filtering: optionally scope retrieval to a specific learning object or section
+- [x] **P0** Relevance scoring: combine vector score + BM25 score (weighted: 0.7 vector + 0.3 BM25)
+- [x] **P0** Return chunks with source metadata (doc title, section, page number) for citation
 - [ ] **P1** Re-ranking with cross-encoder (Phase 2 optimization — stub the interface now)
 
 **Acceptance:** Query "What is gradient descent?" against an ML textbook returns the 5 most relevant chunks, all from sections discussing optimization. Hybrid search outperforms pure vector search on a manual test set of 10 queries.
@@ -335,20 +335,20 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Technical Architecture §5.5
 
-- [ ] **P0** Mentor system prompt encoding the pedagogical loop: ASSESS → TEACH → PRACTICE → VERIFY → CONNECT
-- [ ] **P0** Conversation context assembly:
+- [x] **P0** Mentor system prompt encoding the pedagogical loop: ASSESS → TEACH → PRACTICE → VERIFY → CONNECT
+- [x] **P0** Conversation context assembly:
   1. User's knowledge state for relevant concepts (from `user_concept_state`)
   2. Retrieved content chunks (RAG, top 5)
   3. Conversation history (last 10 turns)
   4. Current teaching objective
-- [ ] **P0** Tool calling via Vercel AI SDK — tools available to mentor:
+- [x] **P0** Tool calling via Vercel AI SDK — tools available to mentor:
   - `check_knowledge_state(concept_name)` → returns mastery level
   - `retrieve_content(query)` → returns relevant chunks
   - `generate_quiz(concept_name, difficulty)` → inline quiz question
   - `update_mastery(concept_name, score)` → update user state
-- [ ] **P0** Streaming response via Vercel AI SDK (`streamText`)
-- [ ] **P0** Grounding enforcement: if retrieval similarity < threshold, mentor responds with "I don't have enough information about this in your materials."
-- [ ] **P0** Store conversation history in `mentor_conversations` table (§7.6)
+- [x] **P0** Streaming response via Vercel AI SDK (`streamText`)
+- [x] **P0** Grounding enforcement: if retrieval similarity < threshold, mentor responds with "I don't have enough information about this in your materials."
+- [x] **P0** Store conversation history in `mentor_conversations` table (§7.6)
 - [ ] **P1** Langfuse tracing for every mentor call
 
 **Acceptance:** Mentor can answer questions grounded in uploaded content. Responses cite source material. Streaming works (tokens appear progressively). Tool calls execute correctly (e.g., generating an inline quiz). Off-topic questions get appropriate "I don't have info" response.
@@ -359,15 +359,15 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Design System §6.4
 
-- [ ] **P0** `/mentor` page OR slide-out panel accessible from content detail
-- [ ] **P0** Chat message list — user messages right-aligned (`bg-brand-primary/10`), AI messages left-aligned (`bg-muted`, serif font `Source Serif 4`)
-- [ ] **P0** Streaming display — tokens render as they arrive, blinking cursor animation
-- [ ] **P0** Source citations — clickable chip below AI message linking to source chunk (doc title, page number)
-- [ ] **P0** Chat input — text input + send button, disabled while AI is responding
-- [ ] **P0** Context selector — which learning object(s) the mentor should reference
+- [x] **P0** `/mentor` page OR slide-out panel accessible from content detail
+- [x] **P0** Chat message list — user messages right-aligned (`bg-brand-primary/10`), AI messages left-aligned (`bg-muted`, serif font `Source Serif 4`)
+- [x] **P0** Streaming display — tokens render as they arrive, blinking cursor animation
+- [x] **P0** Source citations — clickable chip below AI message linking to source chunk (doc title, page number)
+- [x] **P0** Chat input — text input + send button, disabled while AI is responding
+- [x] **P0** Context selector — which learning object(s) the mentor should reference
 - [ ] **P1** Inline quiz rendering — when mentor generates a quiz via tool call, render interactive MCQ/short-answer in the chat
 - [ ] **P1** Conversation history — sidebar list of past conversations, ability to resume
-- [ ] **P1** "Explain like I'm 5" / "Go deeper" quick-action buttons
+- [x] **P1** "Explain like I'm 5" / "Go deeper" quick-action buttons
 
 **Acceptance:** Full chat loop works: type question → see streaming AI response → see source citation → click citation to see chunk. Mentor uses Socratic questioning. UI matches Design System §6.4 wireframe.
 
@@ -385,7 +385,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Technical Architecture §5.3
 
-- [ ] **P0** Quiz generation pipeline:
+- [x] **P0** Quiz generation pipeline:
   1. Select target concept(s) for the quiz
   2. Retrieve relevant chunks
   3. LLM generates questions (structured JSON output):
@@ -402,8 +402,8 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
      }
      ```
   4. Validate: discard questions where correct answer can't be grounded in source chunks
-- [ ] **P0** Store in `questions` table linked to learning object and concepts
-- [ ] **P0** Pre-generate quiz bank during ingestion (batch job) — 5–10 questions per concept
+- [x] **P0** Store in `questions` table linked to learning object and concepts
+- [x] **P0** Pre-generate quiz bank during ingestion (batch job) — 5–10 questions per concept
 - [ ] **P0** Quality scoring: track user feedback (thumbs up/down), exclude low-rated questions
 - [ ] **P1** Difficulty adaptation: >80% correct → increase difficulty, <60% → decrease + flag gap
 
@@ -433,18 +433,18 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Technical Architecture §5.6
 
-- [ ] **P0** `user_concept_state` CRUD via tRPC:
+- [x] **P0** `user_concept_state` CRUD via tRPC:
   - `getState(userId, conceptId)` — returns mastery + FSRS state
   - `updateState(userId, conceptId, rating)` — runs FSRS schedule, updates mastery level
   - `getDueReviews(userId)` — all concepts where `retrievability < 0.9`
-- [ ] **P0** Mastery level update rules (§5.6):
+- [x] **P0** Mastery level update rules (§5.6):
   - Read summary → `exposed` (1)
   - Quiz correct → increment mastery, extend FSRS interval
   - Quiz incorrect → decrement mastery, shorten interval, flag gap
   - Explain-back success → highest boost
   - Time passes → FSRS decay reduces retrievability
-- [ ] **P0** Write to `review_log` on every review event (for analytics and FSRS personalization)
-- [ ] **P0** Initialize `user_concept_state` rows when user first encounters a concept (e.g., views content containing it)
+- [x] **P0** Write to `review_log` on every review event (for analytics and FSRS personalization)
+- [x] **P0** Initialize `user_concept_state` rows when user first encounters a concept (e.g., views content containing it)
 
 **Acceptance:** User answers quiz correctly → mastery increments, next review date moves forward. Answers incorrectly → mastery decrements, review scheduled sooner. After 3 days of no review, retrievability has decayed.
 
@@ -454,7 +454,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Technical Architecture §6.5
 
-- [ ] **P0** tRPC procedure: `review.getDailyQueue(userId)`:
+- [x] **P0** tRPC procedure: `review.getDailyQueue(userId)`:
   1. Query `user_concept_state` where `retrievability < 0.9` (sorted ascending — most likely to forget first)
   2. Cap at user's daily budget (default 20, from `users.preferences`)
   3. Mix ratio: 80% due reviews + 20% new concepts
@@ -470,14 +470,14 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Design System §9.3
 
-- [ ] **P0** `/review` page — full-screen review session
-- [ ] **P0** Progress bar: `X of Y` with percentage
-- [ ] **P0** Question card: display question text, concept name, difficulty badge
-- [ ] **P0** Answer input: MCQ (radio buttons) or text area (short answer)
-- [ ] **P0** Submit → show correct answer + explanation + source citation
-- [ ] **P0** FSRS rating buttons: Again (1) / Hard (2) / Good (3) / Easy (4) — with predicted next interval shown
-- [ ] **P0** On rating: call `updateState`, advance to next card
-- [ ] **P0** Session complete screen: summary (X correct, Y incorrect, Z new concepts), streak update
+- [x] **P0** `/review` page — full-screen review session
+- [x] **P0** Progress bar: `X of Y` with percentage
+- [x] **P0** Question card: display question text, concept name, difficulty badge
+- [x] **P0** Answer input: MCQ (radio buttons) or text area (short answer)
+- [x] **P0** Submit → show correct answer + explanation + source citation
+- [x] **P0** FSRS rating buttons: Again (1) / Hard (2) / Good (3) / Easy (4) — with predicted next interval shown
+- [x] **P0** On rating: call `updateState`, advance to next card
+- [x] **P0** Session complete screen: summary (X correct, Y incorrect, Z new concepts), streak update
 - [ ] **P1** "Show Hint" button — retrieves a relevant chunk as a hint
 - [ ] **P1** Flashcard flip animation (§8)
 - [ ] **P1** Keyboard shortcuts: 1/2/3/4 for ratings, Enter to submit
@@ -496,9 +496,9 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 
 > **Ref:** Design System §6.5, Technical Architecture §6
 
-- [ ] **P0** `/graph` page — interactive knowledge graph canvas
-- [ ] **P0** Use `react-force-graph-2d` (or D3 force simulation) to render concept nodes + edges
-- [ ] **P0** Node rendering:
+- [x] **P0** `/graph` page — interactive knowledge graph canvas
+- [x] **P0** Use `react-force-graph-2d` (or D3 force simulation) to render concept nodes + edges
+- [x] **P0** Node rendering:
   - Size: scales with number of downstream dependencies
   - Color: mastery level color (§3.2)
   - Label: concept display name
@@ -506,8 +506,8 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
   - `prerequisite`: solid arrow
   - `related_to`: dashed line
   - `part_of`: dotted line with diamond
-- [ ] **P0** Click node → side panel with concept detail (definition, mastery, source chunks, "Study this" action)
-- [ ] **P0** Zoom, pan, and basic interaction controls
+- [x] **P0** Click node → side panel with concept detail (definition, mastery, source chunks, "Study this" action)
+- [x] **P0** Zoom, pan, and basic interaction controls
 - [ ] **P1** Node states: pulsing ring (in-progress), glow (mastered), dashed red border (gap detected)
 - [ ] **P1** Filter by: learning object, domain, mastery range
 - [ ] **P2** Minimap for large graphs
@@ -522,12 +522,12 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
   - Daily review card: actual due count from `getDailyQueue`
   - Streak counter: consecutive days with at least 1 review
   - Concepts by mastery level: bar chart (Unknown/Exposed/Practicing/Familiar/Proficient/Mastered)
-- [ ] **P0** `/stats` page — detailed progress:
+- [x] **P0** `/stats` page — detailed progress:
   - Total concepts learned over time (line chart)
   - Mastery distribution (stacked bar)
   - Review accuracy by concept (table)
   - Study time (derived from `review_log` timestamps)
-- [ ] **P0** Use Recharts for all visualizations
+- [x] **P0** Use Recharts for all visualizations
 - [ ] **P1** Streak flame animation (§8)
 - [ ] **P1** "Knowledge health" metric: % of concepts above 0.9 retrievability
 
@@ -559,7 +559,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [ ] **P0** Loading skeletons: shimmer animation for all data-loading states (§8)
 - [ ] **P0** Mobile responsiveness audit: test all pages at 375px, 768px, 1024px, 1440px
 - [ ] **P0** Accessibility audit: keyboard navigation, focus rings, ARIA labels, screen reader testing
-- [ ] **P1** Rate limiting on all tRPC procedures (Upstash Ratelimit)
+- [~] **P1** Rate limiting on all tRPC procedures (Upstash Ratelimit) — in-memory rate limiting added to `/api/mentor` and `/api/ingest`; migrate to Upstash for distributed rate limiting
 - [ ] **P1** Error tracking: Sentry integration
 - [ ] **P1** Product analytics: PostHog integration (page views, feature usage events)
 - [ ] **P1** LLM observability: Langfuse dashboard configured, all AI calls traced

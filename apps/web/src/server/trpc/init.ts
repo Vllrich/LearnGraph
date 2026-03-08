@@ -9,12 +9,17 @@ export type TRPCContext = {
 };
 
 export const createTRPCContext = cache(async (): Promise<TRPCContext> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  return { db, userId: user?.id ?? null };
+    return { db, userId: user?.id ?? null };
+  } catch (e) {
+    console.error("[tRPC] createContext failed:", e);
+    throw e;
+  }
 });
 
 const t = initTRPC.context<TRPCContext>().create();

@@ -9,25 +9,45 @@ import {
 
 export const maxDuration = 60;
 
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
 const chatSchema = z.object({
   conversationId: z.string().uuid().nullable(),
   learningObjectId: z.string().uuid().nullable(),
   message: z.string().min(1).max(4000),
-  history: z.array(
-    z.object({
-      role: z.enum(["user", "assistant"]),
-      content: z.string(),
-      citations: z
-        .array(
-          z.object({
-            chunkId: z.string(),
-            content: z.string(),
-            pageNumber: z.number().nullable(),
-          }),
-        )
-        .optional(),
-    }),
-  ),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().max(10_000),
+        citations: z
+          .array(
+            z.object({
+              chunkId: z.string(),
+              content: z.string().max(500),
+              pageNumber: z.number().nullable(),
+            }),
+          )
+          .optional(),
+      }),
+    )
+    .max(50),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,9 +60,26 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const parsed = chatSchema.safeParse(await req.json());
+  if (!checkRateLimit(user.id)) {
+    return new Response(
+      JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }),
+      { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "60" } },
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const parsed = chatSchema.safeParse(body);
   if (!parsed.success) {
-    return new Response(JSON.stringify({ error: "Invalid input" }), {
+    return new Response(JSON.stringify({ error: "Invalid input", details: parsed.error.issues }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
