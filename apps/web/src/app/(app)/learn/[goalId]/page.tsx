@@ -16,6 +16,8 @@ import {
   CircleDot,
   BookOpen,
   Minimize2,
+  Target,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -397,9 +399,14 @@ export default function LearnSessionPage() {
           ))}
         </div>
 
+        {goalData.goalType === "exam_prep" && <ExamReadinessPanel goalId={goalId} />}
+
         <div className="mt-8 flex gap-3">
           <Button variant="outline" onClick={() => router.push("/")}>
             Done for today
+          </Button>
+          <Button variant="outline" onClick={() => router.push("/exam")}>
+            Practice Exam
           </Button>
           <Button onClick={() => router.push("/review")}>Review weak spots</Button>
         </div>
@@ -734,6 +741,82 @@ export default function LearnSessionPage() {
         {sessionContent}
       </div>
       {chaptersPanel}
+    </div>
+  );
+}
+
+function ExamReadinessPanel({ goalId }: { goalId: string }) {
+  const { data } = trpc.review.getExamReadiness.useQuery({ goalId });
+  if (!data) return null;
+
+  const color =
+    data.readinessScore >= 80
+      ? "text-green-500"
+      : data.readinessScore >= 50
+        ? "text-amber-500"
+        : "text-red-400";
+
+  return (
+    <div className="mt-8 w-full rounded-xl border border-border/30 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Exam Readiness
+        </h2>
+        {data.daysUntilExam != null && (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Calendar className="size-3" />
+            {data.daysUntilExam} days until exam
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Target className={cn("size-5", color)} />
+          <span className={cn("text-2xl font-bold", color)}>{data.readinessScore}%</span>
+        </div>
+        <div className="flex-1 text-[11px] text-muted-foreground">
+          <p>
+            {data.masteredConcepts} of {data.totalConcepts} concepts at Familiar+ level
+          </p>
+          <p>
+            Curriculum: {data.curriculumProgress.completed}/{data.curriculumProgress.total} topics
+            covered ({data.curriculumProgress.percent}%)
+          </p>
+        </div>
+      </div>
+
+      {/* Syllabus progress bar */}
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground/50 mb-1">
+          <span>Syllabus Coverage</span>
+          <span>{data.curriculumProgress.percent}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted/40">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${data.curriculumProgress.percent}%` }}
+          />
+        </div>
+      </div>
+
+      {data.weakConcepts.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">
+            Weak spots ({data.weakConcepts.length})
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {data.weakConcepts.map((c) => (
+              <span
+                key={c.conceptId}
+                className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] text-red-500"
+              >
+                {c.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

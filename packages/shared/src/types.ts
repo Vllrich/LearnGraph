@@ -65,3 +65,42 @@ export type EdgeType = "prerequisite" | "part_of" | "related_to" | "applied_in" 
 export type BloomLevel = "remember" | "understand" | "apply" | "analyze" | "evaluate" | "create";
 
 export type SubscriptionTier = "free" | "pro" | "team";
+
+export type AchievementKey =
+  | "first_upload"
+  | "first_review"
+  | "streak_7"
+  | "streak_30"
+  | "streak_100"
+  | "concepts_10"
+  | "concepts_50"
+  | "concepts_100"
+  | "mastered_10"
+  | "mastered_50"
+  | "explain_back_first"
+  | "explain_back_10"
+  | "perfect_session"
+  | "quick_5_first"
+  | "weekly_goal_met";
+
+export type AchievementDef = {
+  key: AchievementKey;
+  title: string;
+  description: string;
+  icon: string;
+  xp: number;
+};
+
+export type NotificationPreferences = {
+  emailReminders: boolean;
+  pushNotifications: boolean;
+  reminderTime: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  frequency: "daily" | "every_other_day" | "weekly";
+  smartNudges: boolean;
+};
+
+export type GraphViewMode = "mastery" | "retrievability" | "domain";
+
+export type QueueMode = "standard" | "quick_5" | "interleaved";

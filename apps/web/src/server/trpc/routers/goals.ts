@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, learningGoals, curriculumItems } from "@repo/db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import crypto from "crypto";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../init";
+import { db, learningGoals, curriculumItems, sharedCurriculums } from "@repo/db";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const goalsRouter = createTRPCRouter({
@@ -156,5 +157,81 @@ export const goalsRouter = createTRPCRouter({
 
       await db.delete(learningGoals).where(eq(learningGoals.id, input.id));
       return { success: true };
+    }),
+
+  shareCurriculum: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select()
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [existing] = await db
+        .select()
+        .from(sharedCurriculums)
+        .where(eq(sharedCurriculums.goalId, input.goalId))
+        .limit(1);
+
+      if (existing) return { shareToken: existing.shareToken };
+
+      const items = await db
+        .select({
+          title: curriculumItems.title,
+          description: curriculumItems.description,
+          sequenceOrder: curriculumItems.sequenceOrder,
+          estimatedMinutes: curriculumItems.estimatedMinutes,
+          learningMethod: curriculumItems.learningMethod,
+        })
+        .from(curriculumItems)
+        .where(eq(curriculumItems.goalId, input.goalId))
+        .orderBy(asc(curriculumItems.sequenceOrder));
+
+      const token = crypto.randomBytes(16).toString("hex");
+
+      await db.insert(sharedCurriculums).values({
+        goalId: input.goalId,
+        shareToken: token,
+        title: goal.title,
+        description: goal.description,
+        items: items,
+        createdByUserId: ctx.userId,
+      });
+
+      return { shareToken: token };
+    }),
+
+  getSharedCurriculum: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const [shared] = await db
+        .select()
+        .from(sharedCurriculums)
+        .where(eq(sharedCurriculums.shareToken, input.token))
+        .limit(1);
+
+      if (!shared) throw new TRPCError({ code: "NOT_FOUND" });
+
+      await db
+        .update(sharedCurriculums)
+        .set({ viewCount: sql`COALESCE(${sharedCurriculums.viewCount}, 0) + 1` })
+        .where(eq(sharedCurriculums.id, shared.id));
+
+      return {
+        title: shared.title,
+        description: shared.description,
+        items: shared.items as Array<{
+          title: string;
+          description: string | null;
+          sequenceOrder: number;
+          estimatedMinutes: number | null;
+          learningMethod: string | null;
+        }>,
+        viewCount: (shared.viewCount ?? 0) + 1,
+        createdAt: shared.createdAt,
+      };
     }),
 });

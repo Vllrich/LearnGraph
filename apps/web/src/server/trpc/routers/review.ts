@@ -17,7 +17,13 @@ import {
 import { eq, and, lte, sql, asc, desc, count, inArray, gte } from "drizzle-orm";
 import { schedule, newCard, type Card } from "@repo/fsrs";
 import type { FSRSRating } from "@repo/shared";
-import { DEFAULT_DAILY_REVIEW_LIMIT, DEFAULT_REVIEW_MIX_RATIO, computeMastery } from "@repo/shared";
+import {
+  DEFAULT_DAILY_REVIEW_LIMIT,
+  DEFAULT_REVIEW_MIX_RATIO,
+  QUICK_5_LIMIT,
+  computeMastery,
+  computeMasteryExplainBack,
+} from "@repo/shared";
 
 function dbStateToCard(state: typeof userConceptState.$inferSelect): Card {
   return {
@@ -102,14 +108,22 @@ export const reviewRouter = createTRPCRouter({
    * + 20% new concepts (never reviewed, sorted by creation date).
    */
   getDailyQueue: protectedProcedure
-    .input(z.object({ limit: z.number().min(1).max(50).optional() }).optional())
+    .input(
+      z
+        .object({
+          limit: z.number().min(1).max(50).optional(),
+          mode: z.enum(["standard", "quick_5", "interleaved"]).optional(),
+        })
+        .optional()
+    )
     .query(async ({ ctx, input }) => {
-      const budget = input?.limit ?? DEFAULT_DAILY_REVIEW_LIMIT;
+      const mode = input?.mode ?? "standard";
+      const budget =
+        mode === "quick_5" ? QUICK_5_LIMIT : (input?.limit ?? DEFAULT_DAILY_REVIEW_LIMIT);
       const reviewSlots = Math.ceil(budget * DEFAULT_REVIEW_MIX_RATIO.review);
       const newSlots = budget - reviewSlots;
       const now = new Date();
 
-      // Due reviews: concepts with a past nextReviewAt, sorted by lowest retrievability
       const dueItems = await db
         .select({
           id: userConceptState.id,
@@ -120,6 +134,7 @@ export const reviewRouter = createTRPCRouter({
           conceptName: concepts.displayName,
           conceptDefinition: concepts.definition,
           conceptDifficulty: concepts.difficultyLevel,
+          domain: concepts.domain,
         })
         .from(userConceptState)
         .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
@@ -133,7 +148,6 @@ export const reviewRouter = createTRPCRouter({
         .orderBy(asc(userConceptState.fsrsRetrievability))
         .limit(reviewSlots);
 
-      // New concepts: never reviewed (reps=0), enrolled via initConceptStates
       const newItems = await db
         .select({
           id: userConceptState.id,
@@ -144,6 +158,7 @@ export const reviewRouter = createTRPCRouter({
           conceptName: concepts.displayName,
           conceptDefinition: concepts.definition,
           conceptDifficulty: concepts.difficultyLevel,
+          domain: concepts.domain,
         })
         .from(userConceptState)
         .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
@@ -151,12 +166,45 @@ export const reviewRouter = createTRPCRouter({
         .orderBy(asc(userConceptState.createdAt))
         .limit(newSlots);
 
-      const allItems = [...dueItems, ...newItems];
+      let allItems = [...dueItems, ...newItems];
+
+      // Smart queue: interleave domains so consecutive items differ
+      if (mode === "interleaved" && allItems.length > 2) {
+        const byDomain = new Map<string, typeof allItems>();
+        for (const item of allItems) {
+          const domain = item.domain ?? "__none__";
+          const list = byDomain.get(domain) ?? [];
+          list.push(item);
+          byDomain.set(domain, list);
+        }
+        const interleaved: typeof allItems = [];
+        const domainQueues = Array.from(byDomain.values());
+        let idx = 0;
+        while (interleaved.length < allItems.length) {
+          const queue = domainQueues[idx % domainQueues.length];
+          if (queue.length > 0) interleaved.push(queue.shift()!);
+          idx++;
+          if (domainQueues.every((q) => q.length === 0)) break;
+        }
+        allItems = interleaved;
+      }
+
+      // Difficulty ramping: easy → hard → easy (warm-up → peak → cool-down)
+      if (allItems.length >= 5 && mode !== "quick_5") {
+        const sorted = [...allItems].sort(
+          (a, b) => (a.conceptDifficulty ?? 3) - (b.conceptDifficulty ?? 3)
+        );
+        const third = Math.ceil(sorted.length / 3);
+        const easy = sorted.slice(0, third);
+        const hard = sorted.slice(third, third * 2);
+        const mid = sorted.slice(third * 2);
+        allItems = [...easy, ...hard, ...mid];
+      }
+
       const conceptIds = allItems.map((d) => d.conceptId);
 
       let questionsForReview: (typeof questions.$inferSelect)[] = [];
       if (conceptIds.length > 0) {
-        // Build a map of concept → mastery to pick difficulty-appropriate questions
         const masteryMap = new Map<string, number>();
         for (const item of allItems) {
           masteryMap.set(item.conceptId, item.masteryLevel ?? 0);
@@ -173,8 +221,6 @@ export const reviewRouter = createTRPCRouter({
           )
           .limit(budget * 5);
 
-        // Difficulty adaptation: prefer questions matching mastery bracket
-        // >80% accuracy → increase difficulty, <60% → decrease
         questionsForReview = allQuestions
           .map((q) => {
             const conceptId = q.conceptIds?.[0];
@@ -189,11 +235,18 @@ export const reviewRouter = createTRPCRouter({
           .map(({ _sortScore: _, ...q }) => q);
       }
 
+      // Flag high-mastery concepts eligible for explain-back
+      const explainBackEligible = allItems
+        .filter((item) => (item.masteryLevel ?? 0) >= 3)
+        .map((item) => item.conceptId);
+
       return {
         items: allItems,
         questions: questionsForReview,
         totalDue: dueItems.length,
         totalNew: newItems.length,
+        mode,
+        explainBackEligible,
       };
     }),
 
@@ -263,6 +316,87 @@ export const reviewRouter = createTRPCRouter({
         newMastery,
         nextReview: result.nextReview,
         retrievability: result.retrievability,
+      };
+    }),
+
+  submitExplainBack: protectedProcedure
+    .input(
+      z.object({
+        conceptId: z.string().uuid(),
+        explanation: z.string().min(10).max(5000),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [state] = await db
+        .select()
+        .from(userConceptState)
+        .where(
+          and(
+            eq(userConceptState.userId, ctx.userId),
+            eq(userConceptState.conceptId, input.conceptId)
+          )
+        )
+        .limit(1);
+
+      const [concept] = await db
+        .select({ name: concepts.displayName, definition: concepts.definition })
+        .from(concepts)
+        .where(eq(concepts.id, input.conceptId))
+        .limit(1);
+
+      if (!concept) return { success: false, feedback: "Concept not found." };
+
+      const { generateObject } = await import("ai");
+      const { anthropic } = await import("@ai-sdk/anthropic");
+
+      const result = await generateObject({
+        model: anthropic("claude-sonnet-4-5-20250514"),
+        schema: z.object({
+          accuracy: z.number().min(0).max(100),
+          completeness: z.number().min(0).max(100),
+          clarity: z.number().min(0).max(100),
+          overallScore: z.number().min(0).max(100),
+          strengths: z.array(z.string()),
+          improvements: z.array(z.string()),
+          misconceptions: z.array(z.string()),
+          feedback: z.string(),
+        }),
+        prompt: `Evaluate this student's explanation of the concept "${concept.name}".
+
+Reference definition: ${concept.definition ?? "No definition available."}
+
+Student's explanation:
+${input.explanation}
+
+Score on accuracy (factual correctness), completeness (covers key aspects), and clarity (understandable to a beginner). Provide specific strengths, areas for improvement, and any misconceptions detected. Give constructive, encouraging feedback.`,
+      });
+
+      const isSuccess = result.object.overallScore >= 60;
+      const newMastery = computeMasteryExplainBack(state?.masteryLevel ?? 0, isSuccess);
+
+      if (state) {
+        const card = dbStateToCard(state);
+        const fsrsResult = schedule(card, isSuccess ? 4 : 2);
+        await db
+          .update(userConceptState)
+          .set({
+            masteryLevel: newMastery,
+            ...cardToDbFields(fsrsResult.card, fsrsResult.nextReview, fsrsResult.retrievability),
+          })
+          .where(eq(userConceptState.id, state.id));
+      }
+
+      await db.insert(reviewLog).values({
+        userId: ctx.userId,
+        conceptId: input.conceptId,
+        rating: isSuccess ? 4 : 2,
+        reviewType: "explain_back",
+      });
+
+      return {
+        success: isSuccess,
+        evaluation: result.object,
+        newMastery,
       };
     }),
 

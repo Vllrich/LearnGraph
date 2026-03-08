@@ -14,9 +14,15 @@ import {
   Lightbulb,
   ThumbsUp,
   ThumbsDown,
+  Timer,
+  Shuffle,
+  MessageSquare,
+  Send,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import type { QueueMode } from "@repo/shared";
 
 type ReviewQuestion = {
   id: string;
@@ -29,10 +35,21 @@ type ReviewQuestion = {
   conceptIds: string[] | null;
 };
 
+const MODE_OPTIONS: { id: QueueMode; label: string; icon: typeof Zap; desc: string }[] = [
+  { id: "standard", label: "Standard", icon: Zap, desc: "Full daily queue" },
+  { id: "quick_5", label: "Quick 5", icon: Timer, desc: "5-card micro session" },
+  { id: "interleaved", label: "Interleaved", icon: Shuffle, desc: "Mixed domains" },
+];
+
 export default function ReviewPage() {
-  const { data, isLoading } = trpc.review.getDailyQueue.useQuery();
+  const [mode, setMode] = useState<QueueMode>("standard");
+  const [modeChosen, setModeChosen] = useState(false);
+
+  const { data, isLoading } = trpc.review.getDailyQueue.useQuery({ mode }, { enabled: modeChosen });
   const submitMutation = trpc.review.submitReview.useMutation();
+  const explainBackMutation = trpc.review.submitExplainBack.useMutation();
   const rateMutation = trpc.library.rateQuestion.useMutation();
+  const activityMutation = trpc.gamification.recordActivity.useMutation();
   const utils = trpc.useUtils();
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -46,6 +63,24 @@ export default function ReviewPage() {
   const [sessionComplete, setSessionComplete] = useState(false);
   const startTimeRef = useRef(0);
 
+  // Explain-back state
+  const [explainBackMode, setExplainBackMode] = useState(false);
+  const [explainBackText, setExplainBackText] = useState("");
+  const [explainBackResult, setExplainBackResult] = useState<{
+    success: boolean;
+    evaluation: {
+      accuracy: number;
+      completeness: number;
+      clarity: number;
+      overallScore: number;
+      strengths: string[];
+      improvements: string[];
+      misconceptions: string[];
+      feedback: string;
+    };
+    newMastery: number;
+  } | null>(null);
+
   useEffect(() => {
     startTimeRef.current = Date.now();
   }, [currentIndex]);
@@ -55,10 +90,30 @@ export default function ReviewPage() {
   const totalQuestions = allQuestions.length;
   const progress = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0;
 
+  const isExplainBackEligible =
+    currentQuestion && data?.explainBackEligible?.includes(currentQuestion.conceptIds?.[0] ?? "");
+
   const handleSubmit = useCallback(() => {
     if (!currentQuestion || !selectedAnswer) return;
     setShowResult(true);
   }, [currentQuestion, selectedAnswer]);
+
+  const advanceToNext = useCallback(() => {
+    if (currentIndex + 1 >= totalQuestions) {
+      setSessionComplete(true);
+      utils.review.getDailyQueue.invalidate();
+      utils.review.getStats.invalidate();
+      utils.gamification.getStreakAndXp.invalidate();
+    } else {
+      setCurrentIndex((i) => i + 1);
+      setSelectedAnswer(null);
+      setShowResult(false);
+      setShowHint(false);
+      setExplainBackMode(false);
+      setExplainBackText("");
+      setExplainBackResult(null);
+    }
+  }, [currentIndex, totalQuestions, utils]);
 
   const handleRate = useCallback(
     async (rating: 1 | 2 | 3 | 4) => {
@@ -77,36 +132,42 @@ export default function ReviewPage() {
         responseTimeMs: Date.now() - startTimeRef.current,
       });
 
+      activityMutation.mutate({ type: "review" });
+
       setSessionResults((prev) => ({
         correct: prev.correct + (isCorrect ? 1 : 0),
         total: prev.total + 1,
       }));
 
-      if (currentIndex + 1 >= totalQuestions) {
-        setSessionComplete(true);
-        utils.review.getDailyQueue.invalidate();
-        utils.review.getStats.invalidate();
-      } else {
-        setCurrentIndex((i) => i + 1);
-        setSelectedAnswer(null);
-        setShowResult(false);
-        setShowHint(false);
-      }
+      advanceToNext();
     },
-    [
-      currentQuestion,
-      selectedAnswer,
-      currentIndex,
-      totalQuestions,
-      submitMutation,
-      startTimeRef,
-      utils,
-    ]
+    [currentQuestion, selectedAnswer, submitMutation, activityMutation, advanceToNext]
   );
+
+  const handleExplainBackSubmit = useCallback(async () => {
+    const conceptId = currentQuestion?.conceptIds?.[0];
+    if (!conceptId || !explainBackText.trim()) return;
+
+    const result = await explainBackMutation.mutateAsync({
+      conceptId,
+      explanation: explainBackText,
+    });
+
+    if (result.success !== undefined) {
+      setExplainBackResult(result as typeof explainBackResult);
+      activityMutation.mutate({
+        type: result.success ? "explain_back_success" : "explain_back_attempt",
+      });
+      setSessionResults((prev) => ({
+        correct: prev.correct + (result.success ? 1 : 0),
+        total: prev.total + 1,
+      }));
+    }
+  }, [currentQuestion, explainBackText, explainBackMutation, activityMutation]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (sessionComplete) return;
+      if (sessionComplete || explainBackMode) return;
       if (e.key === "Enter" && !showResult && selectedAnswer) {
         e.preventDefault();
         handleSubmit();
@@ -118,13 +179,57 @@ export default function ReviewPage() {
           handleRate(rating);
         }
       }
-      if (e.key === "h" && !showResult) {
-        setShowHint(true);
-      }
+      if (e.key === "h" && !showResult) setShowHint(true);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
+
+  // Mode selection screen
+  if (!modeChosen) {
+    return (
+      <div className="flex h-screen flex-col bg-background">
+        <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border/30 px-4">
+          <Link
+            href="/"
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-4" />
+          </Link>
+          <span className="text-[13px] font-medium">Review</span>
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+          <h1 className="text-lg font-medium mb-1">Choose your session</h1>
+          <p className="text-[13px] text-muted-foreground/60 mb-6">
+            Pick a review mode that fits your schedule
+          </p>
+          <div className="grid gap-3 w-full max-w-sm">
+            {MODE_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    setMode(opt.id);
+                    setModeChosen(true);
+                  }}
+                  className="flex items-center gap-3 rounded-xl border border-border/30 p-4 text-left transition-all hover:border-primary/30 hover:bg-primary/5"
+                >
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-muted/40">
+                    <Icon className="size-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium">{opt.label}</p>
+                    <p className="text-[11px] text-muted-foreground/50">{opt.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -163,6 +268,9 @@ export default function ReviewPage() {
           <Trophy className="size-6 text-amber-500" />
         </div>
         <h1 className="text-lg font-medium">Session complete!</h1>
+        {mode === "quick_5" && (
+          <p className="text-[12px] text-muted-foreground/50 mt-1">Quick 5 — done in a flash</p>
+        )}
         <div className="mt-4 flex gap-6">
           <div>
             <p className="text-2xl font-bold">{sessionResults.correct}</p>
@@ -177,12 +285,184 @@ export default function ReviewPage() {
             <p className="text-[11px] text-muted-foreground">Accuracy</p>
           </div>
         </div>
-        <Link
-          href="/"
-          className="mt-6 flex items-center gap-1 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background"
-        >
-          Done <ChevronRight className="size-3.5" />
-        </Link>
+        <div className="mt-6 flex gap-2">
+          <button
+            onClick={() => {
+              setModeChosen(false);
+              setSessionComplete(false);
+              setCurrentIndex(0);
+              setSessionResults({ correct: 0, total: 0 });
+            }}
+            className="rounded-lg border border-border/30 px-4 py-2 text-[13px] font-medium hover:bg-muted/20"
+          >
+            Another session
+          </button>
+          <Link
+            href="/"
+            className="flex items-center gap-1 rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background"
+          >
+            Done <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Explain-back mode
+  if (explainBackMode) {
+    const conceptName = currentQuestion?.conceptIds?.[0]
+      ? data.items.find((i) => i.conceptId === currentQuestion.conceptIds![0])?.conceptName
+      : "this concept";
+
+    return (
+      <div className="flex h-screen flex-col bg-background">
+        <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border/30 px-4">
+          <button
+            onClick={() => {
+              setExplainBackMode(false);
+              setExplainBackResult(null);
+              setExplainBackText("");
+            }}
+            className="text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-3.5 text-violet-500" />
+            <span className="text-[13px] font-medium">Explain Back</span>
+          </div>
+        </header>
+
+        <div className="flex flex-1 flex-col items-center justify-center px-6">
+          <div className="w-full max-w-lg">
+            {!explainBackResult ? (
+              <>
+                <div className="mb-4 flex items-center gap-2">
+                  <Sparkles className="size-4 text-violet-500" />
+                  <span className="text-[12px] text-muted-foreground/50">
+                    Teach it to learn it — explain as if to a beginner
+                  </span>
+                </div>
+                <h2 className="text-[16px] font-medium leading-relaxed mb-4">
+                  Explain <span className="text-primary">{conceptName}</span> in your own words
+                </h2>
+                <textarea
+                  value={explainBackText}
+                  onChange={(e) => setExplainBackText(e.target.value)}
+                  placeholder="Type your explanation here... What is this concept? How does it work? Why does it matter?"
+                  rows={6}
+                  className="w-full rounded-xl border border-border/30 bg-transparent px-4 py-3 text-[13px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none resize-none"
+                />
+                <div className="mt-3 flex justify-between items-center">
+                  <span className="text-[11px] text-muted-foreground/40">
+                    {explainBackText.length} characters · minimum 10
+                  </span>
+                  <button
+                    onClick={handleExplainBackSubmit}
+                    disabled={explainBackText.length < 10 || explainBackMutation.isPending}
+                    className="flex items-center gap-1.5 rounded-xl bg-foreground px-4 py-2.5 text-[13px] font-medium text-background disabled:opacity-30 transition-opacity"
+                  >
+                    {explainBackMutation.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Send className="size-3.5" />
+                    )}
+                    Submit
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className={cn(
+                    "mb-4 rounded-xl border p-4",
+                    explainBackResult.success
+                      ? "border-green-500/30 bg-green-500/5"
+                      : "border-amber-500/30 bg-amber-500/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {explainBackResult.success ? (
+                      <Check className="size-4 text-green-500" />
+                    ) : (
+                      <Lightbulb className="size-4 text-amber-500" />
+                    )}
+                    <span className="text-[13px] font-medium">
+                      {explainBackResult.success
+                        ? "Great explanation!"
+                        : "Good attempt — keep learning!"}
+                    </span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed text-muted-foreground/70">
+                    {explainBackResult.evaluation.feedback}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {[
+                    { label: "Accuracy", value: explainBackResult.evaluation.accuracy },
+                    { label: "Completeness", value: explainBackResult.evaluation.completeness },
+                    { label: "Clarity", value: explainBackResult.evaluation.clarity },
+                  ].map(({ label, value }) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border border-border/30 p-2.5 text-center"
+                    >
+                      <p className="text-lg font-bold">{value}%</p>
+                      <p className="text-[10px] text-muted-foreground/50">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {explainBackResult.evaluation.strengths.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-[11px] font-medium text-green-600 dark:text-green-400 mb-1">
+                      Strengths
+                    </p>
+                    {explainBackResult.evaluation.strengths.map((s, i) => (
+                      <p key={i} className="text-[12px] text-muted-foreground/60">
+                        • {s}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {explainBackResult.evaluation.improvements.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">
+                      Areas to improve
+                    </p>
+                    {explainBackResult.evaluation.improvements.map((s, i) => (
+                      <p key={i} className="text-[12px] text-muted-foreground/60">
+                        • {s}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {explainBackResult.evaluation.misconceptions.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mb-1">
+                      Misconceptions
+                    </p>
+                    {explainBackResult.evaluation.misconceptions.map((s, i) => (
+                      <p key={i} className="text-[12px] text-muted-foreground/60">
+                        • {s}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={advanceToNext}
+                  className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background"
+                >
+                  Continue
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -213,6 +493,16 @@ export default function ReviewPage() {
             </div>
           </div>
         </div>
+        {mode === "quick_5" && (
+          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-500">
+            Quick 5
+          </span>
+        )}
+        {mode === "interleaved" && (
+          <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-500">
+            Interleaved
+          </span>
+        )}
         <Zap className="size-4 text-muted-foreground/30" />
       </header>
 
@@ -316,7 +606,6 @@ export default function ReviewPage() {
             </div>
           ) : (
             <div className="mt-5 space-y-4">
-              {/* Explanation */}
               {currentQuestion?.explanation && (
                 <div className="rounded-xl bg-muted/20 px-4 py-3">
                   <p className="text-[12px] leading-relaxed text-muted-foreground/70">
@@ -325,8 +614,6 @@ export default function ReviewPage() {
                 </div>
               )}
 
-              {/* FSRS rating buttons */}
-              {/* Question feedback */}
               {currentQuestion && (
                 <div className="flex items-center justify-center gap-3">
                   <span className="text-[10px] text-muted-foreground/30">Rate this question:</span>
@@ -349,6 +636,17 @@ export default function ReviewPage() {
                     <ThumbsDown className="size-3" />
                   </button>
                 </div>
+              )}
+
+              {/* Explain-back CTA for high-mastery concepts */}
+              {isExplainBackEligible && (
+                <button
+                  onClick={() => setExplainBackMode(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/5 py-2.5 text-[12px] font-medium text-violet-600 dark:text-violet-400 transition-all hover:bg-violet-500/10"
+                >
+                  <MessageSquare className="size-3.5" />
+                  Explain this concept for a mastery boost
+                </button>
               )}
 
               <p className="text-center text-[11px] text-muted-foreground/40">

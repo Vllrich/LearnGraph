@@ -11,6 +11,10 @@ import {
   BarChart3,
   Globe,
   GraduationCap,
+  AlertTriangle,
+  Trophy,
+  BookMarked,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
@@ -37,8 +41,15 @@ const NAV_CATEGORIES = [
     label: "Insights",
     items: [
       { href: "/graph", label: "Graph", icon: Globe },
+      { href: "/gaps", label: "Gaps", icon: AlertTriangle },
       { href: "/stats", label: "Progress", icon: BarChart3 },
+      { href: "/journal", label: "Journal", icon: BookMarked },
+      { href: "/achievements", label: "Badges", icon: Trophy },
     ],
+  },
+  {
+    label: "Settings",
+    items: [{ href: "/settings", label: "Settings", icon: Settings }],
   },
 ] as const;
 
