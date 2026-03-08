@@ -60,7 +60,7 @@ export default function PracticeExamPage() {
   const [timeLimit, setTimeLimit] = useState(30);
   const [selectedLOs, setSelectedLOs] = useState<string[]>([]);
 
-  const { data: libraryData } = trpc.library.list.useQuery(
+  const { data: libraryData, isLoading: libraryLoading } = trpc.library.list.useQuery(
     { limit: 100, offset: 0 },
     { enabled: !started }
   );
@@ -224,7 +224,11 @@ export default function PracticeExamPage() {
               Select specific materials or leave empty to use all.
             </p>
             <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border/30 p-2">
-              {readyMaterials.length === 0 ? (
+              {libraryLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="size-4 animate-spin text-muted-foreground/40" />
+                </div>
+              ) : readyMaterials.length === 0 ? (
                 <p className="px-2 py-4 text-center text-[12px] text-muted-foreground/40">
                   No materials available yet. Upload content first.
                 </p>
@@ -302,7 +306,7 @@ export default function PracticeExamPage() {
 
           <button
             onClick={() => setStarted(true)}
-            disabled={readyMaterials.length === 0}
+            disabled={!libraryLoading && readyMaterials.length === 0}
             className="mt-8 w-full rounded-xl bg-foreground py-3 text-[14px] font-medium text-background transition-opacity hover:opacity-80 disabled:opacity-30"
           >
             Start Exam
