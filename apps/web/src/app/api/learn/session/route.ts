@@ -9,8 +9,14 @@ import {
   evaluateExplainBack,
   type SessionContext,
 } from "@repo/ai";
+import { db, learningGoals } from "@repo/db";
+import { eq, and } from "drizzle-orm";
 
 export const maxDuration = 60;
+
+const sessionRateMap = new Map<string, { count: number; resetAt: number }>();
+const SESSION_RATE_WINDOW_MS = 60_000;
+const SESSION_RATE_MAX = 30;
 
 const sessionSchema = z.object({
   action: z.enum(["teach", "check", "answer", "explain_back_prompt", "explain_back_answer"]),
@@ -44,6 +50,16 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  const now = Date.now();
+  const rlEntry = sessionRateMap.get(user.id);
+  if (!rlEntry || now > rlEntry.resetAt) {
+    sessionRateMap.set(user.id, { count: 1, resetAt: now + SESSION_RATE_WINDOW_MS });
+  } else if (rlEntry.count >= SESSION_RATE_MAX) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "60" } });
+  } else {
+    rlEntry.count++;
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -58,8 +74,19 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { action, userAnswer, question, ...rest } = parsed.data;
+  const { action, goalId, userAnswer, question, ...rest } = parsed.data;
+
+  const [goal] = await db
+    .select({ id: learningGoals.id })
+    .from(learningGoals)
+    .where(and(eq(learningGoals.id, goalId), eq(learningGoals.userId, user.id)))
+    .limit(1);
+  if (!goal) {
+    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+  }
+
   const ctx: SessionContext = {
+    goalId,
     ...rest,
     sessionHistory: [],
   };

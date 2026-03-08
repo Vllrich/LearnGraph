@@ -295,6 +295,26 @@ export default function LearnSessionPage() {
     }
   };
 
+  const jumpToChapter = useCallback(
+    (index: number) => {
+      if (index === conceptIndex || streaming) return;
+      setConceptIndex(index);
+      setPreviousConcepts(items.slice(0, index).map((item) => item.title));
+      setPhase("teach");
+      setTeachContent("");
+      setFeedbackContent("");
+      setCurrentQuestion(null);
+      setSelectedAnswer("");
+      setExplainBackInput("");
+      setExplainBackScore(null);
+      setExplainBackPromptText("");
+      setCheckFailed(false);
+      setChaptersOpen(false);
+      setTimeout(() => startTeaching(), 100);
+    },
+    [conceptIndex, streaming, items, startTeaching]
+  );
+
   const advanceToNext = () => {
     const nextIndex = conceptIndex + 1;
     setPreviousConcepts((prev) => [...prev, currentItem?.title ?? ""]);
@@ -610,12 +630,15 @@ export default function LearnSessionPage() {
             const isLocked = i > conceptIndex && item.status !== "completed";
 
             return (
-              <div
+              <button
                 key={item.id}
+                onClick={() => jumpToChapter(i)}
+                disabled={isCurrent || streaming}
                 className={cn(
-                  "flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors",
+                  "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
                   isCurrent && "bg-primary/5",
-                  isCompleted && "opacity-70"
+                  isCompleted && "opacity-70",
+                  !isCurrent && !streaming && "cursor-pointer hover:bg-muted/40"
                 )}
               >
                 <div className="mt-0.5 shrink-0">
@@ -631,7 +654,7 @@ export default function LearnSessionPage() {
                   <p
                     className={cn(
                       "text-[13px] font-medium leading-tight",
-                      isLocked && "text-muted-foreground/50",
+                      !isCurrent && !isCompleted && "text-muted-foreground/70",
                       isCurrent && "text-primary"
                     )}
                   >
@@ -648,7 +671,7 @@ export default function LearnSessionPage() {
                     {item.estimatedMinutes}m
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>

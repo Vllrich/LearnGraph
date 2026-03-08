@@ -8,6 +8,10 @@ import type { GoalType } from "@repo/shared";
 
 export const maxDuration = 60;
 
+const startRateMap = new Map<string, { count: number; resetAt: number }>();
+const START_RATE_WINDOW_MS = 60_000;
+const START_RATE_MAX = 5;
+
 const methodPreferencesSchema = z.object({
   guidedLessons: z.number().min(0).max(100),
   practiceTesting: z.number().min(0).max(100),
@@ -49,7 +53,8 @@ async function fetchCoverImageB64(topic: string, goalType: GoalType): Promise<st
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const prompt = `Stunning minimalist course cover art for "${topic}". Style: ${COVER_STYLE[goalType]}. Abstract geometric illustration, vibrant complementary colors, no text, no letters, no numbers, clean modern design, digital course thumbnail, wide landscape format.`;
+  const sanitizedTopic = topic.replace(/[^\w\s,.-]/g, "").slice(0, 100);
+  const prompt = `Stunning minimalist course cover art for "${sanitizedTopic}". Style: ${COVER_STYLE[goalType]}. Abstract geometric illustration, vibrant complementary colors, no text, no letters, no numbers, clean modern design, digital course thumbnail, wide landscape format.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -104,6 +109,16 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const now = Date.now();
+  const rlEntry = startRateMap.get(user.id);
+  if (!rlEntry || now > rlEntry.resetAt) {
+    startRateMap.set(user.id, { count: 1, resetAt: now + START_RATE_WINDOW_MS });
+  } else if (rlEntry.count >= START_RATE_MAX) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+  } else {
+    rlEntry.count++;
   }
 
   let body: unknown;

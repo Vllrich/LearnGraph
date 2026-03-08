@@ -46,7 +46,10 @@ import ReactMarkdown from "react-markdown";
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type ContentData = NonNullable<RouterOutput["library"]["getById"]>;
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string; conv?: string }>;
+};
 
 const PANEL_TABS = [
   { id: "Chat" as const, icon: MessageSquare, label: "Chat" },
@@ -60,13 +63,42 @@ type PanelTab = (typeof PANEL_TABS)[number]["id"];
 type SelectionActionType = "explain" | "chat" | "quiz" | "flashcard" | "copy" | "read";
 type MentorChatHandlers = ReturnType<typeof useMentorChat>;
 
-export default function ContentDetailPage({ params }: Props) {
+export default function ContentDetailPage({ params, searchParams }: Props) {
   const { id } = use(params);
+  const sp = use(searchParams);
+  const initialTab = PANEL_TABS.find((t) => t.id.toLowerCase() === sp.tab?.toLowerCase())?.id;
   const [panelOpen, setPanelOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<PanelTab>("Chat");
+  const [activeTab, setActiveTab] = useState<PanelTab>(initialTab ?? "Chat");
   const [searchOpen, setSearchOpen] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const mentorChat = useMentorChat(id);
+  const convAutoLoaded = useRef(false);
+
+  useEffect(() => {
+    if (convAutoLoaded.current || !sp.conv) return;
+    convAutoLoaded.current = true;
+    setPanelOpen(true);
+    setActiveTab("Chat");
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/trpc/mentor.getConversation?input=${encodeURIComponent(JSON.stringify({ id: sp.conv }))}`
+        );
+        const json = await res.json();
+        const conv = json?.result?.data;
+        if (conv?.messages) {
+          mentorChat.loadConversation(
+            conv.messages.map((m: { role: string; content: string; citations?: unknown[] }) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              citations: m.citations,
+            })),
+            sp.conv!
+          );
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [sp.conv]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectionAction = useCallback(
     (action: SelectionActionType, text: string) => {

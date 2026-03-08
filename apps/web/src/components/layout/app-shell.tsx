@@ -5,6 +5,7 @@ import { UserProvider } from "@/hooks/use-user";
 import { Sidebar } from "./sidebar";
 import { MobileTabBar } from "./mobile-tab-bar";
 import { Topbar } from "./topbar";
+import { FloatingMentor } from "@/components/mentor/floating-mentor";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -25,6 +26,7 @@ export function AppShell({ children, user }: AppShellProps) {
         </main>
 
         <MobileTabBar />
+        <FloatingMentor />
       </TooltipProvider>
     </UserProvider>
   );

@@ -6,6 +6,8 @@ import {
   saveConversation,
   type MentorMessage,
 } from "@repo/ai";
+import { db, learningObjects } from "@repo/db";
+import { eq, and } from "drizzle-orm";
 
 export const maxDuration = 60;
 
@@ -86,6 +88,17 @@ export async function POST(req: NextRequest) {
   }
 
   const { conversationId, learningObjectId, message, history } = parsed.data;
+
+  if (learningObjectId) {
+    const [lo] = await db
+      .select({ id: learningObjects.id })
+      .from(learningObjects)
+      .where(and(eq(learningObjects.id, learningObjectId), eq(learningObjects.userId, user.id)))
+      .limit(1);
+    if (!lo) {
+      return new Response(JSON.stringify({ error: "Not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+    }
+  }
 
   const { result, chunks } = await streamMentorResponse({
     conversationId,
