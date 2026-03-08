@@ -61,6 +61,14 @@ export default function JournalPage() {
             </button>
           </div>
 
+          <div className="rounded-xl border border-border/30 bg-muted/30 px-6 py-6 text-center mb-4">
+            <BookOpen className="mx-auto mb-3 size-8 text-muted-foreground/40" />
+            <p className="text-[13px] font-medium mb-1">Your weekly learning journal</p>
+            <p className="text-[12px] text-muted-foreground/60 leading-relaxed max-w-xs mx-auto">
+              Each week, your journal automatically tracks reviews completed, concepts mastered or struggled with, and your overall accuracy — so you can see your progress at a glance.
+            </p>
+          </div>
+
           {isLoading && (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -154,12 +162,7 @@ export default function JournalPage() {
               </div>
 
               {data.reviewsCompleted === 0 && (
-                <div className="mt-6 rounded-xl border border-border/30 bg-muted/30 px-6 py-8 text-center">
-                  <BookOpen className="mx-auto mb-3 size-8 text-muted-foreground/40" />
-                  <p className="text-[13px] font-medium mb-1">Your weekly learning journal</p>
-                  <p className="text-[12px] text-muted-foreground/60 leading-relaxed max-w-xs mx-auto mb-5">
-                    Each week, your journal automatically tracks reviews completed, concepts mastered or struggled with, and your overall accuracy — so you can see your progress at a glance.
-                  </p>
+                <div className="mt-4 text-center">
                   <Link
                     href="/review"
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground"
