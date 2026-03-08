@@ -1,14 +1,8 @@
 import { streamText, tool } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "../models";
+import { primaryModel } from "../models";
 import { retrieveChunks } from "../rag";
-import {
-  db,
-  mentorConversations,
-  userConceptState,
-  concepts,
-  questions,
-} from "@repo/db";
+import { db, mentorConversations, userConceptState, concepts, questions } from "@repo/db";
 import { eq, and, sql } from "drizzle-orm";
 import { MASTERY_LABELS } from "@repo/shared";
 import type { MasteryLevel } from "@repo/shared";
@@ -61,7 +55,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
     ? chunks
         .map(
           (c, i) =>
-            `[Chunk ${i + 1}${c.pageNumber ? `, p.${c.pageNumber}` : ""}, score=${c.score.toFixed(3)}]\n${c.content}`,
+            `[Chunk ${i + 1}${c.pageNumber ? `, p.${c.pageNumber}` : ""}, score=${c.score.toFixed(3)}]\n${c.content}`
         )
         .join("\n\n---\n\n")
     : "No sufficiently relevant content found. Tell the user you don't have enough information in their materials to answer this.";
@@ -75,7 +69,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
   ];
 
   const result = streamText({
-    model: anthropicModel,
+    model: primaryModel,
     system: `${SYSTEM_PROMPT}\n\n--- RETRIEVED CONTEXT ---\n${contextBlock}\n--- END CONTEXT ---`,
     messages,
     tools: {
@@ -108,7 +102,11 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
             .where(sql`LOWER(${concepts.canonicalName}) = LOWER(${conceptName.trim()})`)
             .limit(1);
 
-          if (!concept) return { found: false, message: `Concept "${conceptName}" not found in the knowledge graph.` };
+          if (!concept)
+            return {
+              found: false,
+              message: `Concept "${conceptName}" not found in the knowledge graph.`,
+            };
 
           const [state] = await db
             .select({
@@ -118,10 +116,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
             })
             .from(userConceptState)
             .where(
-              and(
-                eq(userConceptState.userId, userId),
-                eq(userConceptState.conceptId, concept.id),
-              ),
+              and(eq(userConceptState.userId, userId), eq(userConceptState.conceptId, concept.id))
             )
             .limit(1);
 
@@ -137,7 +132,8 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
         },
       }),
       generate_quiz: tool({
-        description: "Generate an inline quiz question for a concept to test the student's understanding",
+        description:
+          "Generate an inline quiz question for a concept to test the student's understanding",
         parameters: z.object({
           conceptName: z.string().max(200).describe("Concept to quiz on"),
           difficulty: z.number().min(1).max(5).optional().describe("Difficulty level 1-5"),
@@ -157,7 +153,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
             .where(
               sql`${questions.conceptIds} && ARRAY[${concept.id}::uuid]${
                 difficulty ? sql` AND ${questions.difficulty} = ${difficulty}` : sql``
-              }`,
+              }`
             )
             .limit(3);
 
@@ -202,10 +198,7 @@ export async function saveConversation(opts: {
         updatedAt: new Date(),
       })
       .where(
-        and(
-          eq(mentorConversations.id, conversationId),
-          eq(mentorConversations.userId, userId),
-        ),
+        and(eq(mentorConversations.id, conversationId), eq(mentorConversations.userId, userId))
       );
     return conversationId;
   }
@@ -249,19 +242,16 @@ export async function getConversation(conversationId: string, userId: string) {
   const [conv] = await db
     .select()
     .from(mentorConversations)
-    .where(
-      and(
-        eq(mentorConversations.id, conversationId),
-        eq(mentorConversations.userId, userId),
-      ),
-    )
+    .where(and(eq(mentorConversations.id, conversationId), eq(mentorConversations.userId, userId)))
     .limit(1);
 
   if (!conv) return null;
 
   let messages: MentorMessage[] = [];
   try {
-    const parsed = JSON.parse(typeof conv.messages === "string" ? conv.messages : JSON.stringify(conv.messages));
+    const parsed = JSON.parse(
+      typeof conv.messages === "string" ? conv.messages : JSON.stringify(conv.messages)
+    );
     messages = Array.isArray(parsed) ? parsed : [];
   } catch {
     messages = [];

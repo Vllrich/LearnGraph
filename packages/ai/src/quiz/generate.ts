@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { openaiModel } from "../models";
+import { fallbackModel } from "../models";
 import { retrieveChunks } from "../rag";
 import { db, questions, concepts, conceptChunkLinks, contentChunks } from "@repo/db";
 import { eq, inArray } from "drizzle-orm";
@@ -50,7 +50,7 @@ export async function generateQuizForConcepts(
 
     try {
       const { object } = await generateObject({
-        model: openaiModel,
+        model: fallbackModel,
         schema: questionSchema,
         prompt: `Generate ${questionsPerConcept} quiz questions about the concept "${concept.displayName}" (${concept.definition ?? "no definition"}).
 

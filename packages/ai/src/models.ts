@@ -1,9 +1,13 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
-import { PRIMARY_LLM, FALLBACK_LLM, EMBEDDING_MODEL } from "@repo/shared";
+import { ANTHROPIC_PRIMARY, OPENAI_PRIMARY, OPENAI_FALLBACK, EMBEDDING_MODEL } from "@repo/shared";
 
-export const anthropicModel = anthropic(PRIMARY_LLM);
-export const openaiModel = openai(FALLBACK_LLM);
+const provider = (process.env.LLM_PROVIDER ?? "openai") as "openai" | "anthropic";
+
+export const primaryModel =
+  provider === "anthropic" ? anthropic(ANTHROPIC_PRIMARY) : openai(OPENAI_PRIMARY);
+
+export const fallbackModel = openai(OPENAI_FALLBACK);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const embeddingModel = openai.embedding(EMBEDDING_MODEL) as any;

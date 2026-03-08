@@ -1,20 +1,12 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "../models";
+import { primaryModel } from "../models";
 import { countTokens } from "./chunker";
 
 const summarySchema = z.object({
-  tldr: z
-    .string()
-    .describe("2-3 sentence TL;DR summary of the entire document"),
-  keyPoints: z
-    .array(z.string())
-    .min(3)
-    .max(10)
-    .describe("5-10 key takeaway bullet points"),
-  deepSummary: z
-    .string()
-    .describe("Comprehensive 500-1000 word summary covering all major topics"),
+  tldr: z.string().describe("2-3 sentence TL;DR summary of the entire document"),
+  keyPoints: z.array(z.string()).min(3).max(10).describe("5-10 key takeaway bullet points"),
+  deepSummary: z.string().describe("Comprehensive 500-1000 word summary covering all major topics"),
 });
 
 export type SummaryResult = z.infer<typeof summarySchema>;
@@ -25,10 +17,7 @@ const MAX_CONTEXT_TOKENS = 100_000;
  * Three-tier summarization using Claude.
  * For long docs, uses hierarchical approach (per-section then meta).
  */
-export async function summarizeContent(
-  text: string,
-  title: string,
-): Promise<SummaryResult> {
+export async function summarizeContent(text: string, title: string): Promise<SummaryResult> {
   const tokens = countTokens(text);
 
   if (tokens <= MAX_CONTEXT_TOKENS) {
@@ -38,12 +27,9 @@ export async function summarizeContent(
   return hierarchicalSummarize(text, title);
 }
 
-async function directSummarize(
-  text: string,
-  title: string,
-): Promise<SummaryResult> {
+async function directSummarize(text: string, title: string): Promise<SummaryResult> {
   const { object } = await generateObject({
-    model: anthropicModel,
+    model: primaryModel,
     schema: summarySchema,
     prompt: buildPrompt(text, title),
     temperature: 0.3,
@@ -52,10 +38,7 @@ async function directSummarize(
   return object;
 }
 
-async function hierarchicalSummarize(
-  text: string,
-  title: string,
-): Promise<SummaryResult> {
+async function hierarchicalSummarize(text: string, title: string): Promise<SummaryResult> {
   const sections = text.split(/\n{3,}/);
   const sectionSize = Math.ceil(MAX_CONTEXT_TOKENS * 0.8);
   const sectionBatches: string[] = [];
@@ -79,7 +62,7 @@ async function hierarchicalSummarize(
   const sectionSummaries: z.infer<typeof sectionSchema>[] = [];
   for (let i = 0; i < sectionBatches.length; i++) {
     const { object } = await generateObject({
-      model: anthropicModel,
+      model: primaryModel,
       schema: sectionSchema,
       prompt: `Summarize this section (part ${i + 1} of ${sectionBatches.length}) of "${title}":\n\n${sectionBatches[i]}`,
       temperature: 0.3,

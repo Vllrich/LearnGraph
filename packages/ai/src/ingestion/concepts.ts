@@ -1,13 +1,9 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "../models";
+import { primaryModel } from "../models";
 import { generateEmbedding } from "./embeddings";
 import { db } from "@repo/db";
-import {
-  concepts,
-  conceptEdges,
-  conceptChunkLinks,
-} from "@repo/db";
+import { concepts, conceptEdges, conceptChunkLinks } from "@repo/db";
 import { eq, sql } from "drizzle-orm";
 import { CONCEPT_SIMILARITY_THRESHOLD } from "@repo/shared";
 import type { Chunk } from "./chunker";
@@ -18,33 +14,15 @@ const extractionSchema = z.object({
       name: z.string().describe("Canonical concept name (lowercase, singular)"),
       displayName: z.string().describe("Human-readable display name"),
       definition: z.string().describe("1-2 sentence definition from the source"),
-      prerequisites: z
-        .array(z.string())
-        .describe("Names of concepts this depends on"),
-      relatedTo: z
-        .array(z.string())
-        .describe("Names of related concepts"),
-      difficultyLevel: z
-        .number()
-        .int()
-        .min(1)
-        .max(5)
-        .describe("1=basic, 5=advanced"),
-      bloomLevel: z.enum([
-        "remember",
-        "understand",
-        "apply",
-        "analyze",
-        "evaluate",
-        "create",
-      ]),
-    }),
+      prerequisites: z.array(z.string()).describe("Names of concepts this depends on"),
+      relatedTo: z.array(z.string()).describe("Names of related concepts"),
+      difficultyLevel: z.number().int().min(1).max(5).describe("1=basic, 5=advanced"),
+      bloomLevel: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]),
+    })
   ),
 });
 
-export type ExtractedConcept = z.infer<
-  typeof extractionSchema
->["concepts"][number];
+export type ExtractedConcept = z.infer<typeof extractionSchema>["concepts"][number];
 
 /**
  * Extract concepts from content chunks using LLM, then deduplicate and store.
@@ -52,19 +30,17 @@ export type ExtractedConcept = z.infer<
 export async function extractAndStoreConcepts(
   chunks: Chunk[],
   learningObjectId: string,
-  storedChunkIds: string[],
+  storedChunkIds: string[]
 ): Promise<string[]> {
   const batchSize = 5;
   const allExtracted: { concept: ExtractedConcept; chunkIndices: number[] }[] = [];
 
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const batchText = batch
-      .map((c, j) => `[Chunk ${i + j}]\n${c.content}`)
-      .join("\n\n---\n\n");
+    const batchText = batch.map((c, j) => `[Chunk ${i + j}]\n${c.content}`).join("\n\n---\n\n");
 
     const { object } = await generateObject({
-      model: anthropicModel,
+      model: primaryModel,
       schema: extractionSchema,
       prompt: `Extract key concepts from these content chunks. For each concept, provide its canonical name (lowercase, singular form), definition grounded in the text, prerequisites, related concepts, difficulty level, and Bloom's taxonomy level.
 
@@ -136,12 +112,9 @@ ${batchText}`,
 }
 
 function deduplicateExtracted(
-  items: { concept: ExtractedConcept; chunkIndices: number[] }[],
+  items: { concept: ExtractedConcept; chunkIndices: number[] }[]
 ): { concept: ExtractedConcept; chunkIndices: number[] }[] {
-  const seen = new Map<
-    string,
-    { concept: ExtractedConcept; chunkIndices: number[] }
-  >();
+  const seen = new Map<string, { concept: ExtractedConcept; chunkIndices: number[] }>();
 
   for (const item of items) {
     const key = item.concept.name.toLowerCase().trim();
@@ -172,9 +145,7 @@ async function upsertConcept(extracted: ExtractedConcept): Promise<string> {
     return existing[0].id;
   }
 
-  const embedding = await generateEmbedding(
-    `${extracted.name}: ${extracted.definition}`,
-  );
+  const embedding = await generateEmbedding(`${extracted.name}: ${extracted.definition}`);
 
   const vecLiteral = `[${embedding.join(",")}]`;
   const similar = await db.execute<{
@@ -208,9 +179,7 @@ async function upsertConcept(extracted: ExtractedConcept): Promise<string> {
   return inserted.id;
 }
 
-async function findOrCreateConceptByName(
-  name: string,
-): Promise<string | null> {
+async function findOrCreateConceptByName(name: string): Promise<string | null> {
   const canonical = name.toLowerCase().trim().replace(/\s+/g, "_");
   if (!canonical) return null;
 
