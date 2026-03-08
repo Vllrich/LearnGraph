@@ -28,8 +28,8 @@ export default function SignupPage() {
   const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSignup(e: React.FormEvent) {
-    const supabase = createClient();
     e.preventDefault();
+    const supabase = createClient();
     setError(null);
     setLoading(true);
 

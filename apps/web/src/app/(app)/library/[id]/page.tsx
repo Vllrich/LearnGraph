@@ -64,6 +64,8 @@ export default function ContentDetailPage({ params }: Props) {
   const { id } = use(params);
   const [panelOpen, setPanelOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<PanelTab>("Chat");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const mentorChat = useMentorChat(id);
 
   const handleSelectionAction = useCallback(
@@ -81,11 +83,17 @@ export default function ContentDetailPage({ params }: Props) {
           break;
         case "quiz":
           setPanelOpen(true);
-          setActiveTab("Quizzes");
+          setActiveTab("Chat");
+          mentorChat.sendMessage(
+            `Create a short quiz (2-3 questions, mix of MCQ and short answer) to test understanding of this passage. After each question, wait for my response before revealing the answer.\n\n"${text}"`
+          );
           break;
         case "flashcard":
           setPanelOpen(true);
-          setActiveTab("Flashcards");
+          setActiveTab("Chat");
+          mentorChat.sendMessage(
+            `Create 2-3 concise flashcards (front: question, back: answer) from this passage:\n\n"${text}"`
+          );
           break;
         case "copy":
           navigator.clipboard.writeText(text).catch(() => {});
@@ -191,11 +199,53 @@ export default function ContentDetailPage({ params }: Props) {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Document toolbar */}
           <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/20 px-4 text-muted-foreground/50">
-            <button className="hover:text-foreground transition-colors">
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              className={cn(
+                "hover:text-foreground transition-colors",
+                searchOpen && "text-foreground"
+              )}
+            >
               <Search className="size-3.5" />
             </button>
-            <button className="hover:text-foreground transition-colors">
-              <Volume2 className="size-3.5" />
+            <button
+              onClick={() => {
+                if (isSpeaking) {
+                  window.speechSynthesis.cancel();
+                  setIsSpeaking(false);
+                } else {
+                  const fullText = data.chunks.map((c) => c.content).join("\n\n");
+                  if (!fullText) return;
+                  window.speechSynthesis.cancel();
+                  const utterance = new SpeechSynthesisUtterance(fullText);
+                  utterance.rate = 0.95;
+                  utterance.onend = () => setIsSpeaking(false);
+                  utterance.onerror = () => setIsSpeaking(false);
+                  window.speechSynthesis.speak(utterance);
+                  setIsSpeaking(true);
+                }
+              }}
+              className={cn(
+                "hover:text-foreground transition-colors",
+                isSpeaking && "text-orange-500"
+              )}
+            >
+              {isSpeaking ? (
+                <span className="flex items-center gap-1">
+                  <Square className="size-3" />
+                  <span className="flex items-end gap-px h-3">
+                    {[0, 150, 75, 225].map((delay) => (
+                      <span
+                        key={delay}
+                        className="w-0.5 rounded-full bg-orange-500 animate-[soundbar_0.8s_ease-in-out_infinite]"
+                        style={{ animationDelay: `${delay}ms`, height: "40%" }}
+                      />
+                    ))}
+                  </span>
+                </span>
+              ) : (
+                <Volume2 className="size-3.5" />
+              )}
             </button>
             <div className="mx-auto flex items-center gap-1.5 text-[12px]">
               {data.chunks.length > 0 && (
@@ -203,6 +253,9 @@ export default function ContentDetailPage({ params }: Props) {
               )}
             </div>
           </div>
+
+          {/* Search bar */}
+          {searchOpen && <DocSearchBar data={data} />}
 
           {/* Document content */}
           <div className="flex-1 overflow-y-auto">
@@ -265,6 +318,100 @@ export default function ContentDetailPage({ params }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Document Search Bar ─── */
+
+function DocSearchBar({ data }: { data: ContentData }) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const contentEl = document.querySelector<HTMLElement>("[data-doc-content]");
+    if (!contentEl) return;
+
+    // Remove previous highlights
+    contentEl.querySelectorAll("mark[data-doc-search]").forEach((m) => {
+      const parent = m.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(m.textContent ?? ""), m);
+      parent.normalize();
+    });
+
+    if (query.length < 2) return;
+
+    const lowerQuery = query.toLowerCase();
+    const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+
+    let firstMark: HTMLElement | null = null;
+    for (const node of textNodes) {
+      const text = node.textContent ?? "";
+      const lowerText = text.toLowerCase();
+      let idx = lowerText.indexOf(lowerQuery);
+      if (idx === -1) continue;
+
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      while (idx !== -1) {
+        if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+        const mark = document.createElement("mark");
+        mark.setAttribute("data-doc-search", "");
+        mark.style.cssText = "background:hsl(48 96% 53%/0.4);color:inherit;border-radius:2px;";
+        mark.textContent = text.slice(idx, idx + query.length);
+        frag.appendChild(mark);
+        if (!firstMark) firstMark = mark;
+        last = idx + query.length;
+        idx = lowerText.indexOf(lowerQuery, last);
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode?.replaceChild(frag, node);
+    }
+
+    firstMark?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [query]);
+
+  const matchCount = (() => {
+    if (query.length < 2) return 0;
+    const fullText = data.chunks
+      .map((c) => c.content)
+      .join(" ")
+      .toLowerCase();
+    const q = query.toLowerCase();
+    let count = 0,
+      pos = 0;
+    let idx = fullText.indexOf(q, pos);
+    while (idx !== -1) {
+      count++;
+      pos = idx + q.length;
+      idx = fullText.indexOf(q, pos);
+    }
+    return count;
+  })();
+
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/20 px-4">
+      <Search className="size-3 text-muted-foreground/40" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search in document..."
+        className="flex-1 bg-transparent text-[12px] placeholder:text-muted-foreground/30 focus:outline-none"
+      />
+      {query.length >= 2 && (
+        <span className="text-[11px] tabular-nums text-muted-foreground/40">
+          {matchCount} match{matchCount !== 1 ? "es" : ""}
+        </span>
+      )}
     </div>
   );
 }
@@ -424,7 +571,7 @@ function ContentViewer({
     data.sourceType === "youtube" && data.sourceUrl ? extractVideoId(data.sourceUrl) : null;
 
   return (
-    <div className="relative" onPointerUp={handlePointerUp}>
+    <div className="relative" data-doc-content onPointerUp={handlePointerUp}>
       {selectionMenu && (
         <SelectionMenu
           position={selectionMenu.position}
@@ -1277,12 +1424,21 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       <div className={cn("max-w-[88%]", isUser && "text-right")}>
         <div
           className={cn(
-            "inline-block rounded-2xl px-3.5 py-2",
-            isUser ? "bg-foreground text-background" : "bg-transparent"
+            isUser
+              ? "inline-flex flex-col gap-1.5 rounded-2xl border border-foreground/8 bg-foreground/[0.04] px-3.5 py-2.5 text-left shadow-sm backdrop-blur-sm"
+              : "inline-block rounded-2xl px-3.5 py-2 bg-transparent"
           )}
         >
           {isUser ? (
-            <p className="text-[13px] leading-relaxed">{message.content}</p>
+            <>
+              <div className="flex items-center gap-1.5">
+                <MessageSquare className="size-3 shrink-0 text-foreground/35" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/35">
+                  You
+                </span>
+              </div>
+              <p className="text-[13px] leading-relaxed text-foreground/85">{message.content}</p>
+            </>
           ) : (
             <div className="prose-sm prose dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:text-foreground/90">
               <ReactMarkdown>{message.content}</ReactMarkdown>

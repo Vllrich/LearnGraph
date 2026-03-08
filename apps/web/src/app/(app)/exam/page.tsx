@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft,
   Check,
   X,
   Loader2,
@@ -13,6 +12,7 @@ import {
   ChevronRight,
   AlertTriangle,
   CheckCircle2,
+  GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -202,30 +202,44 @@ export default function PracticeExamPage() {
   // ─── Setup screen ───
   if (!started) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-lg">
-          <h1 className="text-xl font-semibold tracking-tight">Practice Exam</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground/60">
-            Simulate real exam conditions — timed, no hints, no immediate feedback.
-          </p>
+      <div className="px-4 pt-16 lg:pt-20">
+        <div className="mx-auto w-full max-w-2xl">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
+              <GraduationCap className="size-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight font-(family-name:--font-source-serif)">
+                Practice Exam
+              </h1>
+              <p className="text-[13px] text-muted-foreground/60">
+                Simulate real exam conditions — timed, no hints, no immediate feedback.
+              </p>
+            </div>
+          </div>
 
           {/* Course selector */}
-          <div className="mt-6">
-            <label className="text-[12px] font-medium text-muted-foreground">
-              Course {selectedGoalIds.length > 0 && `(${selectedGoalIds.length} selected)`}
+          <div className="mt-8">
+            <label className="text-[13px] font-medium text-muted-foreground">
+              Courses{" "}
+              {selectedGoalIds.length > 0 && (
+                <span className="text-primary">({selectedGoalIds.length} selected)</span>
+              )}
             </label>
             <p className="mt-0.5 text-[11px] text-muted-foreground/50">
               Select courses to draw questions from, or leave empty for all.
             </p>
-            <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-border/30 p-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {goalsLoading ? (
-                <div className="flex items-center justify-center py-4">
+                <div className="col-span-full flex items-center justify-center py-8">
                   <Loader2 className="size-4 animate-spin text-muted-foreground/40" />
                 </div>
               ) : activeGoals.length === 0 ? (
-                <p className="px-2 py-4 text-center text-[12px] text-muted-foreground/40">
-                  No courses yet. Start a course from the home page first.
-                </p>
+                <div className="col-span-full rounded-xl border border-dashed border-border/40 py-8 text-center">
+                  <p className="text-[13px] text-muted-foreground/40">
+                    No courses yet. Start a course from the home page first.
+                  </p>
+                </div>
               ) : (
                 activeGoals.map((goal) => {
                   const isSelected = selectedGoalIds.includes(goal.id);
@@ -238,23 +252,25 @@ export default function PracticeExamPage() {
                       key={goal.id}
                       onClick={() => toggleGoal(goal.id)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                        isSelected ? "bg-primary/5 ring-1 ring-primary/20" : "hover:bg-muted/30"
+                        "flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all",
+                        isSelected
+                          ? "border-primary/30 bg-primary/5 shadow-sm"
+                          : "border-border/30 hover:border-border/60 hover:bg-muted/20"
                       )}
                     >
                       {isSelected ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-primary" />
+                        <CheckCircle2 className="size-5 shrink-0 text-primary" />
                       ) : (
                         <div
                           className={cn(
-                            "size-4 shrink-0 rounded bg-linear-to-br",
+                            "size-5 shrink-0 rounded-md bg-linear-to-br",
                             goalGradient(goal.title)
                           )}
                         />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-medium">{goal.title}</p>
-                        <p className="text-[10px] text-muted-foreground/50">
+                        <p className="truncate text-[13px] font-medium">{goal.title}</p>
+                        <p className="text-[11px] text-muted-foreground/50">
                           {goal.completedItems}/{goal.totalItems} concepts · {pct}%
                         </p>
                       </div>
@@ -265,19 +281,19 @@ export default function PracticeExamPage() {
             </div>
           </div>
 
-          <div className="mt-5 space-y-4">
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground">Questions</label>
-              <div className="mt-1.5 flex gap-2">
+              <label className="text-[13px] font-medium text-muted-foreground">Questions</label>
+              <div className="mt-2 flex gap-2">
                 {[10, 20, 30, 50].map((n) => (
                   <button
                     key={n}
                     onClick={() => setQuestionCount(n)}
                     className={cn(
-                      "rounded-lg border px-4 py-2 text-[13px] transition-all",
+                      "flex-1 rounded-xl border py-2.5 text-[13px] font-medium transition-all",
                       questionCount === n
                         ? "border-foreground bg-foreground text-background"
-                        : "border-border/30 hover:border-border/60"
+                        : "border-border/30 hover:border-border/60 hover:bg-muted/20"
                     )}
                   >
                     {n}
@@ -287,19 +303,17 @@ export default function PracticeExamPage() {
             </div>
 
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground">
-                Time Limit (minutes)
-              </label>
-              <div className="mt-1.5 flex gap-2">
+              <label className="text-[13px] font-medium text-muted-foreground">Time Limit</label>
+              <div className="mt-2 flex gap-2">
                 {[15, 30, 60, 120].map((n) => (
                   <button
                     key={n}
                     onClick={() => setTimeLimit(n)}
                     className={cn(
-                      "rounded-lg border px-4 py-2 text-[13px] transition-all",
+                      "flex-1 rounded-xl border py-2.5 text-[13px] font-medium transition-all",
                       timeLimit === n
                         ? "border-foreground bg-foreground text-background"
-                        : "border-border/30 hover:border-border/60"
+                        : "border-border/30 hover:border-border/60 hover:bg-muted/20"
                     )}
                   >
                     {n}m
@@ -309,20 +323,21 @@ export default function PracticeExamPage() {
             </div>
           </div>
 
-          <button
-            onClick={() => setStarted(true)}
-            disabled={!goalsLoading && activeGoals.length === 0}
-            className="mt-8 w-full rounded-xl bg-foreground py-3 text-[14px] font-medium text-background transition-opacity hover:opacity-80 disabled:opacity-30"
-          >
-            Start Exam
-          </button>
-
-          <Link
-            href="/"
-            className="mt-3 block text-center text-[12px] text-muted-foreground/50 hover:text-muted-foreground"
-          >
-            &larr; Back to Home
-          </Link>
+          <div className="mt-10 flex items-center gap-3">
+            <Link
+              href="/"
+              className="rounded-xl border border-border/30 px-6 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+            >
+              Back
+            </Link>
+            <button
+              onClick={() => setStarted(true)}
+              disabled={!goalsLoading && activeGoals.length === 0}
+              className="flex-1 rounded-xl bg-foreground py-3 text-[14px] font-medium text-background transition-opacity hover:opacity-80 disabled:opacity-30"
+            >
+              Start Exam
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -331,7 +346,7 @@ export default function PracticeExamPage() {
   // ─── Loading / error ───
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex items-center justify-center px-4 pt-32">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
@@ -339,32 +354,46 @@ export default function PracticeExamPage() {
 
   if (error) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center text-center px-6">
-        <AlertTriangle className="size-6 text-red-500 mb-3" />
-        <h1 className="text-lg font-medium">Something went wrong</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground/60">
-          {error.message || "Failed to load exam questions. Please try again."}
-        </p>
-        <button onClick={resetExam} className="mt-4 text-[13px] text-primary hover:underline">
-          Go back
-        </button>
+      <div className="px-4 pt-16 lg:pt-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-red-500/10">
+            <AlertTriangle className="size-5 text-red-500" />
+          </div>
+          <h1 className="text-lg font-semibold">Something went wrong</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground/60">
+            {error.message || "Failed to load exam questions. Please try again."}
+          </p>
+          <button
+            onClick={resetExam}
+            className="mt-5 rounded-xl border border-border/30 px-6 py-2.5 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+          >
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
 
   if (totalQuestions === 0) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center text-center px-6">
-        <AlertTriangle className="size-6 text-amber-500 mb-3" />
-        <h1 className="text-lg font-medium">Not enough questions</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground/60">
-          {selectedGoalIds.length > 0
-            ? "The selected courses don't have enough questions yet. Try selecting more courses or study more content."
-            : "Upload and study more content to build up your question bank."}
-        </p>
-        <button onClick={resetExam} className="mt-4 text-[13px] text-primary hover:underline">
-          Go back
-        </button>
+      <div className="px-4 pt-16 lg:pt-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-amber-500/10">
+            <AlertTriangle className="size-5 text-amber-500" />
+          </div>
+          <h1 className="text-lg font-semibold">Not enough questions</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground/60">
+            {selectedGoalIds.length > 0
+              ? "The selected courses don't have enough questions yet. Try selecting more courses or study more content."
+              : "Upload and study more content to build up your question bank."}
+          </p>
+          <button
+            onClick={resetExam}
+            className="mt-5 rounded-xl border border-border/30 px-6 py-2.5 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+          >
+            Go back
+          </button>
+        </div>
       </div>
     );
   }
@@ -378,46 +407,48 @@ export default function PracticeExamPage() {
     const timeUsed = elapsed;
 
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-lg">
+      <div className="px-4 pt-16 pb-12 lg:pt-20">
+        <div className="mx-auto w-full max-w-2xl">
           <div className="text-center">
-            <div className="mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-amber-500/10">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-amber-500/10">
               <Trophy className="size-6 text-amber-500" />
             </div>
-            <h1 className="text-xl font-semibold">Exam Complete</h1>
+            <h1 className="text-2xl font-semibold font-(family-name:--font-source-serif)">
+              Exam Complete
+            </h1>
             <p className="mt-1 text-[13px] text-muted-foreground/60">
               Time used: {formatTime(timeUsed)} / {data!.timeLimitMinutes}m
             </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-4 gap-3 text-center">
-            <div className="rounded-xl border border-border/30 py-3">
-              <p className="text-2xl font-bold">{accuracy}%</p>
-              <p className="text-[10px] text-muted-foreground">Score</p>
+          <div className="mt-8 grid grid-cols-4 gap-3 text-center">
+            <div className="rounded-xl border border-border/30 bg-card py-4 shadow-sm">
+              <p className="text-3xl font-bold">{accuracy}%</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Score</p>
             </div>
-            <div className="rounded-xl border border-border/30 py-3">
-              <p className="text-2xl font-bold text-green-500">{correctCount}</p>
-              <p className="text-[10px] text-muted-foreground">Correct</p>
+            <div className="rounded-xl border border-green-500/20 bg-green-500/5 py-4">
+              <p className="text-3xl font-bold text-green-500">{correctCount}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Correct</p>
             </div>
-            <div className="rounded-xl border border-border/30 py-3">
-              <p className="text-2xl font-bold text-red-400">{wrongCount}</p>
-              <p className="text-[10px] text-muted-foreground">Wrong</p>
+            <div className="rounded-xl border border-red-400/20 bg-red-500/5 py-4">
+              <p className="text-3xl font-bold text-red-400">{wrongCount}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Wrong</p>
             </div>
-            <div className="rounded-xl border border-border/30 py-3">
-              <p className="text-2xl font-bold text-muted-foreground">{skippedCount}</p>
-              <p className="text-[10px] text-muted-foreground">Skipped</p>
+            <div className="rounded-xl border border-border/30 bg-muted/10 py-4">
+              <p className="text-3xl font-bold text-muted-foreground">{skippedCount}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Skipped</p>
             </div>
           </div>
 
           <button
             onClick={() => setShowReview((v) => !v)}
-            className="mt-6 w-full rounded-xl border border-border/30 px-4 py-2.5 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+            className="mt-8 w-full rounded-xl border border-border/30 px-4 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
           >
             {showReview ? "Hide" : "Review"} Answers
           </button>
 
           {showReview && (
-            <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+            <div className="mt-4 space-y-2">
               {allQuestions.map((q, i) => {
                 const answer = answers[i];
                 if (!answer) return null;
@@ -465,16 +496,16 @@ export default function PracticeExamPage() {
             </div>
           )}
 
-          <div className="mt-6 flex gap-3">
+          <div className="mt-8 flex gap-3">
             <Link
               href="/"
-              className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-border/30 py-2.5 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-border/30 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
             >
               Done
             </Link>
             <button
               onClick={resetExam}
-              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-foreground py-2.5 text-[13px] font-medium text-background"
+              className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-80"
             >
               Retake <ChevronRight className="size-3.5" />
             </button>
@@ -493,106 +524,94 @@ export default function PracticeExamPage() {
   const progress = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/30 px-4">
-        <Link href="/" className="text-muted-foreground/60 hover:text-foreground transition-colors">
-          <ArrowLeft className="size-4" />
-        </Link>
-        <div className="flex-1">
-          <div className="mx-auto max-w-md">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground/50 tabular-nums">
-                {currentIndex + 1} / {totalQuestions}
-              </span>
-              <div className="h-1 flex-1 rounded-full bg-muted/40">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
+    <div className="min-h-screen">
+      {/* Sticky exam header with progress + timer */}
+      <div className="sticky top-12 z-10 border-b border-border/30 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-2.5">
+          <span className="text-[12px] font-medium tabular-nums text-muted-foreground/60">
+            {currentIndex + 1}/{totalQuestions}
+          </span>
+          <div className="h-1.5 flex-1 rounded-full bg-muted/30">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
           </div>
-        </div>
-        <div
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-mono tabular-nums",
-            isLowTime
-              ? "bg-red-500/10 text-red-500 animate-pulse"
-              : "bg-muted/30 text-muted-foreground"
-          )}
-        >
-          <Clock className="size-3" />
-          {formatTime(timeRemaining)}
-        </div>
-      </header>
-
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
-        <div className="w-full max-w-lg">
-          <div className="mb-3 flex items-center gap-2">
-            {currentQuestion?.difficulty && (
-              <span className="rounded-full bg-muted/40 px-2.5 py-0.5 text-[10px] text-muted-foreground/50">
-                Difficulty {currentQuestion.difficulty}/5
-              </span>
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-mono tabular-nums",
+              isLowTime ? "bg-red-500/10 text-red-500 animate-pulse" : "text-muted-foreground"
             )}
-            <span className="rounded-full bg-muted/30 px-2.5 py-0.5 text-[10px] text-muted-foreground/40">
-              {currentQuestion?.learningObjectTitle}
+          >
+            <Clock className="size-3" />
+            {formatTime(timeRemaining)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-2xl px-4 pt-10 pb-12">
+        <div className="mb-3 flex items-center gap-2">
+          {currentQuestion?.difficulty && (
+            <span className="rounded-full bg-muted/40 px-2.5 py-0.5 text-[10px] text-muted-foreground/50">
+              Difficulty {currentQuestion.difficulty}/5
             </span>
-          </div>
-
-          <h2 className="text-[16px] font-medium leading-relaxed">
-            {currentQuestion?.questionText}
-          </h2>
-
-          {currentQuestion?.questionType === "mcq" && options.length > 0 && (
-            <div className="mt-5 space-y-2">
-              {options.map((opt, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedAnswer(opt)}
-                  className={cn(
-                    "w-full rounded-xl border px-4 py-3 text-left text-[13px] transition-all",
-                    selectedAnswer === opt
-                      ? "border-foreground/30 bg-muted/30"
-                      : "border-border/30 hover:border-border/60 hover:bg-muted/20"
-                  )}
-                >
-                  <span className="mr-2 text-muted-foreground/40">
-                    {String.fromCharCode(65 + i)}.
-                  </span>
-                  {opt}
-                </button>
-              ))}
-            </div>
           )}
+          <span className="rounded-full bg-muted/30 px-2.5 py-0.5 text-[10px] text-muted-foreground/40">
+            {currentQuestion?.learningObjectTitle}
+          </span>
+        </div>
 
-          {currentQuestion?.questionType !== "mcq" && (
-            <div className="mt-5">
-              <input
-                type="text"
-                value={selectedAnswer ?? ""}
-                onChange={(e) => setSelectedAnswer(e.target.value)}
-                placeholder="Type your answer..."
-                className="w-full rounded-xl border border-border/30 bg-transparent px-4 py-3 text-[13px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
-              />
-            </div>
-          )}
+        <h2 className="text-lg font-medium leading-relaxed">{currentQuestion?.questionText}</h2>
 
-          <div className="mt-5 flex gap-2">
-            <button
-              onClick={handleSkip}
-              className="rounded-xl border border-border/30 px-4 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
-            >
-              Skip
-            </button>
-            <button
-              onClick={handleNext}
-              disabled={!selectedAnswer}
-              className="flex-1 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-20 transition-opacity"
-            >
-              {currentIndex + 1 >= totalQuestions ? "Finish" : "Next"}{" "}
-              <span className="text-[11px] opacity-50 ml-1">Enter</span>
-            </button>
+        {currentQuestion?.questionType === "mcq" && options.length > 0 && (
+          <div className="mt-6 space-y-2">
+            {options.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedAnswer(opt)}
+                className={cn(
+                  "w-full rounded-xl border px-4 py-3.5 text-left text-[14px] transition-all",
+                  selectedAnswer === opt
+                    ? "border-primary/40 bg-primary/5 shadow-sm"
+                    : "border-border/30 hover:border-border/60 hover:bg-muted/20"
+                )}
+              >
+                <span className="mr-2.5 inline-flex size-6 items-center justify-center rounded-md bg-muted/40 text-[12px] font-medium text-muted-foreground">
+                  {String.fromCharCode(65 + i)}
+                </span>
+                {opt}
+              </button>
+            ))}
           </div>
+        )}
+
+        {currentQuestion?.questionType !== "mcq" && (
+          <div className="mt-6">
+            <input
+              type="text"
+              value={selectedAnswer ?? ""}
+              onChange={(e) => setSelectedAnswer(e.target.value)}
+              placeholder="Type your answer..."
+              className="w-full rounded-xl border border-border/30 bg-transparent px-4 py-3.5 text-[14px] placeholder:text-muted-foreground/30 focus:border-primary/30 focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="mt-6 flex gap-2">
+          <button
+            onClick={handleSkip}
+            className="rounded-xl border border-border/30 px-5 py-3 text-[13px] text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/20"
+          >
+            Skip
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={!selectedAnswer}
+            className="flex-1 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-80 disabled:opacity-20"
+          >
+            {currentIndex + 1 >= totalQuestions ? "Finish" : "Next"}
+            <span className="ml-1.5 text-[11px] opacity-50">Enter</span>
+          </button>
         </div>
       </div>
     </div>

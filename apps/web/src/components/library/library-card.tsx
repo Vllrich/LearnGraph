@@ -12,6 +12,11 @@ import { Button } from "@/components/ui/button";
 import {
   FileText,
   Youtube,
+  Globe,
+  Presentation,
+  FileAudio,
+  Image as ImageIcon,
+  FileType2,
   MoreHorizontal,
   Trash2,
   ExternalLink,
@@ -52,6 +57,16 @@ export function LibraryCard({
       <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5">
         {sourceType === "youtube" ? (
           <Youtube className="size-5 text-red-500" />
+        ) : sourceType === "url" ? (
+          <Globe className="size-5 text-blue-500" />
+        ) : sourceType === "pptx" ? (
+          <Presentation className="size-5 text-orange-500" />
+        ) : sourceType === "audio" ? (
+          <FileAudio className="size-5 text-purple-500" />
+        ) : sourceType === "image" ? (
+          <ImageIcon className="size-5 text-green-500" />
+        ) : sourceType === "docx" ? (
+          <FileType2 className="size-5 text-primary" />
         ) : (
           <FileText className="size-5 text-primary" />
         )}
@@ -59,9 +74,7 @@ export function LibraryCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate text-[15px] font-semibold leading-snug">
-            {title}
-          </h3>
+          <h3 className="truncate text-[15px] font-semibold leading-snug">{title}</h3>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -113,9 +126,7 @@ export function LibraryCard({
                     : "status-dot-failed"
               }`}
             />
-            <span className="text-xs text-muted-foreground capitalize">
-              {status}
-            </span>
+            <span className="text-xs text-muted-foreground capitalize">{status}</span>
           </div>
           {createdAt && (
             <>

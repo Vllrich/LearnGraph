@@ -27,15 +27,25 @@ export default function LoginPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   async function handleEmailLogin(e: React.FormEvent) {
-    const supabase = createClient();
     e.preventDefault();
     setError(null);
     setLoading(true);
 
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError(error.message);
+      if (error.message === "Invalid login credentials") {
+        setError(
+          "Invalid email or password. If you just signed up, check your email for a confirmation link."
+        );
+      } else if (error.message === "Email not confirmed") {
+        setError(
+          "Please confirm your email before logging in. Check your inbox (and spam folder)."
+        );
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
