@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/client";
-import { Sparkles } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 
 export default function OnboardingPage() {
@@ -33,9 +33,7 @@ export default function OnboardingPage() {
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg gradient-brand">
-            <Sparkles className="size-4 text-white" />
-          </div>
+          <Image src="/Logo.svg" alt="" width={32} height={32} className="size-8 rounded-lg" />
           <span className="text-lg font-semibold">LearnGraph</span>
         </div>
 

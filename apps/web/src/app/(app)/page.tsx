@@ -186,7 +186,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Hero + conversational intake */}
-      <div className="flex flex-col items-center px-6 pb-6 pt-16 text-center lg:pt-20">
+      <div className="flex flex-col items-center px-4 pb-6 pt-16 text-center lg:pt-20">
         {intakeStep === "idle" && (
           <>
             <div className="flex w-full max-w-xl items-center justify-center gap-3">

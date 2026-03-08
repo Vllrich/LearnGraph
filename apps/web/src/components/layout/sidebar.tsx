@@ -1,26 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  Home,
-  BookOpen,
-  MessageCircle,
-  Zap,
-  Target,
-  BarChart3,
-  Globe,
-  LogOut,
-  ChevronLeft,
-  Sparkles,
-  Sun,
-  Moon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
+import { Home, BookOpen, MessageCircle, Zap, Target, BarChart3, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { trpc } from "@/trpc/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const NAV_ITEMS = [
@@ -33,162 +17,88 @@ const NAV_ITEMS = [
   { href: "/stats", label: "Progress", icon: BarChart3 },
 ] as const;
 
+const TIERS = [
+  { min: 0, label: "Newcomer", color: "text-muted-foreground" },
+  { min: 5, label: "Explorer", color: "text-blue-500" },
+  { min: 20, label: "Scholar", color: "text-violet-500" },
+  { min: 50, label: "Expert", color: "text-amber-500" },
+  { min: 100, label: "Master", color: "text-emerald-500" },
+];
+
+function getTier(concepts: number) {
+  return [...TIERS].reverse().find((t) => concepts >= t.min) ?? TIERS[0];
+}
+
+function getLevel(concepts: number) {
+  return Math.floor(concepts / 5) + 1;
+}
+
 type SidebarProps = {
-  collapsed: boolean;
-  onToggle: () => void;
   user: { email?: string; displayName?: string } | null;
 };
 
-export function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { data: stats } = trpc.review.getStats.useQuery();
 
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
+  const mastery = stats?.mastery;
+  const totalConcepts = mastery
+    ? [mastery.m0, mastery.m1, mastery.m2, mastery.m3, mastery.m4, mastery.m5].reduce(
+        (s, v) => s + Number(v),
+        0
+      )
+    : 0;
 
-  const initials =
-    user?.displayName
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() ??
-    user?.email?.slice(0, 2).toUpperCase() ??
-    "?";
+  const tier = getTier(totalConcepts);
+  const level = getLevel(totalConcepts);
+  const xpInLevel = totalConcepts % 5;
+  const displayName = user?.displayName ?? user?.email?.split("@")[0] ?? "Learner";
 
   return (
-    <aside
-      className={cn(
-        "fixed inset-y-3 left-3 z-30 hidden flex-col rounded-xl border border-border/50 bg-card shadow-sm transition-[width] duration-200 ease-in-out lg:flex",
-        collapsed ? "w-12" : "w-52"
-      )}
-    >
-      {/* Logo */}
-      <div
-        className={cn(
-          "flex h-12 items-center border-b border-border/40 px-3",
-          collapsed && "justify-center px-0"
-        )}
-      >
-        {!collapsed ? (
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex size-6 items-center justify-center rounded-md gradient-brand">
-              <Sparkles className="size-3 text-white" />
-            </div>
-            <span className="text-sm font-semibold tracking-tight">LearnGraph</span>
-          </Link>
-        ) : (
-          <Link
-            href="/"
-            className="flex size-6 items-center justify-center rounded-md gradient-brand"
-          >
-            <Sparkles className="size-3 text-white" />
-          </Link>
-        )}
+    <aside className="sticky top-12 hidden h-[calc(100vh-3rem)] w-48 shrink-0 flex-col justify-center px-4 lg:flex">
+      {/* Student info */}
+      <div className="mb-6">
+        <p className="text-sm font-semibold text-foreground">{displayName}</p>
+        <div className="mt-1 flex items-center gap-1.5">
+          <span className={cn("text-[11px] font-medium", tier.color)}>{tier.label}</span>
+          <span className="text-[11px] text-muted-foreground/50">·</span>
+          <span className="text-[11px] text-muted-foreground/70">Lv. {level}</span>
+        </div>
+        {/* XP bar */}
+        <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-border/40">
+          <div
+            className="h-full rounded-full bg-primary/50 transition-all"
+            style={{ width: `${(xpInLevel / 5) * 100}%` }}
+          />
+        </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 space-y-0.5 p-2" aria-label="Main navigation">
+      <nav className="space-y-0.5" aria-label="Main navigation">
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
-
-          const link = (
+          return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
-                isActive
-                  ? "bg-primary/8 text-primary"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                collapsed && "justify-center px-0"
+                isActive ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground"
               )}
             >
-              <Icon className="size-[18px] shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              <Icon
+                className={cn(
+                  "size-[17px] shrink-0",
+                  isActive ? "text-foreground" : "text-muted-foreground/50"
+                )}
+              />
+              {item.label}
+              {isActive && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
             </Link>
           );
-
-          if (collapsed) {
-            return (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">
-                  {item.label}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return link;
         })}
       </nav>
-
-      {/* Footer */}
-      <div className="border-t border-border/40 p-2">
-        <div className={cn("flex gap-1", collapsed ? "flex-col items-center" : "items-center")}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("h-8", !collapsed ? "flex-1 justify-start gap-2 px-2.5" : "w-8 px-0")}
-            onClick={onToggle}
-          >
-            <ChevronLeft
-              className={cn("size-3.5 transition-transform", collapsed && "rotate-180")}
-            />
-            {!collapsed && <span className="text-xs text-muted-foreground">Collapse</span>}
-          </Button>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="size-8 shrink-0 p-0"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              >
-                <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side={collapsed ? "right" : "top"} className="text-xs">
-              Toggle theme
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
-        <div
-          className={cn(
-            "mt-1 flex items-center gap-2.5 rounded-lg px-2.5 py-2",
-            collapsed && "justify-center px-0"
-          )}
-        >
-          <Avatar className="size-6">
-            <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="truncate text-[12px] font-medium">{user?.displayName ?? "User"}</p>
-            </div>
-          )}
-          {!collapsed && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="size-6 p-0" onClick={handleLogout}>
-                  <LogOut className="size-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="text-xs">Sign out</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
     </aside>
   );
 }
