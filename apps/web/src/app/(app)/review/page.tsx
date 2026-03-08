@@ -1,17 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
-import {
-  ArrowLeft,
-  Check,
-  X,
-  Loader2,
-  Zap,
-  Trophy,
-  ChevronRight,
-} from "lucide-react";
+import { ArrowLeft, Check, X, Loader2, Zap, Trophy, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 type ReviewQuestion = {
@@ -25,12 +17,6 @@ type ReviewQuestion = {
   conceptIds: string[] | null;
 };
 
-type QueueItem = {
-  conceptId: string;
-  conceptName: string | null;
-  masteryLevel: number | null;
-};
-
 export default function ReviewPage() {
   const { data, isLoading } = trpc.review.getDailyQueue.useQuery();
   const submitMutation = trpc.review.submitReview.useMutation();
@@ -39,16 +25,21 @@ export default function ReviewPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
-  const [sessionResults, setSessionResults] = useState<{ correct: number; total: number }>({ correct: 0, total: 0 });
+  const [sessionResults, setSessionResults] = useState<{ correct: number; total: number }>({
+    correct: 0,
+    total: 0,
+  });
   const [sessionComplete, setSessionComplete] = useState(false);
-  const [startTime, setStartTime] = useState(Date.now());
+  const startTimeRef = useRef(0);
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+  }, [currentIndex]);
 
   const allQuestions = (data?.questions ?? []) as ReviewQuestion[];
   const currentQuestion = allQuestions[currentIndex];
   const totalQuestions = allQuestions.length;
-  const progress = totalQuestions > 0 ? ((currentIndex) / totalQuestions) * 100 : 0;
-
-  useEffect(() => { setStartTime(Date.now()); }, [currentIndex]);
+  const progress = totalQuestions > 0 ? (currentIndex / totalQuestions) * 100 : 0;
 
   const handleSubmit = useCallback(() => {
     if (!currentQuestion || !selectedAnswer) return;
@@ -69,7 +60,7 @@ export default function ReviewPage() {
         questionId: currentQuestion.id,
         answerText: selectedAnswer ?? undefined,
         isCorrect,
-        responseTimeMs: Date.now() - startTime,
+        responseTimeMs: Date.now() - startTimeRef.current,
       });
 
       setSessionResults((prev) => ({
@@ -87,7 +78,15 @@ export default function ReviewPage() {
         setShowResult(false);
       }
     },
-    [currentQuestion, selectedAnswer, currentIndex, totalQuestions, submitMutation, startTime, utils],
+    [
+      currentQuestion,
+      selectedAnswer,
+      currentIndex,
+      totalQuestions,
+      submitMutation,
+      startTimeRef,
+      utils,
+    ]
   );
 
   if (isLoading) {
@@ -116,9 +115,10 @@ export default function ReviewPage() {
   }
 
   if (sessionComplete) {
-    const accuracy = sessionResults.total > 0
-      ? Math.round((sessionResults.correct / sessionResults.total) * 100)
-      : 0;
+    const accuracy =
+      sessionResults.total > 0
+        ? Math.round((sessionResults.correct / sessionResults.total) * 100)
+        : 0;
 
     return (
       <div className="flex h-screen flex-col items-center justify-center text-center px-6">
@@ -150,8 +150,9 @@ export default function ReviewPage() {
     );
   }
 
-  const options = Array.isArray(currentQuestion?.options) ? currentQuestion.options as string[] : [];
-  const isCorrect = selectedAnswer === currentQuestion?.correctAnswer;
+  const options = Array.isArray(currentQuestion?.options)
+    ? (currentQuestion.options as string[])
+    : [];
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -212,10 +213,12 @@ export default function ReviewPage() {
                           ? "border-red-500/50 bg-red-500/5 text-red-700 dark:text-red-400"
                           : isSelected
                             ? "border-foreground/30 bg-muted/30"
-                            : "border-border/30 hover:border-border/60 hover:bg-muted/20",
+                            : "border-border/30 hover:border-border/60 hover:bg-muted/20"
                     )}
                   >
-                    <span className="mr-2 text-muted-foreground/40">{String.fromCharCode(65 + i)}.</span>
+                    <span className="mr-2 text-muted-foreground/40">
+                      {String.fromCharCode(65 + i)}.
+                    </span>
                     {opt}
                     {isCorrectOption && <Check className="float-right mt-0.5 size-4" />}
                     {isWrongSelection && <X className="float-right mt-0.5 size-4" />}
@@ -264,12 +267,14 @@ export default function ReviewPage() {
                 How well did you know this?
               </p>
               <div className="grid grid-cols-4 gap-2">
-                {([
-                  { rating: 1, label: "Again", sublabel: "<1d", color: "text-red-500" },
-                  { rating: 2, label: "Hard", sublabel: "~3d", color: "text-orange-500" },
-                  { rating: 3, label: "Good", sublabel: "~7d", color: "text-blue-500" },
-                  { rating: 4, label: "Easy", sublabel: "~14d", color: "text-green-500" },
-                ] as const).map(({ rating, label, sublabel, color }) => (
+                {(
+                  [
+                    { rating: 1, label: "Again", sublabel: "<1d", color: "text-red-500" },
+                    { rating: 2, label: "Hard", sublabel: "~3d", color: "text-orange-500" },
+                    { rating: 3, label: "Good", sublabel: "~7d", color: "text-blue-500" },
+                    { rating: 4, label: "Easy", sublabel: "~14d", color: "text-green-500" },
+                  ] as const
+                ).map(({ rating, label, sublabel, color }) => (
                   <button
                     key={rating}
                     onClick={() => handleRate(rating)}

@@ -4,13 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
-import {
-  Target,
-  BarChart3,
-  Globe,
-  Settings,
-  LogOut,
-} from "lucide-react";
+import { Target, BarChart3, Globe, LogOut } from "lucide-react";
 import Link from "next/link";
 
 const LINKS = [

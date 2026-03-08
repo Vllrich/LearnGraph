@@ -3,6 +3,8 @@
 import { use, useState, useRef, useEffect, useCallback } from "react";
 import { notFound } from "next/navigation";
 import { trpc } from "@/trpc/client";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/trpc/routers/_app";
 import {
   ArrowLeft,
   ArrowUp,
@@ -18,7 +20,6 @@ import {
   Lightbulb,
   Route,
   Feather,
-  MoreVertical,
   ThumbsUp,
   ThumbsDown,
   Copy,
@@ -27,6 +28,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useMentorChat, type ChatMessage } from "@/hooks/use-mentor-chat";
 import ReactMarkdown from "react-markdown";
+
+type RouterOutput = inferRouterOutputs<AppRouter>;
+type ContentData = NonNullable<RouterOutput["library"]["getById"]>;
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -40,7 +44,7 @@ export default function ContentDetailPage({ params }: Props) {
 
   const { data, isLoading, error } = trpc.library.getById.useQuery(
     { id },
-    { refetchInterval: (query) => (query.state.data?.status === "processing" ? 5000 : false) },
+    { refetchInterval: (query) => (query.state.data?.status === "processing" ? 5000 : false) }
   );
   const initMutation = trpc.review.initConceptStates.useMutation();
   const initRef = useRef(false);
@@ -50,20 +54,21 @@ export default function ContentDetailPage({ params }: Props) {
       initRef.current = true;
       initMutation.mutate({ learningObjectId: id });
     }
-  }, [data?.status, data?.concepts.length, id]);
+  }, [data?.status, data?.concepts.length, id, initMutation]);
 
   if (isLoading) return <LoadingSkeleton />;
   if (error?.data?.code === "NOT_FOUND" || !data) return notFound();
 
   const isProcessing = data.status === "processing";
   const isFailed = data.status === "failed";
-  const metadata = (data.metadata ?? {}) as Record<string, unknown>;
-
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* ─── Top bar ─── */}
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border/30 px-3">
-        <Link href="/" className="flex items-center gap-1.5 text-muted-foreground/70 hover:text-foreground transition-colors">
+        <Link
+          href="/"
+          className="flex items-center gap-1.5 text-muted-foreground/70 hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="size-4" />
         </Link>
         <div className="mx-1 h-4 w-px bg-border/40" />
@@ -81,9 +86,7 @@ export default function ContentDetailPage({ params }: Props) {
             Processing...
           </span>
         )}
-        {isFailed && (
-          <span className="text-[11px] text-destructive">Failed</span>
-        )}
+        {isFailed && <span className="text-[11px] text-destructive">Failed</span>}
         <button
           onClick={() => setPanelOpen(!panelOpen)}
           className="flex size-7 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-muted/50 hover:text-foreground transition-colors"
@@ -98,8 +101,12 @@ export default function ContentDetailPage({ params }: Props) {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Document toolbar */}
           <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/20 px-4 text-muted-foreground/50">
-            <button className="hover:text-foreground transition-colors"><Search className="size-3.5" /></button>
-            <button className="hover:text-foreground transition-colors"><Volume2 className="size-3.5" /></button>
+            <button className="hover:text-foreground transition-colors">
+              <Search className="size-3.5" />
+            </button>
+            <button className="hover:text-foreground transition-colors">
+              <Volume2 className="size-3.5" />
+            </button>
             <div className="mx-auto flex items-center gap-1.5 text-[12px]">
               {data.chunks.length > 0 && (
                 <span className="tabular-nums">1 / {data.chunks.length} chunks</span>
@@ -120,9 +127,7 @@ export default function ContentDetailPage({ params }: Props) {
         </div>
 
         {/* Vertical divider */}
-        {panelOpen && data.status === "ready" && (
-          <div className="w-px bg-border/30" />
-        )}
+        {panelOpen && data.status === "ready" && <div className="w-px bg-border/30" />}
 
         {/* Right: AI Panel */}
         {panelOpen && data.status === "ready" && (
@@ -137,13 +142,11 @@ export default function ContentDetailPage({ params }: Props) {
                     "relative text-[13px] transition-colors",
                     activeTab === tab
                       ? "font-medium text-foreground"
-                      : "text-muted-foreground/60 hover:text-foreground",
+                      : "text-muted-foreground/60 hover:text-foreground"
                   )}
                 >
                   <span className="flex items-center gap-1.5">
-                    {activeTab === tab && (
-                      <span className="size-1.5 rounded-full bg-green-500" />
-                    )}
+                    {activeTab === tab && <span className="size-1.5 rounded-full bg-green-500" />}
                     {tab}
                   </span>
                 </button>
@@ -168,13 +171,15 @@ export default function ContentDetailPage({ params }: Props) {
 
 /* ─── Content Viewer ─── */
 
-function ContentViewer({ data }: { data: any }) {
+function ContentViewer({ data }: { data: ContentData }) {
   let keyPoints: string[] = [];
   if (data.summaryKeyPoints) {
     try {
       keyPoints = JSON.parse(data.summaryKeyPoints);
       if (!Array.isArray(keyPoints)) keyPoints = [];
-    } catch { keyPoints = []; }
+    } catch {
+      keyPoints = [];
+    }
   }
 
   if (data.status !== "ready") {
@@ -213,7 +218,7 @@ function ContentViewer({ data }: { data: any }) {
 
       {data.chunks.length > 0 && (
         <div className="space-y-8 border-t border-border/20 pt-8">
-          {data.chunks.map((chunk: any) => (
+          {data.chunks.map((chunk) => (
             <div key={chunk.id}>
               {chunk.sectionTitle && (
                 <h3 className="mb-2 font-sans text-[14px] font-semibold text-primary/80">
@@ -244,7 +249,7 @@ function TabContent({
   learningObjectId,
 }: {
   tab: PanelTab;
-  data: any;
+  data: ContentData;
   learningObjectId: string;
 }) {
   switch (tab) {
@@ -266,7 +271,7 @@ function TabContent({
 /* ─── Chat Tab ─── */
 
 function ChatTab({ learningObjectId }: { learningObjectId: string }) {
-  const { messages, isLoading, sendMessage } = useMentorChat(learningObjectId);
+  const { messages, sendMessage } = useMentorChat(learningObjectId);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -277,7 +282,9 @@ function ChatTab({ learningObjectId }: { learningObjectId: string }) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <Sparkles className="mb-3 size-5 text-muted-foreground/30" />
-        <p className="text-[13px] font-medium text-foreground/80">Ask anything about this content</p>
+        <p className="text-[13px] font-medium text-foreground/80">
+          Ask anything about this content
+        </p>
         <p className="mt-1 text-[12px] text-muted-foreground/60">
           Answers are grounded in your uploaded material.
         </p>
@@ -302,50 +309,58 @@ function ChatTab({ learningObjectId }: { learningObjectId: string }) {
         <ChatBubble key={i} message={msg} />
       ))}
       {/* Quick actions after last assistant message */}
-      {messages.length > 0 && messages[messages.length - 1].role === "assistant" && !messages[messages.length - 1].isStreaming && (
-        <div className="flex flex-wrap gap-1.5 pl-8">
-          {[
-            { icon: Lightbulb, label: "Give me a hint" },
-            { icon: Route, label: "Walk me through it" },
-            { icon: Feather, label: "Keep it simple" },
-          ].map(({ icon: Icon, label }) => (
-            <button
-              key={label}
-              onClick={() => sendMessage(label)}
-              className="flex items-center gap-1 rounded-full border border-border/30 px-2.5 py-1 text-[11px] text-muted-foreground/60 transition-all hover:border-border/60 hover:text-foreground"
-            >
-              <Icon className="size-3" />
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      {messages.length > 0 &&
+        messages[messages.length - 1].role === "assistant" &&
+        !messages[messages.length - 1].isStreaming && (
+          <div className="flex flex-wrap gap-1.5 pl-8">
+            {[
+              { icon: Lightbulb, label: "Give me a hint" },
+              { icon: Route, label: "Walk me through it" },
+              { icon: Feather, label: "Keep it simple" },
+            ].map(({ icon: Icon, label }) => (
+              <button
+                key={label}
+                onClick={() => sendMessage(label)}
+                className="flex items-center gap-1 rounded-full border border-border/30 px-2.5 py-1 text-[11px] text-muted-foreground/60 transition-all hover:border-border/60 hover:text-foreground"
+              >
+                <Icon className="size-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
     </div>
   );
 }
 
 /* ─── Summary Tab ─── */
 
-function SummaryTab({ data }: { data: any }) {
+function SummaryTab({ data }: { data: ContentData }) {
   let keyPoints: string[] = [];
   if (data.summaryKeyPoints) {
     try {
       keyPoints = JSON.parse(data.summaryKeyPoints);
       if (!Array.isArray(keyPoints)) keyPoints = [];
-    } catch { keyPoints = []; }
+    } catch {
+      keyPoints = [];
+    }
   }
 
   return (
     <div className="px-4 py-4 space-y-4">
       {data.summaryTldr && (
         <div>
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">TL;DR</p>
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">
+            TL;DR
+          </p>
           <p className="text-[13px] leading-relaxed text-foreground/85">{data.summaryTldr}</p>
         </div>
       )}
       {keyPoints.length > 0 && (
         <div>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">Key Points</p>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">
+            Key Points
+          </p>
           <ul className="space-y-1.5">
             {keyPoints.map((p, i) => (
               <li key={i} className="flex gap-2 text-[12px] leading-relaxed text-foreground/75">
@@ -358,7 +373,9 @@ function SummaryTab({ data }: { data: any }) {
       )}
       {data.summaryDeep && (
         <div>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">Full Summary</p>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/50">
+            Full Summary
+          </p>
           <div className="space-y-2 text-[12px] leading-relaxed text-foreground/70">
             {data.summaryDeep.split("\n\n").map((p: string, i: number) => (
               <p key={i}>{p}</p>
@@ -367,7 +384,9 @@ function SummaryTab({ data }: { data: any }) {
         </div>
       )}
       {!data.summaryTldr && !data.summaryDeep && (
-        <p className="py-8 text-center text-[12px] text-muted-foreground/50">No summary available.</p>
+        <p className="py-8 text-center text-[12px] text-muted-foreground/50">
+          No summary available.
+        </p>
       )}
     </div>
   );
@@ -375,14 +394,18 @@ function SummaryTab({ data }: { data: any }) {
 
 /* ─── Concepts Tab ─── */
 
-function ConceptsTab({ data }: { data: any }) {
+function ConceptsTab({ data }: { data: ContentData }) {
   if (data.concepts.length === 0) {
-    return <p className="py-8 text-center text-[12px] text-muted-foreground/50">No concepts extracted yet.</p>;
+    return (
+      <p className="py-8 text-center text-[12px] text-muted-foreground/50">
+        No concepts extracted yet.
+      </p>
+    );
   }
 
   return (
     <div className="px-4 py-4 space-y-1.5">
-      {data.concepts.map((c: any) => (
+      {data.concepts.map((c) => (
         <div key={c.id} className="rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/30">
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-medium text-foreground/85">{c.displayName}</span>
@@ -391,7 +414,9 @@ function ConceptsTab({ data }: { data: any }) {
             )}
           </div>
           {c.definition && (
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">{c.definition}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground/60">
+              {c.definition}
+            </p>
           )}
         </div>
       ))}
@@ -402,9 +427,9 @@ function ConceptsTab({ data }: { data: any }) {
 /* ─── Quizzes Tab ─── */
 
 function QuizzesTab({ learningObjectId }: { learningObjectId: string }) {
-  const { data: questionList, isLoading } = trpc.library.getQuestions.useQuery(
-    { learningObjectId },
-  );
+  const { data: questionList, isLoading } = trpc.library.getQuestions.useQuery({
+    learningObjectId,
+  });
   const submitMutation = trpc.review.submitReview.useMutation();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -480,13 +505,18 @@ function QuizzesTab({ learningObjectId }: { learningObjectId: string }) {
                 disabled={revealed}
                 className={cn(
                   "w-full rounded-lg border px-3 py-2 text-left text-[12px] transition-all",
-                  isRight ? "border-green-500/50 bg-green-500/5 text-green-600 dark:text-green-400"
-                    : isWrong ? "border-red-500/50 bg-red-500/5 text-red-600 dark:text-red-400"
-                    : isSel ? "border-foreground/30 bg-muted/30"
-                    : "border-border/30 hover:border-border/60 hover:bg-muted/20",
+                  isRight
+                    ? "border-green-500/50 bg-green-500/5 text-green-600 dark:text-green-400"
+                    : isWrong
+                      ? "border-red-500/50 bg-red-500/5 text-red-600 dark:text-red-400"
+                      : isSel
+                        ? "border-foreground/30 bg-muted/30"
+                        : "border-border/30 hover:border-border/60 hover:bg-muted/20"
                 )}
               >
-                <span className="mr-1.5 text-muted-foreground/40">{String.fromCharCode(65 + i)}.</span>
+                <span className="mr-1.5 text-muted-foreground/40">
+                  {String.fromCharCode(65 + i)}.
+                </span>
                 {opt}
               </button>
             );
@@ -515,17 +545,21 @@ function QuizzesTab({ learningObjectId }: { learningObjectId: string }) {
         <div className="space-y-3">
           {q.explanation && (
             <div className="rounded-lg bg-muted/20 px-3 py-2">
-              <p className="text-[11px] leading-relaxed text-muted-foreground/70">{q.explanation}</p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                {q.explanation}
+              </p>
             </div>
           )}
-          <p className="text-center text-[10px] text-muted-foreground/40">How well did you know this?</p>
+          <p className="text-center text-[10px] text-muted-foreground/40">
+            How well did you know this?
+          </p>
           <div className="grid grid-cols-4 gap-1.5">
-            {([
+            {[
               { rating: 1 as const, label: "Again", color: "text-red-500" },
               { rating: 2 as const, label: "Hard", color: "text-orange-500" },
               { rating: 3 as const, label: "Good", color: "text-blue-500" },
               { rating: 4 as const, label: "Easy", color: "text-green-500" },
-            ]).map(({ rating, label, color }) => (
+            ].map(({ rating, label, color }) => (
               <button
                 key={rating}
                 onClick={() => handleRate(rating)}
@@ -568,9 +602,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         <div
           className={cn(
             "inline-block rounded-2xl px-3.5 py-2",
-            isUser
-              ? "bg-foreground text-background"
-              : "bg-transparent",
+            isUser ? "bg-foreground text-background" : "bg-transparent"
           )}
         >
           {isUser ? (
@@ -659,7 +691,10 @@ function PersistentChatInput({
         />
         <div className="absolute bottom-1 right-1.5">
           {isLoading ? (
-            <button onClick={stop} className="flex size-6 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted">
+            <button
+              onClick={stop}
+              className="flex size-6 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted"
+            >
               <Square className="size-3" />
             </button>
           ) : (

@@ -1,20 +1,30 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { trpc } from "@/trpc/client";
-import { cn } from "@/lib/utils";
-import {
-  ArrowLeft,
-  Loader2,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Loader2, ZoomIn, ZoomOut, Maximize2, X } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
+
+type GraphNode = {
+  id: string;
+  name: string;
+  definition?: string | null;
+  domain?: string | null;
+  difficulty?: number | null;
+  mastery: number;
+  val: number;
+  x: number;
+  y: number;
+};
+
+type ForceGraphRef = {
+  centerAt: (x: number, y: number, ms: number) => void;
+  zoom: (z?: number, ms?: number) => number;
+  zoomToFit: (ms: number, padding: number) => void;
+} | null;
 
 const MASTERY_COLORS = [
   "#a1a1aa", // 0 - unknown
@@ -27,8 +37,8 @@ const MASTERY_COLORS = [
 
 export default function GraphPage() {
   const { data, isLoading } = trpc.review.getGraphData.useQuery();
-  const graphRef = useRef<any>(null);
-  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const graphRef = useRef<ForceGraphRef>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
   const graphData = {
     nodes: (data?.nodes ?? []).map((n) => ({
@@ -47,32 +57,35 @@ export default function GraphPage() {
     })),
   };
 
-  const handleNodeClick = useCallback((node: any) => {
+  const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
     graphRef.current?.centerAt(node.x, node.y, 500);
     graphRef.current?.zoom(3, 500);
   }, []);
 
-  const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D) => {
-    const r = Math.sqrt(node.val) * 3;
-    const color = MASTERY_COLORS[node.mastery] ?? MASTERY_COLORS[0];
+  const nodeCanvasObject = useCallback(
+    (node: GraphNode, ctx: CanvasRenderingContext2D) => {
+      const r = Math.sqrt(node.val) * 3;
+      const color = MASTERY_COLORS[node.mastery] ?? MASTERY_COLORS[0];
 
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
-    ctx.fill();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
 
-    if (selectedNode?.id === node.id) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+      if (selectedNode?.id === node.id) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
 
-    ctx.fillStyle = "#71717a";
-    ctx.font = "3px Inter, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(node.name, node.x, node.y + r + 5);
-  }, [selectedNode]);
+      ctx.fillStyle = "#71717a";
+      ctx.font = "3px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(node.name, node.x, node.y + r + 5);
+    },
+    [selectedNode]
+  );
 
   if (isLoading) {
     return (
@@ -89,7 +102,9 @@ export default function GraphPage() {
         <p className="mt-1 text-[13px] text-muted-foreground/60">
           Upload content to build your knowledge graph.
         </p>
-        <Link href="/" className="mt-3 text-[13px] text-primary hover:underline">Back to Home</Link>
+        <Link href="/" className="mt-3 text-[13px] text-primary hover:underline">
+          Back to Home
+        </Link>
       </div>
     );
   }
@@ -101,16 +116,27 @@ export default function GraphPage() {
           <ArrowLeft className="size-4" />
         </Link>
         <span className="text-[13px] font-medium">Knowledge Graph</span>
-        <span className="text-[11px] text-muted-foreground/40">{graphData.nodes.length} concepts</span>
+        <span className="text-[11px] text-muted-foreground/40">
+          {graphData.nodes.length} concepts
+        </span>
         <div className="flex-1" />
         <div className="flex gap-1">
-          <button onClick={() => graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 300)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50">
+          <button
+            onClick={() => graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 300)}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50"
+          >
             <ZoomIn className="size-3.5" />
           </button>
-          <button onClick={() => graphRef.current?.zoom(graphRef.current.zoom() / 1.5, 300)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50">
+          <button
+            onClick={() => graphRef.current?.zoom(graphRef.current.zoom() / 1.5, 300)}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50"
+          >
             <ZoomOut className="size-3.5" />
           </button>
-          <button onClick={() => graphRef.current?.zoomToFit(400, 40)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50">
+          <button
+            onClick={() => graphRef.current?.zoomToFit(400, 40)}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted/50"
+          >
             <Maximize2 className="size-3.5" />
           </button>
         </div>
@@ -130,12 +156,17 @@ export default function GraphPage() {
 
         {/* Legend */}
         <div className="absolute bottom-4 left-4 flex gap-3 rounded-lg bg-background/80 backdrop-blur-sm border border-border/20 px-3 py-2">
-          {["Unknown", "Exposed", "Practicing", "Familiar", "Proficient", "Mastered"].map((label, i) => (
-            <div key={label} className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full" style={{ backgroundColor: MASTERY_COLORS[i] }} />
-              <span className="text-[10px] text-muted-foreground/50">{label}</span>
-            </div>
-          ))}
+          {["Unknown", "Exposed", "Practicing", "Familiar", "Proficient", "Mastered"].map(
+            (label, i) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: MASTERY_COLORS[i] }}
+                />
+                <span className="text-[10px] text-muted-foreground/50">{label}</span>
+              </div>
+            )
+          )}
         </div>
 
         {/* Node detail panel */}
@@ -143,19 +174,33 @@ export default function GraphPage() {
           <div className="absolute right-4 top-4 w-72 rounded-xl border border-border/30 bg-background/95 backdrop-blur-sm p-4">
             <div className="flex items-start justify-between">
               <h3 className="text-[14px] font-medium">{selectedNode.name}</h3>
-              <button onClick={() => setSelectedNode(null)} className="text-muted-foreground/40 hover:text-foreground">
+              <button
+                onClick={() => setSelectedNode(null)}
+                className="text-muted-foreground/40 hover:text-foreground"
+              >
                 <X className="size-3.5" />
               </button>
             </div>
             {selectedNode.definition && (
-              <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground/60">{selectedNode.definition}</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground/60">
+                {selectedNode.definition}
+              </p>
             )}
             <div className="mt-3 flex gap-3 text-[11px]">
               <div>
                 <span className="text-muted-foreground/40">Mastery</span>
                 <div className="flex items-center gap-1 mt-0.5">
-                  <span className="size-2 rounded-full" style={{ backgroundColor: MASTERY_COLORS[selectedNode.mastery] }} />
-                  <span className="font-medium">{["Unknown", "Exposed", "Practicing", "Familiar", "Proficient", "Mastered"][selectedNode.mastery]}</span>
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: MASTERY_COLORS[selectedNode.mastery] }}
+                  />
+                  <span className="font-medium">
+                    {
+                      ["Unknown", "Exposed", "Practicing", "Familiar", "Proficient", "Mastered"][
+                        selectedNode.mastery
+                      ]
+                    }
+                  </span>
                 </div>
               </div>
               {selectedNode.difficulty && (

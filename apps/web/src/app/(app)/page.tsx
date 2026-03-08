@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Upload, FileText, Youtube, Sparkles, Search, Loader2 } from "lucide-react";
+import { Plus, FileText, Youtube, Search, Loader2 } from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { UploadDialog } from "@/components/library/upload-dialog";
 import Link from "next/link";
@@ -12,11 +12,11 @@ export default function HomePage() {
   const [search, setSearch] = useState("");
   const { data, isLoading } = trpc.library.list.useQuery(
     { limit: 100, offset: 0 },
-    { refetchInterval: 10_000 },
+    { refetchInterval: 10_000 }
   );
 
   const items = (data?.items ?? []).filter(
-    (i) => !search || i.title.toLowerCase().includes(search.toLowerCase()),
+    (i) => !search || i.title.toLowerCase().includes(search.toLowerCase())
   );
   const hasContent = (data?.items ?? []).length > 0;
 
@@ -77,7 +77,7 @@ export default function HomePage() {
             </div>
           ) : search ? (
             <div className="py-16 text-center">
-              <p className="text-sm text-muted-foreground">No results for "{search}"</p>
+              <p className="text-sm text-muted-foreground">No results for &ldquo;{search}&rdquo;</p>
             </div>
           ) : null}
         </div>
@@ -105,7 +105,7 @@ function ContentCard({ item }: { item: ContentItem }) {
     <div
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl border border-border/30 bg-card transition-all hover:border-border/50 hover:shadow-sm",
-        isReady && "cursor-pointer",
+        isReady && "cursor-pointer"
       )}
     >
       {/* Thumbnail */}
@@ -118,9 +118,7 @@ function ContentCard({ item }: { item: ContentItem }) {
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <h3 className="line-clamp-2 text-[14px] font-medium leading-snug">
-          {item.title}
-        </h3>
+        <h3 className="line-clamp-2 text-[14px] font-medium leading-snug">{item.title}</h3>
 
         {item.summaryTldr && (
           <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
@@ -135,9 +133,7 @@ function ContentCard({ item }: { item: ContentItem }) {
               Processing...
             </span>
           )}
-          {item.status === "failed" && (
-            <span className="text-[11px] text-destructive">Failed</span>
-          )}
+          {item.status === "failed" && <span className="text-[11px] text-destructive">Failed</span>}
           {isReady && item.createdAt && (
             <span className="text-[11px] text-muted-foreground">
               {new Date(item.createdAt).toLocaleDateString(undefined, {
