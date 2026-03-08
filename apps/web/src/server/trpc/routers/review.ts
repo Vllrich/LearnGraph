@@ -346,32 +346,15 @@ export const reviewRouter = createTRPCRouter({
 
       if (!concept) return { success: false, feedback: "Concept not found." };
 
-      const { generateObject } = await import("ai");
-      const { anthropic } = await import("@ai-sdk/anthropic");
+      const { evaluateExplainBackResponse } = await import("@repo/ai");
 
-      const result = await generateObject({
-        model: anthropic("claude-sonnet-4-5-20250514"),
-        schema: z.object({
-          accuracy: z.number().min(0).max(100),
-          completeness: z.number().min(0).max(100),
-          clarity: z.number().min(0).max(100),
-          overallScore: z.number().min(0).max(100),
-          strengths: z.array(z.string()),
-          improvements: z.array(z.string()),
-          misconceptions: z.array(z.string()),
-          feedback: z.string(),
-        }),
-        prompt: `Evaluate this student's explanation of the concept "${concept.name}".
+      const evaluation = await evaluateExplainBackResponse(
+        concept.name,
+        concept.definition,
+        input.explanation
+      );
 
-Reference definition: ${concept.definition ?? "No definition available."}
-
-Student's explanation:
-${input.explanation}
-
-Score on accuracy (factual correctness), completeness (covers key aspects), and clarity (understandable to a beginner). Provide specific strengths, areas for improvement, and any misconceptions detected. Give constructive, encouraging feedback.`,
-      });
-
-      const isSuccess = result.object.overallScore >= 60;
+      const isSuccess = evaluation.overallScore >= 60;
       const newMastery = computeMasteryExplainBack(state?.masteryLevel ?? 0, isSuccess);
 
       if (state) {
@@ -395,7 +378,7 @@ Score on accuracy (factual correctness), completeness (covers key aspects), and 
 
       return {
         success: isSuccess,
-        evaluation: result.object,
+        evaluation,
         newMastery,
       };
     }),

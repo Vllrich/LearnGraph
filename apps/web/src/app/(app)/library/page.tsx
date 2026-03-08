@@ -1,13 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FileText, Youtube, Search, Loader2, Trash2, Grid3x3, List } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Youtube,
+  Search,
+  Loader2,
+  Trash2,
+  Grid3x3,
+  List,
+  FileType2,
+} from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { UploadDialog } from "@/components/library/upload-dialog";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 type ViewMode = "grid" | "list";
 
 export default function LibraryPage() {
@@ -20,10 +31,11 @@ export default function LibraryPage() {
     { refetchInterval: 10_000 }
   );
 
+  const utils = trpc.useUtils();
   const deleteMutation = trpc.library.delete.useMutation({
     onSuccess: () => utils.library.list.invalidate(),
+    onError: (err) => toast.error(err.message ?? "Failed to delete"),
   });
-  const utils = trpc.useUtils();
 
   const items = (data?.items ?? []).filter(
     (i) => !search || i.title.toLowerCase().includes(search.toLowerCase())
@@ -147,13 +159,15 @@ function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: str
   const card = (
     <div
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border border-border/30 bg-card transition-all hover:border-border/50 hover:shadow-sm",
+        "group relative flex flex-col overflow-hidden rounded-xl border border-border/40 shadow-sm bg-card transition-all hover:border-border/60 hover:shadow-md",
         isReady && "cursor-pointer"
       )}
     >
       <div className="flex h-28 items-center justify-center bg-muted/30">
         {item.sourceType === "youtube" ? (
-          <Youtube className="size-8 text-muted-foreground/20" />
+          <Youtube className="size-8 text-red-500/40" />
+        ) : item.sourceType === "pdf" ? (
+          <FileType2 className="size-8 text-red-600/40" />
         ) : (
           <FileText className="size-8 text-muted-foreground/20" />
         )}
@@ -206,7 +220,10 @@ function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: str
       ) : (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-background/90 backdrop-blur-sm"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
         >
           <p className="text-sm font-medium">Delete this material?</p>
           <p className="text-[11px] text-muted-foreground px-6 text-center">
@@ -214,13 +231,21 @@ function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: str
           </p>
           <div className="mt-1 flex gap-2">
             <button
-              onClick={() => setConfirming(false)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setConfirming(false);
+              }}
               className="rounded-lg border border-border/50 px-3 py-1.5 text-xs hover:bg-muted"
             >
               Cancel
             </button>
             <button
-              onClick={() => onDelete(item.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onDelete(item.id);
+              }}
               className="flex items-center gap-1 rounded-lg bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:bg-destructive/90"
             >
               <Trash2 className="size-3" />
@@ -252,7 +277,14 @@ function LibraryListItem({
   const [confirming, setConfirming] = useState(false);
   const isReady = item.status === "ready";
   const isProcessing = item.status === "processing";
-  const Icon = item.sourceType === "youtube" ? Youtube : FileText;
+  const Icon =
+    item.sourceType === "youtube" ? Youtube : item.sourceType === "pdf" ? FileType2 : FileText;
+  const iconColor =
+    item.sourceType === "youtube"
+      ? "text-red-500/80"
+      : item.sourceType === "pdf"
+        ? "text-red-600/80"
+        : "text-muted-foreground/50";
 
   const row = (
     <div
@@ -264,17 +296,28 @@ function LibraryListItem({
       {confirming ? (
         <div
           className="absolute inset-0 flex items-center justify-center gap-3 bg-background/90 backdrop-blur-sm px-4"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
         >
           <p className="text-sm font-medium">Delete this material?</p>
           <button
-            onClick={() => setConfirming(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              setConfirming(false);
+            }}
             className="rounded-lg border border-border/50 px-3 py-1.5 text-xs hover:bg-muted"
           >
             Cancel
           </button>
           <button
-            onClick={() => onDelete(item.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDelete(item.id);
+            }}
             className="flex items-center gap-1 rounded-lg bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:bg-destructive/90"
           >
             <Trash2 className="size-3" />
@@ -283,7 +326,7 @@ function LibraryListItem({
         </div>
       ) : null}
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/40">
-        <Icon className="size-4 text-muted-foreground/50" />
+        <Icon className={cn("size-4", iconColor)} />
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="truncate text-[13px] font-medium">{item.title}</h3>

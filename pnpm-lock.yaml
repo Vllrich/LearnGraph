@@ -56,6 +56,9 @@ importers:
       '@trpc/server':
         specifier: ^11.12.0
         version: 11.12.0(typescript@5.9.3)
+      ai:
+        specifier: ^4.3.19
+        version: 4.3.19(react@19.2.3)(zod@3.25.76)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

@@ -38,7 +38,7 @@ export const analyticsRouter = createTRPCRouter({
           ROUND(COUNT(CASE WHEN ${reviewLog.rating} >= 3 THEN 1 END)::numeric / NULLIF(COUNT(*), 0) * 100, 1)::float as accuracy
         FROM ${reviewLog}
         WHERE ${reviewLog.userId} = ${ctx.userId}
-          AND ${reviewLog.createdAt} >= ${since}
+          AND ${reviewLog.createdAt} >= ${since.toISOString()}
           ${input?.conceptId ? sql`AND ${reviewLog.conceptId} = ${input.conceptId}` : sql``}
         GROUP BY review_date
         ORDER BY review_date ASC
@@ -74,7 +74,7 @@ export const analyticsRouter = createTRPCRouter({
         COALESCE(AVG(${reviewLog.responseTimeMs}), 0)::int as avg_time_ms
       FROM ${reviewLog}
       WHERE ${reviewLog.userId} = ${ctx.userId}
-        AND ${reviewLog.createdAt} >= ${last30Days}
+        AND ${reviewLog.createdAt} >= ${last30Days.toISOString()}
       GROUP BY week
       ORDER BY week ASC
     `);
@@ -200,7 +200,7 @@ export const analyticsRouter = createTRPCRouter({
         and(
           eq(reviewLog.userId, ctx.userId),
           gte(reviewLog.createdAt, twoWeeksAgo),
-          sql`${reviewLog.createdAt} < ${lastWeek}`
+          sql`${reviewLog.createdAt} < ${lastWeek.toISOString()}`
         )
       );
 

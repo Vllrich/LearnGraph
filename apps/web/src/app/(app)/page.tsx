@@ -7,8 +7,6 @@ import {
   Loader2,
   Zap,
   Flame,
-  Brain,
-  Activity,
   ArrowUp,
   ArrowRight,
   GraduationCap,
@@ -16,9 +14,6 @@ import {
   Trash2,
   Target,
   Calendar,
-  Trophy,
-  AlertTriangle,
-  Timer,
 } from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { UploadDialog } from "@/components/library/upload-dialog";
@@ -27,8 +22,6 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import type { GoalType, LearnerLevel } from "@repo/shared";
-
-const MASTERY_COLORS = ["#a1a1aa", "#60a5fa", "#a78bfa", "#fbbf24", "#34d399", "#10b981"];
 
 const POPULAR_TOPICS = [
   { title: "Python", subtitle: "Beginner friendly" },
@@ -95,9 +88,6 @@ export default function HomePage() {
   const { data: activeGoals } = trpc.goals.getActive.useQuery();
   const { data: stats } = trpc.review.getStats.useQuery();
   const { data: queue } = trpc.review.getDailyQueue.useQuery({ mode: "standard" });
-  const { data: errorLog } = trpc.review.getErrorLog.useQuery();
-  const { data: streakData } = trpc.gamification.getStreakAndXp.useQuery();
-  const { data: gaps } = trpc.gaps.detectGaps.useQuery({});
 
   const deleteGoal = trpc.goals.delete.useMutation({
     onSuccess: () => {
@@ -117,9 +107,6 @@ export default function HomePage() {
       Number(mastery.m4) +
       Number(mastery.m5)
     : 0;
-  const healthyConcepts = mastery ? Number(mastery.m4) + Number(mastery.m5) : 0;
-  const knowledgeHealth =
-    totalConcepts > 0 ? Math.round((healthyConcepts / totalConcepts) * 100) : 0;
   const dueCount = (queue?.totalDue ?? 0) + (queue?.totalNew ?? 0);
 
   const startIntake = useCallback((topic: string) => {
@@ -518,132 +505,6 @@ export default function HomePage() {
           </div>
         )}
       </div>
-
-      {/* Stats row */}
-      {totalConcepts > 0 && intakeStep === "idle" && (
-        <div className="px-4 lg:px-8">
-          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-5">
-            <Link
-              href="/review"
-              className="group rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <Zap className="size-4 text-green-500" />
-                <span className="text-[11px] text-muted-foreground/50">Due Today</span>
-              </div>
-              <p className="mt-1 text-xl font-bold">{dueCount}</p>
-            </Link>
-            <div className="rounded-xl border border-border/30 bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Flame
-                  className={cn(
-                    "size-4",
-                    streak > 0 ? "text-amber-500" : "text-muted-foreground/30"
-                  )}
-                />
-                <span className="text-[11px] text-muted-foreground/50">Streak</span>
-              </div>
-              <p className="mt-1 text-xl font-bold">{streak}d</p>
-            </div>
-            <div className="rounded-xl border border-border/30 bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Brain className="size-4 text-primary" />
-                <span className="text-[11px] text-muted-foreground/50">Concepts</span>
-              </div>
-              <p className="mt-1 text-xl font-bold">{totalConcepts}</p>
-            </div>
-            <div className="rounded-xl border border-border/30 bg-card px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Activity className="size-4 text-blue-500" />
-                <span className="text-[11px] text-muted-foreground/50">Health</span>
-              </div>
-              <p className="mt-1 text-xl font-bold">{knowledgeHealth}%</p>
-              <div className="mt-1 flex gap-0.5">
-                {mastery &&
-                  [mastery.m0, mastery.m1, mastery.m2, mastery.m3, mastery.m4, mastery.m5].map(
-                    (v, i) => (
-                      <div
-                        key={i}
-                        className="h-1 rounded-full"
-                        style={{
-                          backgroundColor: MASTERY_COLORS[i],
-                          width: `${totalConcepts > 0 ? (Number(v) / totalConcepts) * 100 : 0}%`,
-                          minWidth: Number(v) > 0 ? "3px" : "0",
-                        }}
-                      />
-                    )
-                  )}
-              </div>
-            </div>
-            <Link
-              href="/exam"
-              className="group rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <GraduationCap className="size-4 text-violet-500" />
-                <span className="text-[11px] text-muted-foreground/50">Practice Exam</span>
-              </div>
-              <p className="mt-1 text-[13px] font-medium text-muted-foreground">
-                {(errorLog?.totalErrors ?? 0) > 0
-                  ? `${errorLog!.totalErrors} mistakes to review`
-                  : "Test yourself →"}
-              </p>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Quick actions row */}
-      {totalConcepts > 0 && intakeStep === "idle" && (
-        <div className="mt-4 px-4 lg:px-8">
-          <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-4">
-            <Link
-              href="/review"
-              className="group flex items-center gap-3 rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-violet-500/30 hover:shadow-sm"
-            >
-              <Timer className="size-5 text-violet-500" />
-              <div>
-                <p className="text-[13px] font-medium">Quick 5</p>
-                <p className="text-[11px] text-muted-foreground/50">5-card micro session</p>
-              </div>
-            </Link>
-            {(gaps?.totalGaps ?? 0) > 0 && (
-              <Link
-                href="/gaps"
-                className="group flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 transition-all hover:border-amber-500/40"
-              >
-                <AlertTriangle className="size-5 text-amber-500" />
-                <div>
-                  <p className="text-[13px] font-medium">{gaps!.totalGaps} Gaps</p>
-                  <p className="text-[11px] text-muted-foreground/50">Knowledge gaps found</p>
-                </div>
-              </Link>
-            )}
-            <Link
-              href="/achievements"
-              className="group flex items-center gap-3 rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
-            >
-              <Trophy className="size-5 text-amber-500" />
-              <div>
-                <p className="text-[13px] font-medium">
-                  {(streakData?.totalXp ?? 0).toLocaleString()} XP
-                </p>
-                <p className="text-[11px] text-muted-foreground/50">View achievements</p>
-              </div>
-            </Link>
-            <Link
-              href="/journal"
-              className="group flex items-center gap-3 rounded-xl border border-border/30 bg-card px-4 py-3 transition-all hover:border-primary/30 hover:shadow-sm"
-            >
-              <Brain className="size-5 text-primary" />
-              <div>
-                <p className="text-[13px] font-medium">Journal</p>
-                <p className="text-[11px] text-muted-foreground/50">Weekly learning summary</p>
-              </div>
-            </Link>
-          </div>
-        </div>
-      )}
 
       <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} defaultTab={uploadTab} />
     </div>

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { trpc } from "@/trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/trpc/routers/_app";
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
   ArrowUp,
@@ -26,6 +27,16 @@ import {
   FileAudio,
   Image as ImageIcon,
   FileType2,
+  MessageSquare,
+  Layers,
+  CircleHelp,
+  AlignLeft,
+  GitFork,
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -37,13 +48,57 @@ type ContentData = NonNullable<RouterOutput["library"]["getById"]>;
 
 type Props = { params: Promise<{ id: string }> };
 
-const PANEL_TABS = ["Chat", "Flashcards", "Quizzes", "Summary", "Concepts", "Related"] as const;
-type PanelTab = (typeof PANEL_TABS)[number];
+const PANEL_TABS = [
+  { id: "Chat" as const, icon: MessageSquare, label: "Chat" },
+  { id: "Flashcards" as const, icon: Layers, label: "Flashcards" },
+  { id: "Quizzes" as const, icon: CircleHelp, label: "Quiz" },
+  { id: "Summary" as const, icon: AlignLeft, label: "Summary" },
+  { id: "Concepts" as const, icon: Lightbulb, label: "Concepts" },
+  { id: "Related" as const, icon: GitFork, label: "Related" },
+];
+type PanelTab = (typeof PANEL_TABS)[number]["id"];
+type SelectionActionType = "explain" | "chat" | "quiz" | "flashcard" | "copy" | "read";
+type MentorChatHandlers = ReturnType<typeof useMentorChat>;
 
 export default function ContentDetailPage({ params }: Props) {
   const { id } = use(params);
   const [panelOpen, setPanelOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<PanelTab>("Chat");
+  const mentorChat = useMentorChat(id);
+
+  const handleSelectionAction = useCallback(
+    (action: SelectionActionType, text: string) => {
+      switch (action) {
+        case "explain":
+          setPanelOpen(true);
+          setActiveTab("Chat");
+          mentorChat.sendMessage(`Explain this passage in simple terms:\n\n"${text}"`);
+          break;
+        case "chat":
+          setPanelOpen(true);
+          setActiveTab("Chat");
+          mentorChat.sendMessage(`Regarding this passage:\n\n"${text}"`);
+          break;
+        case "quiz":
+          setPanelOpen(true);
+          setActiveTab("Quizzes");
+          break;
+        case "flashcard":
+          setPanelOpen(true);
+          setActiveTab("Flashcards");
+          break;
+        case "copy":
+          navigator.clipboard.writeText(text).catch(() => {});
+          import("sonner").then(({ toast }) => toast.success("Copied to clipboard"));
+          break;
+        case "read":
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+          break;
+      }
+    },
+    [mentorChat]
+  );
 
   const { data, isLoading, error } = trpc.library.getById.useQuery(
     { id },
@@ -52,6 +107,11 @@ export default function ContentDetailPage({ params }: Props) {
   const initMutation = trpc.review.initConceptStates.useMutation();
   const initRef = useRef(false);
   const toastRef = useRef(false);
+  const panelScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
+  }, [activeTab]);
 
   useEffect(() => {
     if (data?.status === "ready" && data.concepts.length > 0 && !initRef.current) {
@@ -152,7 +212,7 @@ export default function ContentDetailPage({ params }: Props) {
                 Extracting content — this usually takes 1–3 minutes.
               </div>
             )}
-            <ContentViewer data={data} />
+            <ContentViewer data={data} onSelectionAction={handleSelectionAction} />
           </div>
         </div>
 
@@ -161,40 +221,137 @@ export default function ContentDetailPage({ params }: Props) {
 
         {/* Right: AI Panel */}
         {panelOpen && data.status === "ready" && (
-          <div className="flex w-[400px] shrink-0 flex-col">
+          <div className="flex w-[520px] shrink-0 flex-col">
             {/* Panel tabs */}
-            <div className="flex h-10 shrink-0 items-center gap-4 border-b border-border/20 px-4">
-              {PANEL_TABS.map((tab) => (
+            <div className="flex h-10 shrink-0 items-center border-b border-border/20 px-2 gap-0.5">
+              {PANEL_TABS.map(({ id: tab, icon: TabIcon, label }) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "relative text-[13px] transition-colors",
+                    "relative flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors",
                     activeTab === tab
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground/60 hover:text-foreground"
+                      ? "bg-muted/60 text-foreground"
+                      : "text-muted-foreground/60 hover:bg-muted/30 hover:text-foreground"
                   )}
                 >
-                  <span className="flex items-center gap-1.5">
-                    {activeTab === tab && <span className="size-1.5 rounded-full bg-green-500" />}
-                    {tab}
-                  </span>
+                  <TabIcon className="size-3.5 shrink-0" />
+                  {label}
+                  {activeTab === tab && (
+                    <span className="absolute bottom-0 left-1/2 h-0.5 w-4 -translate-x-1/2 rounded-full bg-green-500" />
+                  )}
                 </button>
               ))}
             </div>
 
             {/* Panel content */}
             <div className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto">
-                <TabContent tab={activeTab} data={data} learningObjectId={id} />
+              <div ref={panelScrollRef} className="flex-1 overflow-y-auto">
+                <TabContent
+                  tab={activeTab}
+                  data={data}
+                  learningObjectId={id}
+                  mentorChat={mentorChat}
+                />
               </div>
 
               {/* Always-visible chat input */}
-              <PersistentChatInput learningObjectId={id} onFocusChat={() => setActiveTab("Chat")} />
+              <PersistentChatInput
+                learningObjectId={id}
+                onFocusChat={() => setActiveTab("Chat")}
+                mentorChat={mentorChat}
+              />
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Selection Menu ─── */
+
+const SELECTION_ACTIONS: Array<{
+  id: SelectionActionType;
+  icon: LucideIcon;
+  label: string;
+  color: string;
+}> = [
+  { id: "explain", icon: Sparkles, label: "Explain", color: "text-amber-500" },
+  { id: "chat", icon: MessageSquare, label: "Chat", color: "text-blue-500" },
+  { id: "quiz", icon: CircleHelp, label: "Quiz", color: "text-violet-500" },
+  { id: "flashcard", icon: Layers, label: "Flashcards", color: "text-emerald-500" },
+  { id: "copy", icon: Copy, label: "Copy", color: "text-muted-foreground" },
+  { id: "read", icon: Volume2, label: "Read aloud", color: "text-rose-400" },
+];
+
+function SelectionMenu({
+  position,
+  onAction,
+  onClose,
+}: {
+  position: { top: number; left: number };
+  onAction: (action: SelectionActionType) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [adjustedLeft, setAdjustedLeft] = useState(position.left);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const menuWidth = ref.current.offsetWidth;
+    const halfMenu = menuWidth / 2;
+    const clamped = Math.max(
+      halfMenu + 8,
+      Math.min(position.left, window.innerWidth - halfMenu - 8)
+    );
+    setAdjustedLeft(clamped);
+    requestAnimationFrame(() => setVisible(true));
+  }, [position.left]);
+
+  const above = position.top > 64;
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        top: above ? position.top - 48 : position.top + 12,
+        left: adjustedLeft,
+        transform: "translateX(-50%)",
+      }}
+      className={cn(
+        "pointer-events-auto fixed z-50 flex items-center gap-0.5 rounded-xl border border-border/40 bg-popover px-1 py-0.5 shadow-2xl shadow-black/15 ring-1 ring-black/3 backdrop-blur-xl transition-all duration-150",
+        visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
+      )}
+    >
+      {SELECTION_ACTIONS.map(({ id, icon: Icon, label, color }) => (
+        <button
+          key={id}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={() => {
+            onAction(id);
+            onClose();
+          }}
+          className="group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground/70 transition-all hover:bg-accent hover:text-foreground"
+        >
+          <Icon
+            className={cn("size-3.5 shrink-0 transition-colors group-hover:scale-110", color)}
+          />
+          <span>{label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -208,7 +365,43 @@ function extractVideoId(url: string): string | null {
   return match ? match[1] : null;
 }
 
-function ContentViewer({ data }: { data: ContentData }) {
+function ContentViewer({
+  data,
+  onSelectionAction,
+}: {
+  data: ContentData;
+  onSelectionAction: (action: SelectionActionType, text: string) => void;
+}) {
+  const [selectionMenu, setSelectionMenu] = useState<{
+    text: string;
+    position: { top: number; left: number };
+  } | null>(null);
+
+  const handlePointerUp = useCallback(() => {
+    // Small defer so the browser finalises the selection range
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      if (text.length < 2) {
+        setSelectionMenu(null);
+        return;
+      }
+      if (!sel || sel.rangeCount === 0) return;
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setSelectionMenu({
+        text,
+        position: { top: rect.top, left: rect.left + rect.width / 2 },
+      });
+    }, 10);
+  }, []);
+
+  const handleAction = useCallback(
+    (action: SelectionActionType) => {
+      onSelectionAction(action, selectionMenu?.text ?? "");
+    },
+    [onSelectionAction, selectionMenu]
+  );
+
   let keyPoints: string[] = [];
   if (data.summaryKeyPoints) {
     try {
@@ -231,66 +424,78 @@ function ContentViewer({ data }: { data: ContentData }) {
     data.sourceType === "youtube" && data.sourceUrl ? extractVideoId(data.sourceUrl) : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-8 font-serif">
-      {videoId && (
-        <div className="mb-6 aspect-video w-full overflow-hidden rounded-xl">
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}`}
-            title={data.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="size-full border-0"
-            loading="lazy"
-            sandbox="allow-scripts allow-same-origin allow-presentation"
-          />
-        </div>
+    <div className="relative" onPointerUp={handlePointerUp}>
+      {selectionMenu && (
+        <SelectionMenu
+          position={selectionMenu.position}
+          onAction={handleAction}
+          onClose={() => setSelectionMenu(null)}
+        />
       )}
+      <div className="mx-auto max-w-3xl px-8 py-8 font-serif">
+        {videoId && (
+          <div className="mb-6 aspect-video w-full overflow-hidden rounded-xl">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+              title={data.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="size-full border-0"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+            />
+          </div>
+        )}
 
-      {data.summaryTldr && (
-        <p className="mb-6 font-sans text-[15px] leading-relaxed text-foreground/80">
-          {data.summaryTldr}
-        </p>
-      )}
+        {data.summaryTldr && (
+          <p className="mb-6 font-sans text-[15px] leading-relaxed text-foreground/80">
+            {data.summaryTldr}
+          </p>
+        )}
 
-      {keyPoints.length > 0 && (
-        <div className="mb-8 border-l-2 border-primary/30 pl-4">
-          {keyPoints.map((point, i) => (
-            <p key={i} className="mb-1.5 font-sans text-[13px] leading-relaxed text-foreground/70">
-              • {point}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {data.summaryDeep && (
-        <div className="mb-8 space-y-4 text-[15px] leading-[1.8] text-foreground/85">
-          {data.summaryDeep.split("\n\n").map((p: string, i: number) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
-      )}
-
-      {data.chunks.length > 0 && (
-        <div className="space-y-8 border-t border-border/20 pt-8">
-          {data.chunks.map((chunk) => (
-            <div key={chunk.id}>
-              {chunk.sectionTitle && (
-                <h3 className="mb-2 font-sans text-[14px] font-semibold text-primary/80">
-                  {chunk.sectionTitle}
-                </h3>
-              )}
-              <p className="whitespace-pre-wrap text-[14px] leading-[1.75] text-foreground/75">
-                {chunk.content}
+        {keyPoints.length > 0 && (
+          <div className="mb-8 border-l-2 border-primary/30 pl-4">
+            {keyPoints.map((point, i) => (
+              <p
+                key={i}
+                className="mb-1.5 font-sans text-[13px] leading-relaxed text-foreground/70"
+              >
+                • {point}
               </p>
-              {chunk.pageNumber != null && (
-                <p className="mt-1.5 font-sans text-[11px] text-muted-foreground/40">
-                  Page {chunk.pageNumber}
+            ))}
+          </div>
+        )}
+
+        {data.summaryDeep && (
+          <div className="mb-8 space-y-4 text-[15px] leading-[1.8] text-foreground/85">
+            {data.summaryDeep.split("\n\n").map((p: string, i: number) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+        )}
+
+        {data.chunks.length > 0 && (
+          <div className="space-y-8 border-t border-border/20 pt-8">
+            {data.chunks.map((chunk) => (
+              <div key={chunk.id}>
+                {chunk.sectionTitle && (
+                  <h3 className="mb-2 font-sans text-[14px] font-semibold text-primary/80">
+                    {chunk.sectionTitle}
+                  </h3>
+                )}
+                <p className="whitespace-pre-wrap text-[14px] leading-[1.75] text-foreground/75">
+                  {chunk.content}
                 </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                {chunk.pageNumber != null && (
+                  <p className="mt-1.5 font-sans text-[11px] text-muted-foreground/40">
+                    Page {chunk.pageNumber}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -301,14 +506,16 @@ function TabContent({
   tab,
   data,
   learningObjectId,
+  mentorChat,
 }: {
   tab: PanelTab;
   data: ContentData;
   learningObjectId: string;
+  mentorChat: MentorChatHandlers;
 }) {
   switch (tab) {
     case "Chat":
-      return <ChatTab learningObjectId={learningObjectId} />;
+      return <ChatTab learningObjectId={learningObjectId} mentorChat={mentorChat} />;
     case "Summary":
       return <SummaryTab data={data} />;
     case "Concepts":
@@ -318,7 +525,7 @@ function TabContent({
     case "Related":
       return <RelatedContentTab learningObjectId={learningObjectId} />;
     case "Flashcards":
-      return <PlaceholderTab label="Flashcards" desc="Flashcard generation coming soon." />;
+      return <FlashcardsTab data={data} learningObjectId={learningObjectId} />;
     default:
       return null;
   }
@@ -326,8 +533,14 @@ function TabContent({
 
 /* ─── Chat Tab ─── */
 
-function ChatTab({ learningObjectId }: { learningObjectId: string }) {
-  const { messages, sendMessage, loadConversation } = useMentorChat(learningObjectId);
+function ChatTab({
+  learningObjectId,
+  mentorChat,
+}: {
+  learningObjectId: string;
+  mentorChat: MentorChatHandlers;
+}) {
+  const { messages, sendMessage, loadConversation } = mentorChat;
   const { data: conversations } = trpc.mentor.listConversations.useQuery();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -780,6 +993,251 @@ function RelatedContentTab({ learningObjectId }: { learningObjectId: string }) {
   );
 }
 
+/* ─── Flashcards Tab ─── */
+
+const DIFFICULTY_LABEL: Record<number, string> = {
+  1: "Beginner",
+  2: "Basic",
+  3: "Intermediate",
+  4: "Advanced",
+  5: "Expert",
+};
+
+function FlashcardsTab({
+  data,
+  learningObjectId,
+}: {
+  data: ContentData;
+  learningObjectId: string;
+}) {
+  const submitMutation = trpc.review.submitReview.useMutation();
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [rated, setRated] = useState<Record<number, boolean>>({});
+
+  const cards = data.concepts.filter((c) => c.definition);
+
+  if (cards.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+        <Layers className="mb-3 size-5 text-muted-foreground/30" />
+        <p className="text-[13px] font-medium text-foreground/70">No flashcards yet</p>
+        <p className="mt-1 text-[12px] text-muted-foreground/50">
+          Flashcards are generated from extracted concepts. Check back once ingestion completes.
+        </p>
+      </div>
+    );
+  }
+
+  const card = cards[currentIdx]!;
+  const totalRated = Object.keys(rated).length;
+  const progress = Math.round((totalRated / cards.length) * 100);
+
+  const goTo = (idx: number) => {
+    setCurrentIdx(idx);
+    setFlipped(false);
+  };
+
+  const handleRate = async (rating: 1 | 2 | 3 | 4) => {
+    setRated((prev) => ({ ...prev, [currentIdx]: true }));
+    try {
+      await submitMutation.mutateAsync({
+        conceptId: card.id,
+        rating,
+        isCorrect: rating >= 3,
+      });
+    } catch {
+      /* non-blocking */
+    }
+    const next = currentIdx + 1 < cards.length ? currentIdx + 1 : currentIdx;
+    goTo(next);
+  };
+
+  const ratingButtons = [
+    {
+      rating: 1 as const,
+      label: "Again",
+      color: "text-red-500",
+      border: "hover:border-red-500/40",
+    },
+    {
+      rating: 2 as const,
+      label: "Hard",
+      color: "text-orange-500",
+      border: "hover:border-orange-500/40",
+    },
+    {
+      rating: 3 as const,
+      label: "Good",
+      color: "text-blue-500",
+      border: "hover:border-blue-500/40",
+    },
+    {
+      rating: 4 as const,
+      label: "Easy",
+      color: "text-green-500",
+      border: "hover:border-green-500/40",
+    },
+  ];
+
+  const allDone = totalRated === cards.length;
+
+  if (allDone) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+        <CheckCircle2 className="mb-3 size-6 text-green-500/70" />
+        <p className="text-[14px] font-semibold text-foreground/85">Session complete!</p>
+        <p className="mt-1 text-[12px] text-muted-foreground/60">
+          You reviewed all {cards.length} flashcards.
+        </p>
+        <button
+          onClick={() => {
+            setRated({});
+            goTo(0);
+          }}
+          className="mt-4 flex items-center gap-1.5 rounded-full border border-border/40 px-4 py-1.5 text-[12px] text-muted-foreground/70 transition-all hover:border-border/70 hover:text-foreground"
+        >
+          <RotateCcw className="size-3.5" />
+          Study again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col px-4 py-4">
+      {/* Progress bar */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex-1 h-1 rounded-full bg-muted/40 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-green-500/60 transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <span className="text-[10px] tabular-nums text-muted-foreground/40">
+          {totalRated}/{cards.length}
+        </span>
+      </div>
+
+      {/* Card */}
+      <div
+        className="relative flex-1 cursor-pointer"
+        style={{ perspective: "1000px" }}
+        onClick={() => setFlipped((f) => !f)}
+      >
+        <div
+          className="relative h-full w-full transition-transform duration-500"
+          style={{
+            transformStyle: "preserve-3d",
+            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          }}
+        >
+          {/* Front */}
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border/30 bg-muted/20 px-6 py-8"
+            style={{ backfaceVisibility: "hidden" }}
+          >
+            <span className="mb-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+              Concept
+            </span>
+            <p className="text-center text-[18px] font-semibold leading-snug text-foreground/90">
+              {card.displayName}
+            </p>
+            {card.difficultyLevel != null && (
+              <span className="mt-4 rounded-full bg-muted/50 px-2.5 py-0.5 text-[10px] text-muted-foreground/50">
+                {DIFFICULTY_LABEL[card.difficultyLevel] ?? `Level ${card.difficultyLevel}`}
+              </span>
+            )}
+            <p className="mt-6 text-[11px] text-muted-foreground/35">Tap to reveal definition</p>
+          </div>
+
+          {/* Back */}
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border/30 bg-card px-6 py-8"
+            style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+          >
+            <span className="mb-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+              Definition
+            </span>
+            <p className="text-center text-[13px] leading-relaxed text-foreground/80">
+              {card.definition}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="mt-4 space-y-3">
+        {flipped ? (
+          <>
+            <p className="text-center text-[10px] text-muted-foreground/40">
+              How well did you know this?
+            </p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {ratingButtons.map(({ rating, label, color, border }) => (
+                <button
+                  key={rating}
+                  onClick={() => handleRate(rating)}
+                  disabled={submitMutation.isPending}
+                  className={cn(
+                    "rounded-xl border border-border/30 py-2 text-center transition-all hover:bg-muted/20",
+                    border
+                  )}
+                >
+                  <p className={cn("text-[11px] font-semibold", color)}>{label}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={() => setFlipped(true)}
+            className="w-full rounded-xl bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90"
+          >
+            Reveal
+          </button>
+        )}
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => goTo(Math.max(0, currentIdx - 1))}
+            disabled={currentIdx === 0}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground/40 transition-colors hover:text-foreground disabled:opacity-20"
+          >
+            <ChevronLeft className="size-3.5" />
+            Prev
+          </button>
+          <div className="flex gap-1">
+            {cards.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={cn(
+                  "size-1.5 rounded-full transition-all",
+                  i === currentIdx
+                    ? "bg-foreground/70 scale-125"
+                    : rated[i]
+                      ? "bg-green-500/50"
+                      : "bg-border/50 hover:bg-border/80"
+                )}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => goTo(Math.min(cards.length - 1, currentIdx + 1))}
+            disabled={currentIdx === cards.length - 1}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground/40 transition-colors hover:text-foreground disabled:opacity-20"
+          >
+            Next
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Placeholder Tab ─── */
 
 function PlaceholderTab({ label, desc }: { label: string; desc: string }) {
@@ -869,13 +1327,14 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 /* ─── Persistent Chat Input (always at bottom of right panel) ─── */
 
 function PersistentChatInput({
-  learningObjectId,
   onFocusChat,
+  mentorChat,
 }: {
   learningObjectId: string;
   onFocusChat: () => void;
+  mentorChat: MentorChatHandlers;
 }) {
-  const { isLoading, sendMessage, stop } = useMentorChat(learningObjectId);
+  const { isLoading, sendMessage, stop } = mentorChat;
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -955,7 +1414,7 @@ function LoadingSkeleton() {
           </div>
         </div>
         <div className="w-px bg-border/30" />
-        <div className="w-[400px] p-4">
+        <div className="w-[520px] p-4">
           <div className="flex gap-4 mb-6">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-3.5 w-14 rounded bg-muted/40 animate-pulse" />
