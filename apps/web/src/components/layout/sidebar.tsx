@@ -2,19 +2,44 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, BookOpen, MessageCircle, Zap, Target, BarChart3, Globe } from "lucide-react";
+import {
+  Home,
+  BookOpen,
+  MessageCircle,
+  Zap,
+  Target,
+  BarChart3,
+  Globe,
+  GraduationCap,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/library", label: "Library", icon: BookOpen },
-  { href: "/mentor", label: "Mentor", icon: MessageCircle },
-  { href: "/review", label: "Review", icon: Zap },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/graph", label: "Graph", icon: Globe },
-  { href: "/stats", label: "Progress", icon: BarChart3 },
+const NAV_CATEGORIES = [
+  {
+    label: "Learn",
+    items: [
+      { href: "/", label: "Home", icon: Home },
+      { href: "/library", label: "Library", icon: BookOpen },
+      { href: "/mentor", label: "Mentor", icon: MessageCircle },
+      { href: "/goals", label: "Goals", icon: Target },
+    ],
+  },
+  {
+    label: "Practice",
+    items: [
+      { href: "/review", label: "Review", icon: Zap },
+      { href: "/exam", label: "Exam", icon: GraduationCap },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/graph", label: "Graph", icon: Globe },
+      { href: "/stats", label: "Progress", icon: BarChart3 },
+    ],
+  },
 ] as const;
 
 const TIERS = [
@@ -74,30 +99,42 @@ export function Sidebar({ user }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="space-y-0.5" aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => {
-          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
-                isActive ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground"
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-[17px] shrink-0",
-                  isActive ? "text-foreground" : "text-muted-foreground/50"
-                )}
-              />
-              {item.label}
-              {isActive && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
-            </Link>
-          );
-        })}
+      <nav className="space-y-4" aria-label="Main navigation">
+        {NAV_CATEGORIES.map((category) => (
+          <div key={category.label}>
+            <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40">
+              {category.label}
+            </p>
+            <div className="space-y-0.5">
+              {category.items.map((item) => {
+                const isActive =
+                  item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted-foreground/60 hover:text-foreground"
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "size-[17px] shrink-0",
+                        isActive ? "text-foreground" : "text-muted-foreground/50"
+                      )}
+                    />
+                    {item.label}
+                    {isActive && <span className="ml-auto h-1 w-1 rounded-full bg-primary" />}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </aside>
   );

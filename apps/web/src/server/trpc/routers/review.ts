@@ -340,6 +340,7 @@ export const reviewRouter = createTRPCRouter({
         questionCount: z.number().min(1).max(100).default(20),
         timeLimitMinutes: z.number().min(5).max(240).default(60),
         learningObjectIds: z.array(z.string().uuid()).optional(),
+        goalIds: z.array(z.string().uuid()).optional(),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -352,6 +353,36 @@ export const reviewRouter = createTRPCRouter({
       if (input.learningObjectIds && input.learningObjectIds.length > 0) {
         conditions.push(inArray(learningObjects.id, input.learningObjectIds));
       }
+
+      // Resolve goalIds → conceptIds and filter questions by concept overlap
+      let goalConceptFilter: ReturnType<typeof sql> | null = null;
+      if (input.goalIds && input.goalIds.length > 0) {
+        const items = await db
+          .select({ conceptIds: curriculumItems.conceptIds })
+          .from(curriculumItems)
+          .innerJoin(learningGoals, eq(curriculumItems.goalId, learningGoals.id))
+          .where(
+            and(
+              inArray(curriculumItems.goalId, input.goalIds),
+              eq(learningGoals.userId, ctx.userId)
+            )
+          );
+
+        const conceptIdSet = new Set<string>();
+        for (const item of items) {
+          for (const cid of item.conceptIds ?? []) conceptIdSet.add(cid);
+        }
+
+        const conceptArr = Array.from(conceptIdSet);
+        if (conceptArr.length > 0) {
+          goalConceptFilter = sql`${questions.conceptIds} && ARRAY[${sql.join(
+            conceptArr.map((id) => sql`${id}::uuid`),
+            sql`, `
+          )}]`;
+        }
+      }
+
+      if (goalConceptFilter) conditions.push(goalConceptFilter);
 
       const examQuestions = await db
         .select({

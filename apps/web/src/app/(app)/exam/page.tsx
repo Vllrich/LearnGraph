@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import {
@@ -12,13 +12,6 @@ import {
   Trophy,
   ChevronRight,
   AlertTriangle,
-  FileText,
-  Youtube,
-  Globe,
-  Presentation,
-  FileAudio,
-  Image as ImageIcon,
-  FileType2,
   CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,39 +34,37 @@ type AnswerRecord = {
   correct: boolean;
 };
 
-const SOURCE_ICONS: Record<string, typeof FileText> = {
-  youtube: Youtube,
-  url: Globe,
-  pptx: Presentation,
-  docx: FileType2,
-  audio: FileAudio,
-  image: ImageIcon,
-};
+const GOAL_GRADIENTS = [
+  "from-violet-600 to-indigo-500",
+  "from-blue-600 to-cyan-500",
+  "from-emerald-600 to-teal-500",
+  "from-orange-500 to-amber-400",
+  "from-rose-600 to-pink-500",
+  "from-purple-600 to-violet-500",
+];
 
-function getSourceIcon(sourceType: string) {
-  return SOURCE_ICONS[sourceType] ?? FileText;
+function goalGradient(title: string) {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) & 0xffffffff;
+  return GOAL_GRADIENTS[Math.abs(hash) % GOAL_GRADIENTS.length];
 }
 
 export default function PracticeExamPage() {
   const [started, setStarted] = useState(false);
   const [questionCount, setQuestionCount] = useState(20);
   const [timeLimit, setTimeLimit] = useState(30);
-  const [selectedLOs, setSelectedLOs] = useState<string[]>([]);
+  const [selectedGoalIds, setSelectedGoalIds] = useState<string[]>([]);
 
-  const { data: libraryData, isLoading: libraryLoading } = trpc.library.list.useQuery(
-    { limit: 100, offset: 0 },
-    { enabled: !started }
-  );
-  const readyMaterials = useMemo(
-    () => (libraryData?.items ?? []).filter((lo) => lo.status === "ready"),
-    [libraryData?.items]
-  );
+  const { data: goalsData, isLoading: goalsLoading } = trpc.goals.getActive.useQuery(undefined, {
+    enabled: !started,
+  });
+  const activeGoals = goalsData ?? [];
 
   const { data, isLoading, error } = trpc.review.getPracticeExam.useQuery(
     {
       questionCount,
       timeLimitMinutes: timeLimit,
-      learningObjectIds: selectedLOs.length > 0 ? selectedLOs : undefined,
+      goalIds: selectedGoalIds.length > 0 ? selectedGoalIds : undefined,
     },
     { enabled: started, retry: false }
   );
@@ -190,8 +181,10 @@ export default function PracticeExamPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [examComplete, started, selectedAnswer, handleNext]);
 
-  const toggleLO = (id: string) => {
-    setSelectedLOs((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleGoal = (id: string) => {
+    setSelectedGoalIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   const resetExam = () => {
@@ -202,6 +195,7 @@ export default function PracticeExamPage() {
     setAnswers([]);
     setShowReview(false);
     setElapsed(0);
+    setSelectedGoalIds([]);
     examStartedAtRef.current = null;
   };
 
@@ -215,44 +209,55 @@ export default function PracticeExamPage() {
             Simulate real exam conditions — timed, no hints, no immediate feedback.
           </p>
 
-          {/* Material selector */}
+          {/* Course selector */}
           <div className="mt-6">
             <label className="text-[12px] font-medium text-muted-foreground">
-              Materials {selectedLOs.length > 0 && `(${selectedLOs.length} selected)`}
+              Course {selectedGoalIds.length > 0 && `(${selectedGoalIds.length} selected)`}
             </label>
             <p className="mt-0.5 text-[11px] text-muted-foreground/50">
-              Select specific materials or leave empty to use all.
+              Select courses to draw questions from, or leave empty for all.
             </p>
-            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border/30 p-2">
-              {libraryLoading ? (
+            <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-border/30 p-2">
+              {goalsLoading ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="size-4 animate-spin text-muted-foreground/40" />
                 </div>
-              ) : readyMaterials.length === 0 ? (
+              ) : activeGoals.length === 0 ? (
                 <p className="px-2 py-4 text-center text-[12px] text-muted-foreground/40">
-                  No materials available yet. Upload content first.
+                  No courses yet. Start a course from the home page first.
                 </p>
               ) : (
-                readyMaterials.map((lo) => {
-                  const Icon = getSourceIcon(lo.sourceType);
-                  const isSelected = selectedLOs.includes(lo.id);
+                activeGoals.map((goal) => {
+                  const isSelected = selectedGoalIds.includes(goal.id);
+                  const pct =
+                    goal.totalItems > 0
+                      ? Math.round((goal.completedItems / goal.totalItems) * 100)
+                      : 0;
                   return (
                     <button
-                      key={lo.id}
-                      onClick={() => toggleLO(lo.id)}
+                      key={goal.id}
+                      onClick={() => toggleGoal(goal.id)}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                        isSelected
-                          ? "bg-primary/5 text-foreground"
-                          : "text-muted-foreground/70 hover:bg-muted/30 hover:text-foreground"
+                        "flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
+                        isSelected ? "bg-primary/5 ring-1 ring-primary/20" : "hover:bg-muted/30"
                       )}
                     >
                       {isSelected ? (
-                        <CheckCircle2 className="size-3.5 shrink-0 text-primary" />
+                        <CheckCircle2 className="size-4 shrink-0 text-primary" />
                       ) : (
-                        <Icon className="size-3.5 shrink-0 text-muted-foreground/40" />
+                        <div
+                          className={cn(
+                            "size-4 shrink-0 rounded bg-linear-to-br",
+                            goalGradient(goal.title)
+                          )}
+                        />
                       )}
-                      <span className="truncate text-[12px]">{lo.title}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-medium">{goal.title}</p>
+                        <p className="text-[10px] text-muted-foreground/50">
+                          {goal.completedItems}/{goal.totalItems} concepts · {pct}%
+                        </p>
+                      </div>
                     </button>
                   );
                 })
@@ -306,7 +311,7 @@ export default function PracticeExamPage() {
 
           <button
             onClick={() => setStarted(true)}
-            disabled={!libraryLoading && readyMaterials.length === 0}
+            disabled={!goalsLoading && activeGoals.length === 0}
             className="mt-8 w-full rounded-xl bg-foreground py-3 text-[14px] font-medium text-background transition-opacity hover:opacity-80 disabled:opacity-30"
           >
             Start Exam
@@ -353,8 +358,8 @@ export default function PracticeExamPage() {
         <AlertTriangle className="size-6 text-amber-500 mb-3" />
         <h1 className="text-lg font-medium">Not enough questions</h1>
         <p className="mt-1 text-[13px] text-muted-foreground/60">
-          {selectedLOs.length > 0
-            ? "The selected materials don't have enough questions yet. Try selecting more materials."
+          {selectedGoalIds.length > 0
+            ? "The selected courses don't have enough questions yet. Try selecting more courses or study more content."
             : "Upload and study more content to build up your question bank."}
         </p>
         <button onClick={resetExam} className="mt-4 text-[13px] text-primary hover:underline">
