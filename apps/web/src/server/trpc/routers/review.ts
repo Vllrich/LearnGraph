@@ -337,11 +337,22 @@ export const reviewRouter = createTRPCRouter({
   getPracticeExam: protectedProcedure
     .input(
       z.object({
-        questionCount: z.number().min(5).max(100).default(20),
+        questionCount: z.number().min(1).max(100).default(20),
         timeLimitMinutes: z.number().min(5).max(240).default(60),
+        learningObjectIds: z.array(z.string().uuid()).optional(),
       })
     )
     .query(async ({ ctx, input }) => {
+      const conditions = [
+        eq(learningObjects.userId, ctx.userId),
+        eq(learningObjects.status, "ready"),
+        sql`COALESCE(${questions.isExcluded}, false) = false`,
+      ];
+
+      if (input.learningObjectIds && input.learningObjectIds.length > 0) {
+        conditions.push(inArray(learningObjects.id, input.learningObjectIds));
+      }
+
       const examQuestions = await db
         .select({
           id: questions.id,
@@ -352,15 +363,11 @@ export const reviewRouter = createTRPCRouter({
           explanation: questions.explanation,
           difficulty: questions.difficulty,
           conceptIds: questions.conceptIds,
+          learningObjectTitle: learningObjects.title,
         })
         .from(questions)
         .innerJoin(learningObjects, eq(questions.learningObjectId, learningObjects.id))
-        .where(
-          and(
-            eq(learningObjects.userId, ctx.userId),
-            sql`COALESCE(${questions.isExcluded}, false) = false`
-          )
-        )
+        .where(and(...conditions))
         .orderBy(sql`RANDOM()`)
         .limit(input.questionCount);
 
