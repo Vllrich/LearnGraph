@@ -194,13 +194,14 @@ async function getGapSuggestions(
 
 export const discoveryRouter = createTRPCRouter({
   getSuggestions: protectedProcedure.query(async ({ ctx }) => {
-    const allDismissed = await getDismissedKeys(ctx.userId);
+    const allDismissed = await getDismissedKeys(ctx.userId).catch(() => new Set<string>());
 
     const [profileRow] = await db
       .select()
       .from(learnerProfiles)
       .where(eq(learnerProfiles.userId, ctx.userId))
-      .limit(1);
+      .limit(1)
+      .catch(() => [undefined]);
     const profile = profileRow
       ? rowToProfile(profileRow)
       : DEFAULT_LEARNER_PROFILE;
@@ -214,7 +215,8 @@ export const discoveryRouter = createTRPCRouter({
           eq(learningGoals.userId, ctx.userId),
           eq(learningGoals.status, "active")
         )
-      );
+      )
+      .catch(() => [] as { title: string }[]);
     const existingTitles = goalRows.map((g) => g.title);
 
     const [forYou, trending, gaps] = await Promise.all([
@@ -227,8 +229,8 @@ export const discoveryRouter = createTRPCRouter({
         console.error("[discovery] AI topic generation failed:", err);
         return [] as PersonalizedTopic[];
       }),
-      getTrendingTopics(allDismissed, 6),
-      getGapSuggestions(ctx.userId, allDismissed, 4),
+      getTrendingTopics(allDismissed, 6).catch(() => []),
+      getGapSuggestions(ctx.userId, allDismissed, 4).catch(() => []),
     ]);
 
     return { forYou, trending, gaps, hasProfile };

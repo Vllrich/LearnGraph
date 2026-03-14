@@ -24,7 +24,7 @@ import {
   getEducationStagePrompt,
   getSessionDefaults,
 } from "./method-defaults";
-import { generateBlockContent } from "./blocks/generate-block";
+// Block content is generated on-demand via session-v2, not at course creation time
 
 // ---------------------------------------------------------------------------
 // Zod schemas for structured generation
@@ -381,7 +381,7 @@ Requirements:
     }
   }
 
-  // ─── Step 5: Generate block content and persist (parallel per lesson)
+  // ─── Step 5: Persist block outlines (content generated on-demand) ────
 
   const blockPromises = blockOutlines.map(async (lessonBlk) => {
     const lessonId = lessonMap.get(
@@ -389,38 +389,26 @@ Requirements:
     );
     if (!lessonId) return;
 
-    const previousSummaries: string[] = [];
-
     for (let bi = 0; bi < lessonBlk.blocks.length; bi++) {
       const blk = lessonBlk.blocks[bi];
       const cappedBloom = capBloomLevel(blk.bloomLevel, bloomCeiling);
-
-      let content;
-      try {
-        content = await generateBlockContent({
-          blockType: blk.blockType,
-          conceptName: blk.conceptName,
-          bloomLevel: cappedBloom,
-          lessonTitle: lessonBlk.lessonTitle,
-          moduleTitle: lessonBlk.moduleTitle,
-          courseTopic: topic,
-          profile: learnerProfile,
-          previousBlockSummaries: previousSummaries,
-        });
-      } catch {
-        content = { text: `Content for ${blk.conceptName} (${blk.blockType})`, error: true };
-      }
 
       await db.insert(lessonBlocks).values({
         lessonId,
         sequenceOrder: bi,
         blockType: blk.blockType,
         bloomLevel: cappedBloom,
-        generatedContent: content,
+        generatedContent: {
+          _pending: true,
+          conceptName: blk.conceptName,
+          bloomLevel: cappedBloom,
+          briefDescription: blk.briefDescription,
+          lessonTitle: lessonBlk.lessonTitle,
+          moduleTitle: lessonBlk.moduleTitle,
+          courseTopic: topic,
+        },
         status: "pending",
       });
-
-      previousSummaries.push(blk.briefDescription);
     }
   });
 

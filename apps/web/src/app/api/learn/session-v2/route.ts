@@ -4,10 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import {
   streamFeedback,
   evaluateExplainBack,
+  generateBlockContent,
   type SessionContext,
 } from "@repo/ai";
 import { db, learningGoals, lessonBlocks, courseLessons, courseModules } from "@repo/db";
 import { eq, and } from "drizzle-orm";
+import type { BlockType, BloomLevel } from "@repo/shared";
 
 export const maxDuration = 60;
 
@@ -137,7 +139,30 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
   }
 
-  const content = block.generatedContent as Record<string, unknown>;
+  let content = block.generatedContent as Record<string, unknown>;
+
+  if (content._pending) {
+    try {
+      const generated = await generateBlockContent({
+        blockType: block.blockType as BlockType,
+        conceptName: (content.conceptName as string) ?? block.blockType,
+        bloomLevel: (content.bloomLevel as BloomLevel) ?? "understand",
+        lessonTitle: (content.lessonTitle as string) ?? "",
+        moduleTitle: (content.moduleTitle as string) ?? "",
+        courseTopic: (content.courseTopic as string) ?? goal.title,
+      });
+      content = generated as Record<string, unknown>;
+      await db
+        .update(lessonBlocks)
+        .set({ generatedContent: content })
+        .where(eq(lessonBlocks.id, blockId));
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Failed to generate block content" }),
+        { status: 500 },
+      );
+    }
+  }
 
   // Build a session context from block data for streaming functions
   const ctx: SessionContext = {

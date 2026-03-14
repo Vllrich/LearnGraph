@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -10,10 +10,18 @@ import {
   Check,
   Plus,
   X,
-  GripVertical,
   Calendar,
   ChevronDown,
   ChevronUp,
+  Layers,
+  Zap,
+  Target,
+  FileText,
+  Briefcase,
+  BookOpen,
+  Compass,
+  Sprout,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
@@ -28,17 +36,17 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-const GOAL_OPTIONS: { id: GoalType; label: string; icon: string; hint: string }[] = [
-  { id: "exam_prep", label: "Exam", icon: "📝", hint: "Prepare for a test or certification" },
-  { id: "skill_building", label: "Career", icon: "💼", hint: "Build job-relevant skills" },
-  { id: "course_supplement", label: "Course", icon: "📚", hint: "Supplement a class you're taking" },
-  { id: "exploration", label: "Curious", icon: "✨", hint: "Explore out of interest" },
+const GOAL_OPTIONS: { id: GoalType; label: string; icon: string; Icon: LucideIcon; hint: string }[] = [
+  { id: "exam_prep", label: "Exam", icon: "📝", Icon: FileText, hint: "Prepare for a test or certification" },
+  { id: "skill_building", label: "Career", icon: "💼", Icon: Briefcase, hint: "Build job-relevant skills" },
+  { id: "course_supplement", label: "Course", icon: "📚", Icon: BookOpen, hint: "Supplement a class you're taking" },
+  { id: "exploration", label: "Curious", icon: "✨", Icon: Compass, hint: "Explore out of interest" },
 ];
 
-const LEVEL_OPTIONS: { id: LearnerLevel; label: string; icon: string }[] = [
-  { id: "beginner", label: "Brand new", icon: "🌱" },
-  { id: "some_knowledge", label: "Some knowledge", icon: "📖" },
-  { id: "experienced", label: "Experienced", icon: "🎓" },
+const LEVEL_OPTIONS: { id: LearnerLevel; label: string; icon: string; Icon: LucideIcon }[] = [
+  { id: "beginner", label: "Brand new", icon: "🌱", Icon: Sprout },
+  { id: "some_knowledge", label: "Some knowledge", icon: "📖", Icon: BookOpen },
+  { id: "experienced", label: "Experienced", icon: "🎓", Icon: GraduationCap },
 ];
 
 type ModeOption = {
@@ -331,10 +339,9 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
     setGenStage(0);
     setError(null);
 
-    // Animate through generation stages
     const stageInterval = setInterval(() => {
-      setGenStage((prev) => Math.min(prev + 1, GENERATION_STAGES.length - 1));
-    }, 3000);
+      setGenStage((prev) => Math.min(prev + 1, GENERATION_STAGES.length - 2));
+    }, 8000);
 
     const selectedTopics = enabledTopics.length > 0
       ? enabledTopics.map((t) => ({ title: t.title, description: t.description }))
@@ -441,7 +448,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border/20 px-6 py-4">
+      <div className="relative flex shrink-0 items-center justify-center border-b border-border/20 px-6 py-4">
         <div className="flex gap-2">
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
@@ -455,15 +462,15 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
         </div>
         <button
           onClick={() => onOpenChange(false)}
-          className="rounded-lg p-1 text-muted-foreground/50 hover:text-foreground"
+          className="absolute right-4 rounded-lg p-1 text-muted-foreground/50 hover:text-foreground"
         >
           <X className="size-4" />
         </button>
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-xl px-6 py-8">
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8">
+        <div className={cn("w-full transition-all", step === 2 && !topicsLoading ? "max-w-3xl" : "max-w-md")}>
           {/* First-time onboarding */}
           {showOnboarding && (
             <div className="space-y-5">
@@ -620,78 +627,77 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
               </div>
 
               {topicsLoading ? (
-                <div className="flex flex-col items-center gap-3 py-12">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground/60">Generating topic outline...</p>
+                <div className="flex flex-col items-center gap-4 py-16">
+                  <div className="relative size-10">
+                    <div className="absolute inset-0 animate-[spin_2s_linear_infinite] rounded-full border-2 border-transparent border-t-primary/60" />
+                    <div className="absolute inset-1 animate-[spin_3s_linear_infinite_reverse] rounded-full border-2 border-transparent border-t-primary/30" />
+                  </div>
+                  <AnimatedLoadingText />
                 </div>
               ) : (
                 <>
-                  {/* Topics grouped into module clusters */}
+                  {/* Topics in 3 horizontal difficulty columns */}
                   {(() => {
                     const groupSize = Math.max(2, Math.ceil(topics.length / 3));
                     const groups = [
-                      { label: "Foundations", topics: topics.slice(0, groupSize) },
-                      { label: "Core Concepts", topics: topics.slice(groupSize, groupSize * 2) },
-                      { label: "Advanced", topics: topics.slice(groupSize * 2) },
+                      { label: "Foundations", Icon: Layers, topics: topics.slice(0, groupSize) },
+                      { label: "Core Concepts", Icon: Zap, topics: topics.slice(groupSize, groupSize * 2) },
+                      { label: "Advanced", Icon: Target, topics: topics.slice(groupSize * 2) },
                     ].filter((g) => g.topics.length > 0);
 
                     return (
-                      <div className="space-y-4">
+                      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${groups.length}, 1fr)` }}>
                         {groups.map((group, gi) => (
-                          <div key={gi}>
-                            <div className="mb-1.5 flex items-center gap-2">
-                              <div className="size-1.5 rounded-full bg-primary/40" />
-                              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                          <div key={gi} className="flex flex-col gap-1.5">
+                            <div className="mb-1 flex items-center gap-1.5 px-1">
+                              <group.Icon className="size-3 text-muted-foreground/40" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50">
                                 {group.label}
                               </span>
-                              {gi > 0 && (
-                                <div className="flex-1 border-t border-dashed border-border/20" />
-                              )}
                             </div>
-                            <div className="space-y-1.5">
-                              {group.topics.map((t) => {
-                                const idx = topics.indexOf(t);
-                                return (
-                                  <div
-                                    key={idx}
-                                    className={cn(
-                                      "flex items-start gap-2 rounded-lg border px-3 py-2 transition-all",
-                                      t.enabled
-                                        ? "border-border/30 bg-card"
-                                        : "border-border/15 bg-muted/20 opacity-50",
-                                    )}
+                            {group.topics.map((t) => {
+                              const idx = topics.indexOf(t);
+                              return (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    "group/card relative rounded-lg border px-2.5 py-2 transition-all",
+                                    t.enabled
+                                      ? "border-border/30 bg-card"
+                                      : "border-border/15 bg-muted/20 opacity-40",
+                                  )}
+                                >
+                                  <button
+                                    onClick={() => toggleTopic(idx)}
+                                    className="flex w-full items-start gap-2 text-left"
                                   >
-                                    <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/30" />
-                                    <button
-                                      onClick={() => toggleTopic(idx)}
-                                      className={cn(
-                                        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-all",
-                                        t.enabled
-                                          ? "border-primary bg-primary text-primary-foreground"
-                                          : "border-border/50",
-                                      )}
-                                    >
-                                      {t.enabled && <Check className="size-2.5" />}
-                                    </button>
+                                    <div className={cn(
+                                      "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded border transition-all",
+                                      t.enabled
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border/50",
+                                    )}>
+                                      {t.enabled && <Check className="size-2" />}
+                                    </div>
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-[13px] font-medium leading-tight">{t.title}</p>
-                                      <p className="text-[11px] text-muted-foreground/50 leading-tight">
+                                      <p className="text-[12px] font-medium leading-snug">{t.title}</p>
+                                      <p className="mt-0.5 text-[10px] text-muted-foreground/40 leading-snug line-clamp-2">
                                         {t.description}
                                       </p>
+                                      <span className="mt-1 block text-[10px] text-muted-foreground/30">
+                                        {t.estimatedMinutes}m
+                                      </span>
                                     </div>
-                                    <span className="shrink-0 text-[10px] text-muted-foreground/40">
-                                      {t.estimatedMinutes}m
-                                    </span>
-                                    <button
-                                      onClick={() => removeTopic(idx)}
-                                      className="mt-0.5 shrink-0 text-muted-foreground/30 hover:text-destructive"
-                                    >
-                                      <X className="size-3" />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  </button>
+                                  <button
+                                    onClick={() => removeTopic(idx)}
+                                    className="absolute right-1.5 top-1.5 hidden text-muted-foreground/20 hover:text-destructive group-hover/card:block"
+                                  >
+                                    <X className="size-2.5" />
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
                         ))}
                       </div>
@@ -909,12 +915,28 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
                     <SummaryRow label="Topic" value={topic} onEdit={() => onOpenChange(false)} />
                     <SummaryRow
                       label="Goal"
-                      value={`${GOAL_OPTIONS.find((o) => o.id === goalType)?.icon} ${GOAL_OPTIONS.find((o) => o.id === goalType)?.label}${examName ? ` — ${examName}` : ""}${contextNote ? ` — ${contextNote}` : ""}`}
+                      value={(() => {
+                        const g = GOAL_OPTIONS.find((o) => o.id === goalType);
+                        return g ? (
+                          <span className="flex items-center gap-1.5">
+                            <g.Icon className="size-3.5 text-muted-foreground/50" />
+                            {g.label}{examName ? ` — ${examName}` : ""}{contextNote ? ` — ${contextNote}` : ""}
+                          </span>
+                        ) : null;
+                      })()}
                       onEdit={() => setStep(0)}
                     />
                     <SummaryRow
                       label="Level"
-                      value={`${LEVEL_OPTIONS.find((o) => o.id === level)?.icon} ${LEVEL_OPTIONS.find((o) => o.id === level)?.label}`}
+                      value={(() => {
+                        const l = LEVEL_OPTIONS.find((o) => o.id === level);
+                        return l ? (
+                          <span className="flex items-center gap-1.5">
+                            <l.Icon className="size-3.5 text-muted-foreground/50" />
+                            {l.label}
+                          </span>
+                        ) : null;
+                      })()}
                       onEdit={() => setStep(1)}
                     />
                     <SummaryRow
@@ -957,35 +979,67 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
 
       {/* Navigation footer */}
       {step < 4 && (
-        <div className="shrink-0 border-t border-border/20 px-6 py-4">
-          <div className="mx-auto flex w-full max-w-xl items-center justify-between">
-            <button
-              onClick={goBack}
-              disabled={step === 0}
-              className={cn(
-                "flex items-center gap-1 text-xs text-muted-foreground transition-all",
-                step === 0 ? "invisible" : "hover:text-foreground",
-              )}
-            >
-              <ArrowLeft className="size-3" /> Back
-            </button>
-
+        <div className="shrink-0 border-t border-border/20 px-6 py-5">
+          <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3">
             <button
               onClick={goNext}
               disabled={!canGoNext()}
               className={cn(
-                "flex items-center gap-1 rounded-lg px-4 py-2 text-xs font-medium transition-all",
+                "flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all",
                 canGoNext()
                   ? "bg-foreground text-background hover:opacity-90"
                   : "bg-muted/30 text-muted-foreground/30 cursor-not-allowed",
               )}
             >
-              {step === (skipModeStep ? 2 : 3) ? "Review" : "Continue"} <ArrowRight className="size-3" />
+              {step === (skipModeStep ? 2 : 3) ? "Review" : "Continue"} <ArrowRight className="size-3.5" />
+            </button>
+            <button
+              onClick={goBack}
+              disabled={step === 0}
+              className={cn(
+                "flex items-center gap-1 text-xs text-muted-foreground/50 transition-all",
+                step === 0 ? "invisible" : "hover:text-foreground",
+              )}
+            >
+              <ArrowLeft className="size-3" /> Back
             </button>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+const TOPIC_LOADING_MESSAGES = [
+  "Analyzing your goal...",
+  "Mapping key concepts...",
+  "Structuring learning path...",
+  "Generating topic outline...",
+  "Tailoring to your level...",
+];
+
+function AnimatedLoadingText() {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % TOPIC_LOADING_MESSAGES.length);
+        setVisible(true);
+      }, 300);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <p className={cn(
+      "text-sm text-muted-foreground/60 transition-opacity duration-300",
+      visible ? "opacity-100" : "opacity-0",
+    )}>
+      {TOPIC_LOADING_MESSAGES[idx]}
+    </p>
   );
 }
 
@@ -995,7 +1049,7 @@ function SummaryRow({
   onEdit,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   onEdit?: () => void;
 }) {
   return (

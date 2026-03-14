@@ -29,7 +29,6 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "LearnGraph",
   description: "AI-powered learning platform — ingest, understand, practice, retain, master.",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
