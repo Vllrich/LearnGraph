@@ -1,5 +1,6 @@
 import { extractText, getMeta } from "unpdf";
-import { PDFParse } from "pdf-parse";
+import { generateText, type CoreMessage } from "ai";
+import { primaryModel } from "../models";
 
 export type PdfResult = {
   text: string;
@@ -28,15 +29,13 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfResult> {
 
   let fullText = pages.join("\n\n");
 
-  // Fallback: if unpdf returned too little text (font-handling issues), try pdf-parse
+  // Fallback: if pdfjs can't handle the fonts, use the LLM to read the PDF directly
   if (normalizeText(fullText).length < MIN_USEFUL_TEXT) {
     try {
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      const result = await parser.getText();
-      if (result.text && normalizeText(result.text).length > normalizeText(fullText).length) {
-        fullText = result.text;
+      const llmText = await extractTextViaLLM(buffer);
+      if (llmText && normalizeText(llmText).length > normalizeText(fullText).length) {
+        fullText = llmText;
       }
-      await parser.destroy();
     } catch {
       // keep whatever unpdf returned
     }
@@ -62,6 +61,33 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfResult> {
     title,
     pageOffsets,
   };
+}
+
+async function extractTextViaLLM(buffer: Buffer): Promise<string> {
+  const messages: CoreMessage[] = [
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Extract ALL text content from this PDF document verbatim. Preserve paragraph structure with blank lines between paragraphs. Do not summarize — output the full text exactly as written. If the document contains tables, render them as plain text. Output ONLY the document text, no commentary.",
+        },
+        {
+          type: "file",
+          data: buffer,
+          mimeType: "application/pdf",
+        },
+      ],
+    },
+  ];
+
+  const { text } = await generateText({
+    model: primaryModel,
+    messages,
+    maxTokens: 16000,
+  });
+
+  return text;
 }
 
 function normalizeText(text: string): string {

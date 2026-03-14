@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { primaryModel } from "../models";
+import { withParseRetry } from "../robust-generate";
 import { generateEmbedding } from "./embeddings";
 import { db } from "@repo/db";
 import { concepts, conceptEdges, conceptChunkLinks } from "@repo/db";
@@ -39,16 +40,18 @@ export async function extractAndStoreConcepts(
     const batch = chunks.slice(i, i + batchSize);
     const batchText = batch.map((c, j) => `[Chunk ${i + j}]\n${c.content}`).join("\n\n---\n\n");
 
-    const { object } = await generateObject({
-      model: primaryModel,
-      schema: extractionSchema,
-      prompt: `Extract key concepts from these chunks. Provide canonical name (lowercase singular), definition from text, prerequisites, related concepts, difficulty (1-5), Bloom level.
+    const { object } = await withParseRetry(() =>
+      generateObject({
+        model: primaryModel,
+        schema: extractionSchema,
+        prompt: `Extract key concepts from these chunks. Provide canonical name (lowercase singular), definition from text, prerequisites, related concepts, difficulty (1-5), Bloom level.
 Only extract concepts explicitly in text.
 
 ${batchText}`,
-      temperature: 0.2,
-      maxTokens: 4096,
-    });
+        temperature: 0.2,
+        maxTokens: 4096,
+      })
+    );
 
     for (const concept of object.concepts) {
       const chunkIndices = batch.map((_, j) => i + j);

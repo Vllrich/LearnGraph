@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { primaryModel } from "../models";
+import { withParseRetry } from "../robust-generate";
 import { countTokens } from "./chunker";
 
 const summarySchema = z.object({
@@ -28,13 +29,15 @@ export async function summarizeContent(text: string, title: string): Promise<Sum
 }
 
 async function directSummarize(text: string, title: string): Promise<SummaryResult> {
-  const { object } = await generateObject({
-    model: primaryModel,
-    schema: summarySchema,
-    prompt: buildPrompt(text, title),
-    temperature: 0.3,
-    maxTokens: 4096,
-  });
+  const { object } = await withParseRetry(() =>
+    generateObject({
+      model: primaryModel,
+      schema: summarySchema,
+      prompt: buildPrompt(text, title),
+      temperature: 0.3,
+      maxTokens: 4096,
+    })
+  );
 
   return object;
 }
@@ -62,12 +65,14 @@ async function hierarchicalSummarize(text: string, title: string): Promise<Summa
 
   const sectionSummaries: z.infer<typeof sectionSchema>[] = [];
   for (let i = 0; i < sectionBatches.length; i++) {
-    const { object } = await generateObject({
-      model: primaryModel,
-      schema: sectionSchema,
-      prompt: `Summarize this section (part ${i + 1} of ${sectionBatches.length}) of "${title}":\n\n${sectionBatches[i]}`,
-      temperature: 0.3,
-    });
+    const { object } = await withParseRetry(() =>
+      generateObject({
+        model: primaryModel,
+        schema: sectionSchema,
+        prompt: `Summarize this section (part ${i + 1} of ${sectionBatches.length}) of "${title}":\n\n${sectionBatches[i]}`,
+        temperature: 0.3,
+      })
+    );
     sectionSummaries.push(object);
   }
 
