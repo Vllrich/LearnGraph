@@ -33,7 +33,7 @@ export async function extractAndStoreConcepts(
   learningObjectId: string,
   storedChunkIds: string[]
 ): Promise<string[]> {
-  const batchSize = 8;
+  const batchSize = 5;
   const allExtracted: { concept: ExtractedConcept; chunkIndices: number[] }[] = [];
 
   for (let i = 0; i < chunks.length; i += batchSize) {
@@ -49,7 +49,6 @@ Only extract concepts explicitly in text.
 
 ${batchText}`,
         temperature: 0.2,
-        maxTokens: 4096,
       })
     );
 
