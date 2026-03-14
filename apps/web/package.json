@@ -11,6 +11,7 @@
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.1",
     "@repo/ai": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/fsrs": "workspace:*",

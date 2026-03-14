@@ -23,6 +23,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@getbrevo/brevo':
+        specifier: ^5.0.1
+        version: 5.0.1
       '@repo/ai':
         specifier: workspace:*
         version: link:../../packages/ai
@@ -851,6 +854,10 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@getbrevo/brevo@5.0.1':
+    resolution: {integrity: sha512-GRi70hv8obJsTnNkDlw0NfFezmx/jnuOL26ljKo/6J1AAw4D+7Jg9TX4+pau0uL5Fo9fEJy13ZsJtmARGt4E1A==}
+    engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -5407,6 +5414,8 @@ snapshots:
       react-dom: 19.2.3(react@19.2.3)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@getbrevo/brevo@5.0.1': {}
 
   '@humanfs/core@0.19.1': {}
 
