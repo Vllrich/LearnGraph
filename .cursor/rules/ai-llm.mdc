@@ -15,7 +15,7 @@ alwaysApply: false
 
 ## CRITICAL: Always Use generateObject
 ```ts
-// CORRECT — structured, validated output
+// CORRECT — structured, validated output with maxTokens
 import { generateObject } from "ai";
 import { z } from "zod";
 
@@ -25,11 +25,14 @@ const { object } = await generateObject({
     concepts: z.array(z.object({ name: z.string(), description: z.string() })),
   }),
   prompt: buildPrompt(context),
+  maxTokens: 800, // REQUIRED — always set based on expected output size
 });
 
 // NEVER do this — raw text is unvalidated and brittle
 const { text } = await generateText({ ... });
 ```
+
+`maxTokens` guidelines: mentor `streamText` → 1500, block content → 2000, summary → 1500, quiz → 800, discovery → 600.
 
 ## Prompt Injection Defense — YOU MUST Follow This
 Wrap ALL user-controlled text in XML delimiter tags with explicit instructions:
@@ -43,9 +46,11 @@ const prompt = `
 Tag names by context: `<student_answer>`, `<student_explanation>`, `<user_context>`, `<document_content>`
 
 ## Rate Limiting — REQUIRED on All LLM Routes
+Use `@upstash/ratelimit` (NOT in-memory Maps — they reset on cold start):
 ```ts
-// In-memory per-user per-minute limits (apply at route entry)
-const LIMITS = { ingest: 5, mentor: 20, session: 30, start: 5, suggest: 10 };
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+const ratelimit = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(10, "60 s") });
 ```
 
 ## Ownership Verification — NEVER Skip This
@@ -74,6 +79,7 @@ if (!obj) throw new TRPCError({ code: "NOT_FOUND" });
 - LLM responses MUST be grounded in RAG-retrieved chunks — no speculation beyond retrieved context
 
 ## Embeddings Pattern
+Always use `embedMany` for batches — NEVER call `generateEmbedding` in a loop:
 ```ts
 import { embedMany } from "ai";
 import { openai } from "@ai-sdk/openai";
@@ -83,3 +89,15 @@ const { embeddings } = await embedMany({
   values: chunks.map((c) => c.content),
 });
 ```
+
+Use `cachedEmbedding` from `@repo/ai` for single embeddings to avoid duplicate API calls (SHA256-keyed, Redis-backed, no TTL).
+
+## RAG Retrieval Tuning
+- `topK` ≤ 4 for mentor (diminishing returns beyond 4 chunks)
+- Truncate each chunk to 400 tokens max before inserting into prompt
+- Drop chunks with cosine similarity < 0.3 (relevance threshold)
+
+## LLM Prompt Efficiency
+- Compute shared context (profile block, method emphasis) ONCE and reuse across all `generateObject` calls in a pipeline — never regenerate per call
+- Use compressed key=value format for learner profile in system prompts: `edu=undergraduate comm=casual depth=thorough`
+- Semantic LLM cache (`llm:{sha256(prompt)}`, 24h TTL) is safe ONLY for non-personalized, non-conversational calls (quiz generation, discovery suggestions)

@@ -61,10 +61,57 @@ export type NewExample = typeof examples.$inferInsert;
 - Export both `$inferSelect` and `$inferInsert` types
 - RLS policies: `supabase migration new <name>` → raw SQL only, never in Drizzle
 
+## Query Performance — ALWAYS Follow
+- **No `SELECT *`** — always list explicit columns; `raw_text` and `embedding` columns are especially expensive
+- **Parallelize independent DB queries** with `Promise.all` — never chain sequential `await` calls for unrelated data
+- **No N+1 queries** — batch fetch with `inArray`, then group in memory; never query inside a loop
+- **Consolidated ownership checks** — use a single joined query to verify the full ownership chain (block → lesson → module → goal); never do 3–4 sequential ownership round-trips
+- **Batch upserts** — collect all values in memory, then do a single `db.insert().values(batch).onConflictDoUpdate()`
+- **Connection pooling** — `max: 1` in production (serverless); Drizzle client must be module-level singleton
+
+```ts
+// CORRECT: parallel independent queries
+const [items, concepts] = await Promise.all([
+  db.select({ id: t.id, title: t.title }).from(t).where(...),
+  db.select().from(concepts).where(...),
+]);
+
+// WRONG: sequential independent queries
+const items = await db.select().from(t).where(...);
+const concepts = await db.select().from(concepts).where(...);
+```
+
+## Caching — Use `cached()` from `@repo/shared`
+```ts
+import { cached, invalidateCache } from "@repo/shared/cache";
+
+// Cache a DB result
+const profile = await cached(`profile:${userId}`, 300, () =>
+  db.select().from(learnerProfiles).where(eq(learnerProfiles.userId, userId))
+);
+
+// Invalidate on write
+await invalidateCache(`profile:${userId}`);
+```
+Cache keys and TTLs: `profile:{userId}` 5min, `queue:{userId}:{date}` 1h, `stats:{userId}` 5min, `progress:{goalId}` 2min, `discovery:{userId}` 30min.
+
+## Rate Limiting — Upstash Ratelimit (not in-memory)
+```ts
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, "60 s"),
+});
+```
+In-memory rate limiting is FORBIDDEN on API routes — it resets on every cold start.
+
 ## pgvector
 - Embedding dimension: 1536 (text-embedding-3-small)
 - Cosine similarity for concept dedup threshold: ≥ 0.92
 - Column type: `vector(1536)` via `pgvector` extension
+- HNSW index (`vector_cosine_ops`, m=16, ef_construction=64) is required on `concepts.embedding`
 
 ## Auth Pattern
 ```ts

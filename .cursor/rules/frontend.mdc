@@ -49,6 +49,19 @@ if (error) return <ErrorMessage message={error.message} />;
 if (!data?.length) return <EmptyState />;
 ```
 
+## TanStack Query Defaults — REQUIRED
+The global `QueryClient` must be configured with these defaults (already set in `apps/web/src/trpc/`):
+```ts
+defaultOptions: {
+  queries: {
+    staleTime: 30_000,          // 30s before background refetch
+    gcTime: 5 * 60_000,         // 5min before garbage collection
+    refetchOnWindowFocus: false, // no refetch on tab switch
+  },
+}
+```
+Do NOT override these per-query unless there is a specific real-time requirement (e.g. review queue).
+
 ## Animations
 Use project-defined keyframes from `globals.css`:
 `animate-cursor-blink`, `animate-shimmer`, `animate-level-up`
