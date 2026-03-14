@@ -252,439 +252,425 @@ export default function SettingsPage() {
         <span className="text-[13px] font-medium">Settings</span>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-6 py-8 space-y-8">
-          {/* ── Learner Profile ─────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <GraduationCap className="size-4 text-violet-500" />
-              Learner Profile
-            </h2>
-            <div className="space-y-2 rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50 mb-3">
-                This shapes how the mentor talks to you, how courses are structured, and which
-                learning methods are emphasized.
-              </p>
-              {EDUCATION_STAGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setEducationStage(opt.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all",
-                    eff.educationStage === opt.id
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-border/20 hover:border-border/50"
-                  )}
-                >
-                  <span className="text-base">{opt.icon}</span>
-                  <span className="text-[13px] font-medium">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* ── Language ────────────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Globe className="size-4 text-blue-500" />
-              Language
-            </h2>
-            <div className="space-y-4 rounded-xl border border-border/30 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Native language</p>
-                  <p className="text-[11px] text-muted-foreground/50">
-                    Your primary spoken language
-                  </p>
-                </div>
-                <select
-                  value={eff.nativeLanguage}
-                  onChange={(e) => setNativeLanguage(e.target.value)}
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                >
-                  {COMMON_LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Learning language</p>
-                  <p className="text-[11px] text-muted-foreground/50">
-                    Language the mentor teaches in
-                  </p>
-                </div>
-                <select
-                  value={eff.contentLanguage}
-                  onChange={(e) => setContentLanguage(e.target.value)}
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                >
-                  {COMMON_LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Mentor Style ───────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <MessageSquare className="size-4 text-emerald-500" />
-              Mentor Style
-            </h2>
-            <div className="space-y-5 rounded-xl border border-border/30 p-4">
-              <OptionGrid
-                label="Communication"
-                description="How the mentor phrases things"
-                options={COMMUNICATION_STYLE_OPTIONS}
-                value={eff.communicationStyle}
-                onChange={(v) => setCommunicationStyle(v as CommunicationStyle)}
-              />
-              <OptionGrid
-                label="Explanation depth"
-                description="How much detail per concept"
-                options={EXPLANATION_DEPTH_OPTIONS}
-                value={eff.explanationDepth}
-                onChange={(v) => setExplanationDepth(v as ExplanationDepth)}
-              />
-              <OptionGrid
-                label="Tone"
-                description="How the mentor motivates you"
-                options={MENTOR_TONE_OPTIONS}
-                value={eff.mentorTone}
-                onChange={(v) => setMentorTone(v as MentorTone)}
-              />
-            </div>
-          </section>
-
-          {/* ── Motivations ────────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Sparkles className="size-4 text-amber-500" />
-              Learning Motivations
-            </h2>
-            <div className="rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50 mb-3">
-                Select all that apply — this influences how concepts are framed and which examples
-                are used.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {MOTIVATION_OPTIONS.map((opt) => {
-                  const active = eff.learningMotivations.includes(opt.id);
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => toggleMotivation(opt.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all",
-                        active
-                          ? "border-primary/50 bg-primary/10 text-primary"
-                          : "border-border/30 text-muted-foreground hover:border-border/50"
-                      )}
-                    >
-                      <span>{opt.icon}</span>
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-
-          {/* ── Expertise Domains ──────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Brain className="size-4 text-purple-500" />
-              Expertise Domains
-            </h2>
-            <div className="rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50 mb-3">
-                Subjects you already know well — the mentor will draw analogies from these and skip
-                overlapping prerequisites.
-              </p>
-              <div className="flex gap-2 mb-3">
-                <input
-                  type="text"
-                  placeholder="e.g. Physics, Web Development, Music Theory..."
-                  value={domainInput}
-                  onChange={(e) => setDomainInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addDomain())}
-                  className="flex-1 rounded-lg border border-border/30 bg-transparent px-3 py-1.5 text-[13px] placeholder:text-muted-foreground/30 focus:border-primary/40 focus:outline-none"
-                />
-                <button
-                  onClick={addDomain}
-                  disabled={!domainInput.trim()}
-                  className="rounded-lg border border-border/30 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground disabled:opacity-30 transition-all"
-                >
-                  Add
-                </button>
-              </div>
-              {eff.expertiseDomains.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {eff.expertiseDomains.map((d) => (
-                    <span
-                      key={d}
-                      className="flex items-center gap-1 rounded-full border border-border/30 bg-muted/30 px-2.5 py-1 text-[12px]"
-                    >
-                      {d}
-                      <button
-                        onClick={() => removeDomain(d)}
-                        className="text-muted-foreground/50 hover:text-foreground transition-colors"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Left sidebar nav ──────────────────────────────── */}
+        <nav className="w-48 shrink-0 border-r border-border/30 py-4 px-2 flex flex-col gap-0.5">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-all text-left",
+                activeTab === tab.id
+                  ? "bg-primary/8 text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
               )}
-            </div>
-          </section>
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
 
-          {/* ── Accessibility ──────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Accessibility className="size-4 text-teal-500" />
-              Accessibility
-            </h2>
-            <div className="space-y-4 rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50">
-                The mentor adapts its output format to your needs.
-              </p>
-              <ToggleRow
-                label="Dyslexia-friendly"
-                description="Shorter paragraphs, bullet lists, bolded key terms"
-                checked={!!eff.accessibilityNeeds.dyslexia}
-                onChange={(v) => setA11y("dyslexia", v)}
-              />
-              <ToggleRow
-                label="ADHD-friendly"
-                description="Frequent micro-checkpoints, shorter explanations, more quizzes"
-                checked={!!eff.accessibilityNeeds.adhd}
-                onChange={(v) => setA11y("adhd", v)}
-              />
-              <ToggleRow
-                label="Visual impairment"
-                description="Detailed text descriptions of diagrams and visual concepts"
-                checked={!!eff.accessibilityNeeds.visualImpairment}
-                onChange={(v) => setA11y("visualImpairment", v)}
-              />
-              <ToggleRow
-                label="Reduced motion"
-                description="Fewer animations and transitions in the UI"
-                checked={!!eff.accessibilityNeeds.reducedMotion}
-                onChange={(v) => setA11y("reducedMotion", v)}
-              />
-            </div>
-          </section>
+        {/* ── Tab content ───────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-2xl px-8 py-7 space-y-7">
 
-          {/* ── Inferred Profile (read-only) ───────────────────── */}
-          {learnerProfile && learnerProfile.calibrationConfidence > 0 && (
-            <section>
-              <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-                <Sparkles className="size-4 text-primary" />
-                AI-Inferred Profile
-              </h2>
-              <div className="rounded-xl border border-border/30 bg-muted/10 p-4">
-                <p className="text-[11px] text-muted-foreground/50 mb-3">
-                  Based on your review sessions, the system has calibrated these parameters.
-                  They blend with your declared settings above.
-                </p>
-                <div className="grid grid-cols-2 gap-3 text-[12px]">
-                  {learnerProfile.inferredPace && (
-                    <div>
-                      <span className="text-muted-foreground/60">Pace:</span>{" "}
-                      <span className="font-medium capitalize">{learnerProfile.inferredPace}</span>
-                    </div>
-                  )}
-                  {learnerProfile.inferredBloomCeiling && (
-                    <div>
-                      <span className="text-muted-foreground/60">Bloom ceiling:</span>{" "}
-                      <span className="font-medium capitalize">
-                        {learnerProfile.inferredBloomCeiling}
-                      </span>
-                    </div>
-                  )}
-                  {learnerProfile.inferredOptimalSessionMin && (
-                    <div>
-                      <span className="text-muted-foreground/60">Optimal session:</span>{" "}
-                      <span className="font-medium">
-                        {learnerProfile.inferredOptimalSessionMin} min
-                      </span>
-                    </div>
-                  )}
-                  {learnerProfile.inferredReadingLevel && (
-                    <div>
-                      <span className="text-muted-foreground/60">Reading level:</span>{" "}
-                      <span className="font-medium">
-                        Grade {Math.round(learnerProfile.inferredReadingLevel)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground/60">Calibration confidence:</span>{" "}
-                    <span className="font-medium">
-                      {Math.round(learnerProfile.calibrationConfidence * 100)}%
-                    </span>
+            {/* ── Profile tab ─────────────────────────────── */}
+            {activeTab === "profile" && (
+              <>
+                <section>
+                  <SectionHeader icon={<GraduationCap className="size-4 text-violet-500" />} title="Education Stage" />
+                  <div className="space-y-2 rounded-xl border border-border/30 p-4">
+                    <p className="text-[11px] text-muted-foreground/50 mb-3">
+                      Shapes vocabulary level, analogy sources, and session defaults.
+                    </p>
+                    {EDUCATION_STAGE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setEducationStage(opt.id)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all",
+                          eff.educationStage === opt.id
+                            ? "border-primary/50 bg-primary/5"
+                            : "border-border/20 hover:border-border/50"
+                        )}
+                      >
+                        <span className="text-base">{opt.icon}</span>
+                        <span className="text-[13px] font-medium">{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
-                </div>
-              </div>
-            </section>
-          )}
+                </section>
 
-          {/* ── Study Preferences ──────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Clock className="size-4 text-primary" />
-              Study Preferences
-            </h2>
-            <div className="space-y-4 rounded-xl border border-border/30 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Daily review budget</p>
-                  <p className="text-[11px] text-muted-foreground/50">
-                    Max cards per daily session
-                  </p>
-                </div>
-                <input
-                  type="number"
-                  min={5}
-                  max={50}
-                  value={dailyBudget}
-                  onChange={(e) => setDailyBudget(Number(e.target.value))}
-                  className="w-16 rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-center text-[13px] focus:border-primary/40 focus:outline-none"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Weekly review goal</p>
-                  <p className="text-[11px] text-muted-foreground/50">Target reviews per week</p>
-                </div>
-                <input
-                  type="number"
-                  min={5}
-                  max={500}
-                  value={weeklyGoal}
-                  onChange={(e) => setWeeklyGoal(Number(e.target.value))}
-                  className="w-16 rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-center text-[13px] focus:border-primary/40 focus:outline-none"
-                />
-              </div>
-            </div>
-          </section>
+                <section>
+                  <SectionHeader icon={<Globe className="size-4 text-blue-500" />} title="Language" />
+                  <div className="space-y-4 rounded-xl border border-border/30 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Native language</p>
+                        <p className="text-[11px] text-muted-foreground/50">Your primary spoken language</p>
+                      </div>
+                      <select
+                        value={eff.nativeLanguage}
+                        onChange={(e) => setNativeLanguage(e.target.value)}
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      >
+                        {COMMON_LANGUAGES.map((l) => (
+                          <option key={l.code} value={l.code}>{l.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Learning language</p>
+                        <p className="text-[11px] text-muted-foreground/50">Language the mentor teaches in</p>
+                      </div>
+                      <select
+                        value={eff.contentLanguage}
+                        onChange={(e) => setContentLanguage(e.target.value)}
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      >
+                        {COMMON_LANGUAGES.map((l) => (
+                          <option key={l.code} value={l.code}>{l.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </section>
 
-          {/* ── Notifications ──────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Bell className="size-4 text-amber-500" />
-              Notifications & Reminders
-            </h2>
-            <div className="space-y-4 rounded-xl border border-border/30 p-4">
-              <ToggleRow
-                label="Email reminders"
-                description="Daily digest of due reviews"
-                checked={effNotifs.email}
-                onChange={setEmailReminders}
-              />
-              <ToggleRow
-                label="Push notifications"
-                description="Browser push at study time"
-                checked={effNotifs.push}
-                onChange={setPushNotifications}
-              />
-              <ToggleRow
-                label="Smart nudges"
-                description="Alert when concepts are fading"
-                checked={effNotifs.smartNudges}
-                onChange={setSmartNudges}
-              />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Reminder time</p>
-                  <p className="text-[11px] text-muted-foreground/50">
-                    When to send daily reminders
-                  </p>
-                </div>
-                <input
-                  type="time"
-                  value={effNotifs.reminderTime}
-                  onChange={(e) => setReminderTime(e.target.value)}
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium">Frequency</p>
-                </div>
-                <select
-                  value={effNotifs.frequency ?? "daily"}
-                  onChange={(e) =>
-                    setFrequency(e.target.value as "daily" | "every_other_day" | "weekly")
-                  }
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                >
-                  <option value="daily">Daily</option>
-                  <option value="every_other_day">Every other day</option>
-                  <option value="weekly">Weekly</option>
-                </select>
-              </div>
-            </div>
-          </section>
+                <section>
+                  <SectionHeader icon={<Sparkles className="size-4 text-amber-500" />} title="Learning Motivations" />
+                  <div className="rounded-xl border border-border/30 p-4">
+                    <p className="text-[11px] text-muted-foreground/50 mb-3">
+                      Select all that apply — influences how concepts are framed and which examples are used.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {MOTIVATION_OPTIONS.map((opt) => {
+                        const active = eff.learningMotivations.includes(opt.id);
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => toggleMotivation(opt.id)}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all",
+                              active
+                                ? "border-primary/50 bg-primary/10 text-primary"
+                                : "border-border/30 text-muted-foreground hover:border-border/50"
+                            )}
+                          >
+                            <span>{opt.icon}</span>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
 
-          {/* ── Quiet Hours ────────────────────────────────────── */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <Shield className="size-4 text-violet-500" />
-              Quiet Hours
-            </h2>
-            <div className="rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50 mb-3">
-                No notifications during these hours
-              </p>
-              <div className="flex items-center gap-3">
-                <input
-                  type="time"
-                  value={effNotifs.quietStart}
-                  onChange={(e) => setQuietStart(e.target.value)}
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                />
-                <span className="text-[12px] text-muted-foreground/40">to</span>
-                <input
-                  type="time"
-                  value={effNotifs.quietEnd}
-                  onChange={(e) => setQuietEnd(e.target.value)}
-                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* ── Save ───────────────────────────────────────────── */}
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-50 transition-opacity"
-          >
-            {saved ? (
-              <>
-                <Check className="size-4" />
-                Saved
-              </>
-            ) : isSaving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <>
-                <Save className="size-4" />
-                Save settings
+                <section>
+                  <SectionHeader icon={<Brain className="size-4 text-purple-500" />} title="Expertise Domains" />
+                  <div className="rounded-xl border border-border/30 p-4">
+                    <p className="text-[11px] text-muted-foreground/50 mb-3">
+                      Subjects you already know well — the mentor draws analogies from these and skips overlapping prerequisites.
+                    </p>
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        placeholder="e.g. Physics, Web Development, Music Theory..."
+                        value={domainInput}
+                        onChange={(e) => setDomainInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addDomain())}
+                        className="flex-1 rounded-lg border border-border/30 bg-transparent px-3 py-1.5 text-[13px] placeholder:text-muted-foreground/30 focus:border-primary/40 focus:outline-none"
+                      />
+                      <button
+                        onClick={addDomain}
+                        disabled={!domainInput.trim()}
+                        className="rounded-lg border border-border/30 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground disabled:opacity-30 transition-all"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {eff.expertiseDomains.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {eff.expertiseDomains.map((d) => (
+                          <span
+                            key={d}
+                            className="flex items-center gap-1 rounded-full border border-border/30 bg-muted/30 px-2.5 py-1 text-[12px]"
+                          >
+                            {d}
+                            <button
+                              onClick={() => removeDomain(d)}
+                              className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
               </>
             )}
-          </button>
+
+            {/* ── Mentor tab ──────────────────────────────── */}
+            {activeTab === "mentor" && (
+              <>
+                <section>
+                  <SectionHeader icon={<MessageSquare className="size-4 text-emerald-500" />} title="Mentor Style" />
+                  <div className="space-y-5 rounded-xl border border-border/30 p-4">
+                    <OptionGrid
+                      label="Communication"
+                      description="How the mentor phrases things"
+                      options={COMMUNICATION_STYLE_OPTIONS}
+                      value={eff.communicationStyle}
+                      onChange={(v) => setCommunicationStyle(v as CommunicationStyle)}
+                    />
+                    <OptionGrid
+                      label="Explanation depth"
+                      description="How much detail per concept"
+                      options={EXPLANATION_DEPTH_OPTIONS}
+                      value={eff.explanationDepth}
+                      onChange={(v) => setExplanationDepth(v as ExplanationDepth)}
+                    />
+                    <OptionGrid
+                      label="Tone"
+                      description="How the mentor motivates you"
+                      options={MENTOR_TONE_OPTIONS}
+                      value={eff.mentorTone}
+                      onChange={(v) => setMentorTone(v as MentorTone)}
+                    />
+                  </div>
+                </section>
+
+                <section>
+                  <SectionHeader icon={<Accessibility className="size-4 text-teal-500" />} title="Accessibility" />
+                  <div className="space-y-4 rounded-xl border border-border/30 p-4">
+                    <p className="text-[11px] text-muted-foreground/50">
+                      The mentor adapts its output format to your needs.
+                    </p>
+                    <ToggleRow
+                      label="Dyslexia-friendly"
+                      description="Shorter paragraphs, bullet lists, bolded key terms"
+                      checked={!!eff.accessibilityNeeds.dyslexia}
+                      onChange={(v) => setA11y("dyslexia", v)}
+                    />
+                    <ToggleRow
+                      label="ADHD-friendly"
+                      description="Frequent micro-checkpoints, shorter explanations, more quizzes"
+                      checked={!!eff.accessibilityNeeds.adhd}
+                      onChange={(v) => setA11y("adhd", v)}
+                    />
+                    <ToggleRow
+                      label="Visual impairment"
+                      description="Detailed text descriptions of diagrams and visual concepts"
+                      checked={!!eff.accessibilityNeeds.visualImpairment}
+                      onChange={(v) => setA11y("visualImpairment", v)}
+                    />
+                    <ToggleRow
+                      label="Reduced motion"
+                      description="Fewer animations and transitions in the UI"
+                      checked={!!eff.accessibilityNeeds.reducedMotion}
+                      onChange={(v) => setA11y("reducedMotion", v)}
+                    />
+                  </div>
+                </section>
+
+                {learnerProfile && learnerProfile.calibrationConfidence > 0 && (
+                  <section>
+                    <SectionHeader icon={<Sparkles className="size-4 text-primary" />} title="AI-Inferred Profile" />
+                    <div className="rounded-xl border border-border/30 bg-muted/10 p-4">
+                      <p className="text-[11px] text-muted-foreground/50 mb-3">
+                        Calibrated from your review sessions — blends with your declared settings above.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 text-[12px]">
+                        {learnerProfile.inferredPace && (
+                          <div>
+                            <span className="text-muted-foreground/60">Pace:</span>{" "}
+                            <span className="font-medium capitalize">{learnerProfile.inferredPace}</span>
+                          </div>
+                        )}
+                        {learnerProfile.inferredBloomCeiling && (
+                          <div>
+                            <span className="text-muted-foreground/60">Bloom ceiling:</span>{" "}
+                            <span className="font-medium capitalize">{learnerProfile.inferredBloomCeiling}</span>
+                          </div>
+                        )}
+                        {learnerProfile.inferredOptimalSessionMin && (
+                          <div>
+                            <span className="text-muted-foreground/60">Optimal session:</span>{" "}
+                            <span className="font-medium">{learnerProfile.inferredOptimalSessionMin} min</span>
+                          </div>
+                        )}
+                        {learnerProfile.inferredReadingLevel && (
+                          <div>
+                            <span className="text-muted-foreground/60">Reading level:</span>{" "}
+                            <span className="font-medium">Grade {Math.round(learnerProfile.inferredReadingLevel)}</span>
+                          </div>
+                        )}
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground/60">Calibration confidence:</span>{" "}
+                          <span className="font-medium">{Math.round(learnerProfile.calibrationConfidence * 100)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
+            {/* ── Study tab ───────────────────────────────── */}
+            {activeTab === "study" && (
+              <section>
+                <SectionHeader icon={<Clock className="size-4 text-primary" />} title="Study Preferences" />
+                <div className="space-y-4 rounded-xl border border-border/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[13px] font-medium">Daily review budget</p>
+                      <p className="text-[11px] text-muted-foreground/50">Max cards per daily session</p>
+                    </div>
+                    <input
+                      type="number"
+                      min={5}
+                      max={50}
+                      value={dailyBudget}
+                      onChange={(e) => setDailyBudget(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-center text-[13px] focus:border-primary/40 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[13px] font-medium">Weekly review goal</p>
+                      <p className="text-[11px] text-muted-foreground/50">Target reviews per week</p>
+                    </div>
+                    <input
+                      type="number"
+                      min={5}
+                      max={500}
+                      value={weeklyGoal}
+                      onChange={(e) => setWeeklyGoal(Number(e.target.value))}
+                      className="w-16 rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-center text-[13px] focus:border-primary/40 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── Notifications tab ───────────────────────── */}
+            {activeTab === "notifications" && (
+              <>
+                <section>
+                  <SectionHeader icon={<Bell className="size-4 text-amber-500" />} title="Notifications & Reminders" />
+                  <div className="space-y-4 rounded-xl border border-border/30 p-4">
+                    <ToggleRow
+                      label="Email reminders"
+                      description="Daily digest of due reviews"
+                      checked={effNotifs.email}
+                      onChange={setEmailReminders}
+                    />
+                    <ToggleRow
+                      label="Push notifications"
+                      description="Browser push at study time"
+                      checked={effNotifs.push}
+                      onChange={setPushNotifications}
+                    />
+                    <ToggleRow
+                      label="Smart nudges"
+                      description="Alert when concepts are fading"
+                      checked={effNotifs.smartNudges}
+                      onChange={setSmartNudges}
+                    />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Reminder time</p>
+                        <p className="text-[11px] text-muted-foreground/50">When to send daily reminders</p>
+                      </div>
+                      <input
+                        type="time"
+                        value={effNotifs.reminderTime}
+                        onChange={(e) => setReminderTime(e.target.value)}
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[13px] font-medium">Frequency</p>
+                      </div>
+                      <select
+                        value={effNotifs.frequency ?? "daily"}
+                        onChange={(e) =>
+                          setFrequency(e.target.value as "daily" | "every_other_day" | "weekly")
+                        }
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="every_other_day">Every other day</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <SectionHeader icon={<Shield className="size-4 text-violet-500" />} title="Quiet Hours" />
+                  <div className="rounded-xl border border-border/30 p-4">
+                    <p className="text-[11px] text-muted-foreground/50 mb-3">
+                      No notifications during these hours
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="time"
+                        value={effNotifs.quietStart}
+                        onChange={(e) => setQuietStart(e.target.value)}
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      />
+                      <span className="text-[12px] text-muted-foreground/40">to</span>
+                      <input
+                        type="time"
+                        value={effNotifs.quietEnd}
+                        onChange={(e) => setQuietEnd(e.target.value)}
+                        className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {/* ── Save ────────────────────────────────────── */}
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-50 transition-opacity"
+            >
+              {saved ? (
+                <>
+                  <Check className="size-4" />
+                  Saved
+                </>
+              ) : isSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <>
+                  <Save className="size-4" />
+                  Save settings
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+      {icon}
+      {title}
+    </h2>
   );
 }
 
