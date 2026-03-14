@@ -217,7 +217,7 @@ ${learningObjectId ? `Currently viewing: ${userMaterials.find((m) => m.id === le
           "Generate an inline quiz question for a concept to test the student's understanding",
         parameters: z.object({
           conceptName: z.string().max(200).describe("Concept to quiz on"),
-          difficulty: z.number().min(1).max(5).optional().describe("Difficulty level 1-5"),
+          difficulty: z.number().min(1).max(5).describe("Difficulty level 1-5, use 3 if unsure"),
         }),
         execute: async ({ conceptName, difficulty }) => {
           const [concept] = await db

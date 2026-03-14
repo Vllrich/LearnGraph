@@ -104,6 +104,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  log.info("Mentor request", { userId: user.id, learningObjectId, messageLen: message.length, historyLen: history.length });
+
   const { result, chunks } = await streamMentorResponse({
     conversationId,
     userId: user.id,
@@ -112,12 +114,19 @@ export async function POST(req: NextRequest) {
     history,
   });
 
-  const citations = chunks.map((c) => ({
-    chunkId: c.id,
-    content: c.content.slice(0, 200),
-    pageNumber: c.pageNumber,
-    learningObjectId: c.learningObjectId,
-  }));
+  log.debug("RAG retrieval done", { chunkCount: chunks.length, topScore: chunks[0]?.score });
+
+  const citations = chunks
+    .filter((c) => {
+      const alphaNum = c.content.replace(/[^a-zA-Z0-9]/g, "");
+      return alphaNum.length > 20;
+    })
+    .map((c) => ({
+      chunkId: c.id,
+      content: c.content.replace(/\s+/g, " ").trim().slice(0, 200),
+      pageNumber: c.pageNumber,
+      learningObjectId: c.learningObjectId,
+    }));
 
   const encoder = new TextEncoder();
   let fullResponse = "";
@@ -130,14 +139,27 @@ export async function POST(req: NextRequest) {
           encoder.encode(`data: ${JSON.stringify({ type: "citations", citations })}\n\n`),
         );
 
-        for await (const chunk of result.textStream) {
-          fullResponse += chunk;
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk })}\n\n`),
-          );
+        let chunkCount = 0;
+        let toolCalls: string[] = [];
+        for await (const part of result.fullStream) {
+          if (part.type === "text-delta") {
+            chunkCount++;
+            fullResponse += part.textDelta;
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "text", text: part.textDelta })}\n\n`),
+            );
+          } else if (part.type === "tool-call") {
+            toolCalls.push(part.toolName);
+            log.debug("Tool call", { tool: part.toolName, args: part.args });
+          } else if (part.type === "tool-result") {
+            log.debug("Tool result", { tool: (part as Record<string, unknown>).toolName });
+          } else if (part.type === "error") {
+            log.error("Stream error part", { error: part.error });
+          } else if (part.type === "finish") {
+            log.info("Stream complete", { chunkCount, responseLen: fullResponse.length, toolCalls });
+          }
         }
 
-        // Save the conversation after streaming completes
         const updatedHistory: MentorMessage[] = [
           ...history,
           { role: "user", content: message },
