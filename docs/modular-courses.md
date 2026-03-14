@@ -247,11 +247,13 @@ Added to `apps/web/src/server/trpc/routers/goals.ts`:
 | Procedure | Type | Description |
 |---|---|---|
 | `getNextLesson` | query | Path engine: returns next lesson or completion status |
-| `getCourseRoadmap` | query | Full hierarchical course structure with progress |
+| `getCourseRoadmap` | query | Full hierarchical course structure with progress, concept skill, unlock requirements |
 | `getLessonBlocks` | query | All blocks for a lesson (ownership verified) |
-| `completeBlock` | mutation | Marks a block complete, stores interaction log |
+| `completeBlock` | mutation | Marks block complete, updates FSRS concept state + review_log, awards XP/streak |
 | `skipModule` | mutation | Skips a module if eligible (retrievability > 0.9) |
 | `getCourseProgress` | query | Overall course completion stats |
+| `getCatchUpSuggestion` | query | Identifies weak concepts blocking the next locked module |
+| `getWelcomeBack` | query | Finds decayed concepts for inactive users (3+ days) |
 
 All procedures verify resource ownership and use Zod input validation.
 
@@ -261,28 +263,34 @@ All procedures verify resource ownership and use Zod input validation.
 
 ### Course Setup Wizard (`course-setup-wizard.tsx`)
 
-Adaptive 4-step wizard:
-1. **Goal type** — Exploration, certification, exam prep, etc.
-2. **Topics** — AI-suggested topics with manual additions
-3. **Learning mode** — Cards showing available modes, adapted per education stage (elementary skips this step, high school sees simplified set)
-4. **Generation** — Animated progress through generation stages
-
-Session length and days/week are pre-filled from education stage defaults and can be customized.
+Adaptive wizard with first-time onboarding:
+- **Onboarding** (new users only) — education stage selection seeds the learner profile before wizard starts
+- **Step 0: Goal type** — Exploration, certification, exam prep, etc.
+- **Step 1: Familiarity** — Beginner / Some knowledge / Experienced
+- **Step 2: Topics** — AI-suggested topics grouped into Foundations / Core / Advanced clusters. Estimated structure preview (~N modules · ~N lessons · ~N blocks) shown before generation.
+- **Step 3: Learning mode** — Cards showing available modes, adapted per education stage (elementary skips, high school sees simplified set, self-learner sees customize expanded)
+- **Step 4: Generation** — Animated progress through generation stages
 
 ### Course Roadmap (`course-roadmap.tsx`)
 
 Visual course overview showing:
 - Overall progress bar
 - Module cards with status indicators (locked/available/in-progress/completed/skipped)
+- **Locked modules** show specific concept unlock requirements with % progress bars
+- **Per-module concept skill bar** derived from `user_concept_state` retrievability
 - Lesson list within active modules
 - "Start", "Continue", and "Test out" actions
+- **Mode adaptation card** — suggests switching learning mode based on block completion patterns
 
 ### Lesson Player (`lesson-player.tsx`)
 
 Block-by-block progression through a lesson:
 - Header with lesson title, block counter, and progress bar
+- **Transition animations** (fade/slide) between blocks
 - Dynamic content area adapting to each block type
 - Error recovery: failed blocks show error message and allow skipping
+- **Scaffold fading** — hint count decreases as the session progresses (fewer hints after 3+ blocks, minimal after 8+)
+- **Block-level analytics** — time spent, hints used, correctness logged in `interaction_log`
 - Auto-scrolling during streamed content
 - "Next Block" button respects block-type-specific completion rules
 
@@ -294,14 +302,15 @@ Block-by-block progression through a lesson:
 - `packages/shared/src/types.ts` — `LearningMode`, `MethodWeights`, `BlockType`, `ModuleType`, etc.
 - `packages/db/src/schema/courses.ts` — `courseModules`, `courseLessons`, `lessonBlocks`
 - `packages/db/src/schema/goals.ts` — `learning_mode`, `schema_version` columns
-- `packages/db/drizzle/0005_hot_warstar.sql` — migration
+- `packages/db/drizzle/0005_hot_warstar.sql` — initial V2 migration
+- `packages/db/drizzle/0006_rls_and_constraints.sql` — RLS policies + CHECK constraints
 
 ### AI Pipeline
 - `packages/ai/src/curriculum/method-defaults.ts` — `getMethodWeights()`, `getDefaultLearningMode()`
 - `packages/ai/src/curriculum/generate-modular.ts` — `generateModularCourse()`
 - `packages/ai/src/curriculum/blocks/schemas.ts` — Zod schemas per block type
 - `packages/ai/src/curriculum/blocks/generate-block.ts` — `generateBlockContent()`
-- `packages/ai/src/curriculum/path-engine.ts` — `getNextLesson()`, `getCourseRoadmap()`
+- `packages/ai/src/curriculum/path-engine.ts` — `getNextLesson()`, `getCourseRoadmap()`, `generateCatchUpSuggestion()`, `getWelcomeBackSuggestion()`
 
 ### API Routes
 - `apps/web/src/app/api/learn/start-v2/route.ts` — course creation

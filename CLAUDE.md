@@ -89,9 +89,12 @@ Adaptive profile that changes how the entire app behaves per user. Stored in `le
 Hierarchical Course → Module → Lesson → Block structure replacing flat curriculum_items.
 - **6 learning modes**: understand_first, remember_longer, apply_faster, deep_mastery, exam_prep, mentor_heavy
 - **7 block types**: concept, worked_example, checkpoint, practice, reflection, scenario, mentor
-- **Adaptive path engine**: mastery gates, module unlocking, skip eligibility, remedial insertion
-- **Schema**: `course_modules`, `course_lessons`, `lesson_blocks` tables + `learning_mode`/`schema_version` on `learning_goals`
-- Full docs: `docs/modular-courses.md`
+- **Adaptive path engine**: mastery gates, module unlocking, skip eligibility, catch-up suggestions, welcome-back detection
+- **FSRS integration**: `completeBlock` updates `user_concept_state` + `review_log`, schedules next review
+- **Gamification**: block completion awards XP/streak; module/course milestones trigger achievements
+- **Scaffold fading**: hint density decreases as session mastery grows
+- **RLS policies**: all 3 course tables have row-level security via `0006_rls_and_constraints.sql`
+- Full docs: `docs/modular-courses.md` · `docs/feature-status.md`
 
 ## Reference Docs (read before starting a task)
 - `docs/TECHNICAL_ARCHITECTURE.md` — full data models (§7), AI pipeline, system design

@@ -9,14 +9,215 @@ import {
   courseModules,
   courseLessons,
   lessonBlocks,
+  userConceptState,
+  reviewLog,
+  userStreaks,
+  userAchievements,
+  users,
 } from "@repo/db";
-import { eq, and, desc, asc, sql } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
   getNextLesson as getNextLessonEngine,
   getCourseRoadmap as getCourseRoadmapEngine,
   isModuleSkipEligible,
+  generateCatchUpSuggestion,
+  getWelcomeBackSuggestion,
 } from "@repo/ai";
+import { schedule, newCard } from "@repo/fsrs";
+import type { AchievementKey } from "@repo/shared";
+import { ACHIEVEMENT_DEFINITIONS, XP_VALUES } from "@repo/shared";
+
+// ---------------------------------------------------------------------------
+// Helpers for FSRS + gamification integration (shared with gamification router)
+// ---------------------------------------------------------------------------
+
+function getTodayStr(tz: string): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: tz });
+}
+
+async function ensureStreak(userId: string) {
+  const [existing] = await db
+    .select()
+    .from(userStreaks)
+    .where(eq(userStreaks.userId, userId))
+    .limit(1);
+  if (existing) return existing;
+  const [created] = await db
+    .insert(userStreaks)
+    .values({ userId, currentStreak: 0, longestStreak: 0, totalXp: 0 })
+    .returning();
+  return created;
+}
+
+async function grantAchievementIfNew(userId: string, key: AchievementKey): Promise<boolean> {
+  const def = ACHIEVEMENT_DEFINITIONS.find((a) => a.key === key);
+  if (!def) return false;
+  try {
+    await db.insert(userAchievements).values({ userId, achievementKey: key });
+    await db
+      .update(userStreaks)
+      .set({ totalXp: sql`COALESCE(${userStreaks.totalXp}, 0) + ${def.xp}`, updatedAt: new Date() })
+      .where(eq(userStreaks.userId, userId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function blockRatingFromType(blockType: string, interactionLog: unknown): number {
+  if (blockType === "checkpoint" || blockType === "practice") {
+    const log = interactionLog as Record<string, unknown> | undefined;
+    if (log?.correct === true) return 4;
+    if (log?.correct === false) return 2;
+  }
+  if (blockType === "concept" || blockType === "worked_example") return 3;
+  return 3;
+}
+
+async function updateConceptStateFromBlock(
+  userId: string,
+  conceptIds: string[],
+  blockType: string,
+  interactionLog: unknown,
+) {
+  const rating = blockRatingFromType(blockType, interactionLog);
+  const now = new Date();
+
+  for (const conceptId of conceptIds) {
+    const [existing] = await db
+      .select()
+      .from(userConceptState)
+      .where(and(eq(userConceptState.userId, userId), eq(userConceptState.conceptId, conceptId)))
+      .limit(1);
+
+    const card = existing
+      ? {
+          stability: existing.fsrsStability ?? 0,
+          difficulty: existing.fsrsDifficulty ?? 5,
+          elapsedDays: existing.fsrsElapsedDays ?? 0,
+          scheduledDays: existing.fsrsScheduledDays ?? 0,
+          reps: existing.fsrsReps ?? 0,
+          lapses: existing.fsrsLapses ?? 0,
+          state: (existing.fsrsState ?? "new") as "new" | "learning" | "review" | "relearning",
+          lastReview: existing.lastReviewAt,
+        }
+      : newCard();
+
+    const result = schedule(card, rating as 1 | 2 | 3 | 4, now);
+    const masteryLevel = Math.min(5, Math.floor(result.retrievability * 5 + 0.5));
+
+    if (existing) {
+      await db
+        .update(userConceptState)
+        .set({
+          fsrsStability: result.card.stability,
+          fsrsDifficulty: result.card.difficulty,
+          fsrsElapsedDays: result.card.elapsedDays,
+          fsrsScheduledDays: result.card.scheduledDays,
+          fsrsRetrievability: result.retrievability,
+          fsrsState: result.card.state,
+          fsrsReps: result.card.reps,
+          fsrsLapses: result.card.lapses,
+          lastReviewAt: now,
+          nextReviewAt: result.nextReview,
+          masteryLevel,
+          updatedAt: now,
+        })
+        .where(eq(userConceptState.id, existing.id));
+    } else {
+      await db.insert(userConceptState).values({
+        userId,
+        conceptId,
+        fsrsStability: result.card.stability,
+        fsrsDifficulty: result.card.difficulty,
+        fsrsElapsedDays: result.card.elapsedDays,
+        fsrsScheduledDays: result.card.scheduledDays,
+        fsrsRetrievability: result.retrievability,
+        fsrsState: result.card.state,
+        fsrsReps: result.card.reps,
+        fsrsLapses: result.card.lapses,
+        lastReviewAt: now,
+        nextReviewAt: result.nextReview,
+        masteryLevel,
+      });
+    }
+
+    await db.insert(reviewLog).values({
+      userId,
+      conceptId,
+      rating,
+      reviewType: `block_${blockType}`,
+    });
+  }
+}
+
+async function recordBlockActivity(userId: string) {
+  const streak = await ensureStreak(userId);
+  const [userRow] = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const tz = userRow?.timezone ?? "UTC";
+  const today = getTodayStr(tz);
+  const xpGain = XP_VALUES.review;
+  const isNewDay = streak.lastActivityDate !== today;
+
+  const updates: Record<string, unknown> = {
+    totalXp: sql`COALESCE(${userStreaks.totalXp}, 0) + ${xpGain}`,
+    updatedAt: new Date(),
+  };
+
+  if (isNewDay) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString("sv-SE", { timeZone: tz });
+    const isConsecutive = streak.lastActivityDate === yesterdayStr;
+
+    if (isConsecutive || !streak.lastActivityDate) {
+      const newStreak = (streak.currentStreak ?? 0) + 1;
+      updates.currentStreak = newStreak;
+      updates.longestStreak = sql`GREATEST(COALESCE(${userStreaks.longestStreak}, 0), ${newStreak})`;
+    } else {
+      updates.currentStreak = 1;
+    }
+    updates.lastActivityDate = today;
+  }
+
+  await db.update(userStreaks).set(updates).where(eq(userStreaks.id, streak.id));
+}
+
+async function checkCourseAchievements(userId: string, goalId: string) {
+  const completedModules = await db
+    .select({ cnt: count() })
+    .from(courseModules)
+    .where(and(eq(courseModules.goalId, goalId), eq(courseModules.status, "completed")));
+  const moduleCount = Number(completedModules[0]?.cnt ?? 0);
+
+  if (moduleCount >= 1) await grantAchievementIfNew(userId, "first_module_complete");
+  if (moduleCount >= 5) await grantAchievementIfNew(userId, "modules_5");
+  if (moduleCount >= 10) await grantAchievementIfNew(userId, "modules_10");
+
+  const allModules = await db
+    .select({ status: courseModules.status })
+    .from(courseModules)
+    .where(eq(courseModules.goalId, goalId));
+  const courseComplete = allModules.length > 0 && allModules.every(
+    (m) => m.status === "completed" || m.status === "skipped",
+  );
+  if (courseComplete) await grantAchievementIfNew(userId, "first_course_complete");
+
+  const totalBlocks = await db
+    .select({ cnt: count() })
+    .from(lessonBlocks)
+    .innerJoin(courseLessons, eq(lessonBlocks.lessonId, courseLessons.id))
+    .innerJoin(courseModules, eq(courseLessons.moduleId, courseModules.id))
+    .where(and(eq(courseModules.goalId, goalId), eq(lessonBlocks.status, "completed")));
+  const blockCount = Number(totalBlocks[0]?.cnt ?? 0);
+  if (blockCount >= 50) await grantAchievementIfNew(userId, "blocks_50");
+  if (blockCount >= 100) await grantAchievementIfNew(userId, "blocks_100");
+}
 
 export const goalsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -362,6 +563,15 @@ export const goalsRouter = createTRPCRouter({
         .where(eq(lessonBlocks.id, input.blockId))
         .returning();
 
+      // FSRS: update concept state + review log for block's concepts
+      const conceptIds = (block.conceptIds ?? []).filter(Boolean) as string[];
+      if (conceptIds.length > 0) {
+        await updateConceptStateFromBlock(ctx.userId, conceptIds, block.blockType, input.interactionLog);
+      }
+
+      // Streak + XP
+      await recordBlockActivity(ctx.userId);
+
       // Check if all blocks in this lesson are complete
       const allBlocks = await db
         .select({ status: lessonBlocks.status })
@@ -378,7 +588,6 @@ export const goalsRouter = createTRPCRouter({
           .set({ status: "completed", completedAt: new Date() })
           .where(eq(courseLessons.id, block.lessonId));
 
-        // Check if all lessons in module are complete
         const allLessons = await db
           .select({ status: courseLessons.status })
           .from(courseLessons)
@@ -393,6 +602,8 @@ export const goalsRouter = createTRPCRouter({
             .update(courseModules)
             .set({ status: "completed", completedAt: new Date() })
             .where(eq(courseModules.id, lesson.moduleId));
+
+          await checkCourseAchievements(ctx.userId, mod.goalId);
         }
       }
 
@@ -503,5 +714,22 @@ export const goalsRouter = createTRPCRouter({
         blockProgress: totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0,
         isComplete: completedModules === totalModules && totalModules > 0,
       };
+    }),
+
+  getCatchUpSuggestion: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+      return generateCatchUpSuggestion(input.goalId, ctx.userId);
+    }),
+
+  getWelcomeBack: protectedProcedure
+    .query(async ({ ctx }) => {
+      return getWelcomeBackSuggestion(ctx.userId);
     }),
 });

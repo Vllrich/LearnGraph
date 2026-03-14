@@ -14,7 +14,11 @@ export {
   evaluateModuleStatus,
   isModuleSkipEligible,
   getCourseRoadmap,
+  generateCatchUpSuggestion,
+  getWelcomeBackSuggestion,
   type NextLessonResult,
+  type CatchUpSuggestion,
+  type WelcomeBackResult,
 } from "./path-engine";
 export { generateBlockContent } from "./blocks";
 export type {

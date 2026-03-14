@@ -5,8 +5,9 @@ import {
   lessonBlocks,
   userConceptState,
   learningGoals,
+  concepts,
 } from "@repo/db";
-import { eq, and, asc, sql, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, lte } from "drizzle-orm";
 import type { ModuleStatus } from "@repo/shared";
 
 const MASTERY_GATE_THRESHOLD = 0.7;
@@ -280,6 +281,43 @@ export async function getCourseRoadmap(goalId: string, userId: string) {
       ).length;
       const skipEligible = await isModuleSkipEligible(mod.id, userId);
 
+      // Concept skill data for this module
+      let conceptSkill = 0;
+      let unlockRequirements: { conceptName: string; retrievability: number }[] = [];
+      if (mod.conceptIds?.length) {
+        const states = await db
+          .select({
+            conceptId: userConceptState.conceptId,
+            retrievability: userConceptState.fsrsRetrievability,
+          })
+          .from(userConceptState)
+          .where(
+            and(
+              eq(userConceptState.userId, userId),
+              inArray(userConceptState.conceptId, mod.conceptIds),
+            ),
+          );
+
+        const stateMap = new Map(states.map((s) => [s.conceptId, s.retrievability ?? 0]));
+        const totalR = mod.conceptIds.reduce((s, cid) => s + (stateMap.get(cid) ?? 0), 0);
+        conceptSkill = Math.round((totalR / mod.conceptIds.length) * 100);
+
+        if (mod.status === "locked") {
+          const conceptNames = await db
+            .select({ id: concepts.id, name: concepts.displayName })
+            .from(concepts)
+            .where(inArray(concepts.id, mod.conceptIds));
+
+          const nameMap = new Map(conceptNames.map((c) => [c.id, c.name]));
+          unlockRequirements = mod.conceptIds
+            .filter((cid) => (stateMap.get(cid) ?? 0) < MASTERY_GATE_THRESHOLD)
+            .map((cid) => ({
+              conceptName: nameMap.get(cid) ?? "Unknown concept",
+              retrievability: Math.round((stateMap.get(cid) ?? 0) * 100),
+            }));
+        }
+      }
+
       return {
         ...mod,
         lessons: lessonDetails,
@@ -288,6 +326,8 @@ export async function getCourseRoadmap(goalId: string, userId: string) {
         progressPercent:
           totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0,
         skipEligible,
+        conceptSkill,
+        unlockRequirements,
       };
     }),
   );
@@ -312,6 +352,135 @@ async function getWeakConceptsForModule(
   return states
     .filter((s) => (s.fsrsRetrievability ?? 0) < MASTERY_GATE_THRESHOLD)
     .map((s) => s.conceptId);
+}
+
+export type CatchUpSuggestion = {
+  type: "catch_up";
+  weakConcepts: { conceptId: string; conceptName: string; retrievability: number }[];
+  targetModuleTitle: string;
+};
+
+export async function generateCatchUpSuggestion(
+  goalId: string,
+  userId: string,
+): Promise<CatchUpSuggestion | null> {
+  const lockedModules = await db
+    .select()
+    .from(courseModules)
+    .where(and(eq(courseModules.goalId, goalId), eq(courseModules.status, "locked")))
+    .orderBy(asc(courseModules.sequenceOrder))
+    .limit(1);
+
+  const lockedMod = lockedModules[0];
+  if (!lockedMod?.conceptIds?.length) return null;
+
+  const states = await db
+    .select({
+      conceptId: userConceptState.conceptId,
+      retrievability: userConceptState.fsrsRetrievability,
+    })
+    .from(userConceptState)
+    .where(
+      and(
+        eq(userConceptState.userId, userId),
+        inArray(userConceptState.conceptId, lockedMod.conceptIds),
+      ),
+    );
+
+  const stateMap = new Map(states.map((s) => [s.conceptId, s.retrievability ?? 0]));
+  const weakIds = lockedMod.conceptIds.filter(
+    (cid) => (stateMap.get(cid) ?? 0) < MASTERY_GATE_THRESHOLD,
+  );
+
+  if (weakIds.length === 0) return null;
+
+  const conceptNames = await db
+    .select({ id: concepts.id, name: concepts.displayName })
+    .from(concepts)
+    .where(inArray(concepts.id, weakIds));
+
+  const nameMap = new Map(conceptNames.map((c) => [c.id, c.name]));
+
+  return {
+    type: "catch_up",
+    weakConcepts: weakIds.map((cid) => ({
+      conceptId: cid,
+      conceptName: nameMap.get(cid) ?? "Unknown concept",
+      retrievability: Math.round((stateMap.get(cid) ?? 0) * 100),
+    })),
+    targetModuleTitle: lockedMod.title,
+  };
+}
+
+export type WelcomeBackResult = {
+  type: "welcome_back";
+  daysSinceActivity: number;
+  decayedConcepts: { conceptId: string; conceptName: string; retrievability: number }[];
+  goalId: string;
+  goalTitle: string;
+};
+
+export async function getWelcomeBackSuggestion(
+  userId: string,
+): Promise<WelcomeBackResult | null> {
+  const activeGoals = await db
+    .select()
+    .from(learningGoals)
+    .where(
+      and(
+        eq(learningGoals.userId, userId),
+        eq(learningGoals.status, "active"),
+      ),
+    )
+    .orderBy(asc(learningGoals.createdAt))
+    .limit(1);
+
+  const goal = activeGoals[0];
+  if (!goal) return null;
+
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - RE_ENGAGEMENT_DAYS * 24 * 60 * 60 * 1000);
+
+  const decayedConcepts = await db
+    .select({
+      conceptId: userConceptState.conceptId,
+      retrievability: userConceptState.fsrsRetrievability,
+    })
+    .from(userConceptState)
+    .where(
+      and(
+        eq(userConceptState.userId, userId),
+        lte(userConceptState.nextReviewAt, cutoff),
+      ),
+    )
+    .limit(10);
+
+  if (decayedConcepts.length === 0) return null;
+
+  const conceptIds = decayedConcepts.map((c) => c.conceptId);
+  const conceptNames = await db
+    .select({ id: concepts.id, name: concepts.displayName })
+    .from(concepts)
+    .where(inArray(concepts.id, conceptIds));
+
+  const nameMap = new Map(conceptNames.map((c) => [c.id, c.name]));
+
+  const lastReview = decayedConcepts.reduce(
+    (latest, c) => Math.min(latest, c.retrievability ?? 0),
+    1,
+  );
+
+  return {
+    type: "welcome_back",
+    daysSinceActivity: RE_ENGAGEMENT_DAYS,
+    decayedConcepts: decayedConcepts.map((c) => ({
+      conceptId: c.conceptId,
+      conceptName: nameMap.get(c.conceptId) ?? "Unknown concept",
+      retrievability: Math.round((c.retrievability ?? 0) * 100),
+    })),
+    goalId: goal.id,
+    goalTitle: goal.title,
+  };
 }
 
 async function unlockDependentModules(goalId: string, userId: string) {

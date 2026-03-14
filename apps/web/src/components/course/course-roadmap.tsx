@@ -8,12 +8,15 @@ import {
   SkipForward,
   Clock,
   Loader2,
+  AlertTriangle,
+  Sparkles,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 
 
@@ -172,6 +175,30 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                 </div>
               </div>
 
+              {/* Unlock requirements for locked modules */}
+              {isLocked && mod.unlockRequirements?.length > 0 && (
+                <div className="border-t border-border/15 px-4 py-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="size-3" />
+                    Master these concepts to unlock:
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {mod.unlockRequirements.map((req: { conceptName: string; retrievability: number }, i: number) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="flex-1 text-[11px] text-muted-foreground">{req.conceptName}</span>
+                        <span className="text-[10px] text-muted-foreground/60">{req.retrievability}%</span>
+                        <div className="h-1 w-12 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-amber-500/60 transition-all"
+                            style={{ width: `${req.retrievability}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Lessons inside module */}
               {isActive && mod.lessons.length > 0 && (
                 <div className="border-t border-border/15 px-4 py-2">
@@ -209,15 +236,87 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                 </div>
               )}
 
-              {/* Progress bar for non-locked modules */}
-              {!isLocked && mod.progressPercent > 0 && (
-                <div className="px-4 pb-2">
-                  <Progress value={mod.progressPercent} className="h-1" />
+              {/* Skill bar and progress for non-locked modules */}
+              {!isLocked && (mod.progressPercent > 0 || mod.conceptSkill > 0) && (
+                <div className="space-y-1.5 px-4 pb-2">
+                  {mod.progressPercent > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground/50 w-12">Lessons</span>
+                      <Progress value={mod.progressPercent} className="h-1 flex-1" />
+                    </div>
+                  )}
+                  {mod.conceptSkill > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground/50 w-12 flex items-center gap-0.5">
+                        <Brain className="size-2.5" /> Skill
+                      </span>
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-violet-500/70 transition-all"
+                          style={{ width: `${mod.conceptSkill}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/40">{mod.conceptSkill}%</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+
+      {/* Mode adaptation suggestion */}
+      {overallProgress > 20 && (
+        <ModeSuggestionCard goalId={goalId} modules={modules} />
+      )}
+    </div>
+  );
+}
+
+function ModeSuggestionCard({
+  modules,
+}: {
+  goalId: string;
+  modules: Array<{
+    lessons: Array<{
+      blockCount: number;
+      completedBlocks: number;
+      blockTypes: string[];
+    }>;
+  }>;
+}) {
+  const allBlockTypes = modules.flatMap((m) => m.lessons.flatMap((l) => l.blockTypes));
+  const completedLessons = modules.flatMap((m) =>
+    m.lessons.filter((l) => (l as { status?: string }).status === "completed"),
+  );
+  if (completedLessons.length < 3) return null;
+
+  const checkpointCount = allBlockTypes.filter((t) => t === "checkpoint").length;
+  const reflectionCount = allBlockTypes.filter((t) => t === "reflection").length;
+  const totalBlocks = allBlockTypes.length;
+  if (totalBlocks === 0) return null;
+
+  const checkpointRatio = checkpointCount / totalBlocks;
+  const reflectionRatio = reflectionCount / totalBlocks;
+
+  let suggestion: string | null = null;
+  if (checkpointRatio > 0.3 && reflectionRatio < 0.05) {
+    suggestion = "You&apos;re acing checkpoints! Try switching to Deep Mastery for more challenge.";
+  } else if (reflectionRatio > 0.2) {
+    suggestion = "Great reflection scores! Apply Faster mode could help you build practical skills.";
+  }
+
+  if (!suggestion) return null;
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+      <Sparkles className="mt-0.5 size-4 shrink-0 text-violet-500" />
+      <div>
+        <p className="text-sm font-medium text-violet-700 dark:text-violet-300">
+          Mode suggestion
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground" dangerouslySetInnerHTML={{ __html: suggestion }} />
       </div>
     </div>
   );

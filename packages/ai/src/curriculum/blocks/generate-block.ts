@@ -76,10 +76,7 @@ export async function generateBlockContent(
 
   const schema = SCHEMA_MAP[blockType];
 
-  const { object } = await generateObject({
-    model: primaryModel,
-    schema,
-    prompt: `${BLOCK_INSTRUCTIONS[blockType]}
+  const prompt = `${BLOCK_INSTRUCTIONS[blockType]}
 
 Course: <course_topic>${courseTopic}</course_topic>
 Module: "${moduleTitle}"
@@ -91,9 +88,22 @@ ${previousContext}
 
 Learner profile:
 ${profilePrompt}
-${groundingContext}`,
-    temperature: 0.5,
-  });
+${groundingContext}`;
 
-  return object as BlockContent;
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { object } = await generateObject({
+        model: primaryModel,
+        schema,
+        prompt,
+        temperature: attempt === 0 ? 0.5 : 0.3,
+      });
+      return object as BlockContent;
+    } catch (err) {
+      if (attempt === MAX_RETRIES) throw err;
+    }
+  }
+
+  throw new Error(`Block generation failed after ${MAX_RETRIES + 1} attempts`);
 }

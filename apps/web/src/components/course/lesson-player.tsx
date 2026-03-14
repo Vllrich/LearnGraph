@@ -64,6 +64,9 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const [checkResult, setCheckResult] = useState<{ correct: boolean; explanation: string } | null>(null);
   const [hintsRevealed, setHintsRevealed] = useState(0);
   const [scenarioResult, setScenarioResult] = useState<{ outcome: string; isOptimal: boolean; debrief: string } | null>(null);
+  const [blockTransition, setBlockTransition] = useState(false);
+  const blockStartTime = useRef(Date.now());
+  const [blocksCompletedThisSession, setBlocksCompletedThisSession] = useState(0);
 
   const blocks = data?.blocks ?? [];
   const currentBlock = blocks[blockIndex];
@@ -279,7 +282,19 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   function advanceToNext() {
     if (!currentBlock) return;
 
-    completeMutation.mutate({ blockId: currentBlock.id });
+    const timeSpentMs = Date.now() - blockStartTime.current;
+    completeMutation.mutate({
+      blockId: currentBlock.id,
+      interactionLog: {
+        timeSpentMs,
+        blockType: currentBlock.blockType,
+        hintsUsed: hintsRevealed,
+        correct: checkResult?.correct,
+        completedAt: new Date().toISOString(),
+      },
+    });
+
+    setBlocksCompletedThisSession((c) => c + 1);
 
     const nextIndex = blockIndex + 1;
     if (nextIndex >= totalBlocks) {
@@ -287,16 +302,21 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
       return;
     }
 
-    setBlockIndex(nextIndex);
-    setStreamedContent("");
-    setStreamState("idle");
-    setBlockError(null);
-    setUserInput("");
-    setFeedback(null);
-    setSelectedAnswer("");
-    setCheckResult(null);
-    setHintsRevealed(0);
-    setScenarioResult(null);
+    setBlockTransition(true);
+    setTimeout(() => {
+      setBlockIndex(nextIndex);
+      setStreamedContent("");
+      setStreamState("idle");
+      setBlockError(null);
+      setUserInput("");
+      setFeedback(null);
+      setSelectedAnswer("");
+      setCheckResult(null);
+      setHintsRevealed(0);
+      setScenarioResult(null);
+      blockStartTime.current = Date.now();
+      setBlockTransition(false);
+    }, 200);
   }
 
   if (isLoading) {
@@ -394,22 +414,38 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const renderPracticeHints = () => {
     const hints = content.hints as string[] | undefined;
     if (!hints?.length) return null;
+
+    // Scaffold fading: reduce visible hints as session mastery grows
+    // After 3+ blocks completed, show fewer hints; after 8+, show at most 1
+    const maxHints = blocksCompletedThisSession >= 8
+      ? Math.min(1, hints.length)
+      : blocksCompletedThisSession >= 3
+        ? Math.min(Math.ceil(hints.length / 2), hints.length)
+        : hints.length;
+
+    const visibleHints = hints.slice(0, maxHints);
+
     return (
       <div className="mt-3">
-        {hintsRevealed < hints.length && (
+        {hintsRevealed < visibleHints.length && (
           <button
             onClick={() => setHintsRevealed((h) => h + 1)}
             className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-muted-foreground"
           >
             <Lightbulb className="size-3" />
-            Show hint ({hintsRevealed + 1}/{hints.length})
+            Show hint ({hintsRevealed + 1}/{visibleHints.length})
           </button>
         )}
-        {hints.slice(0, hintsRevealed).map((hint, i) => (
+        {visibleHints.slice(0, hintsRevealed).map((hint, i) => (
           <p key={i} className="mt-1 rounded-lg bg-amber-500/5 px-3 py-1.5 text-[12px] text-amber-700 dark:text-amber-400">
             Hint {i + 1}: {hint}
           </p>
         ))}
+        {maxHints < hints.length && hintsRevealed >= visibleHints.length && (
+          <p className="mt-1 text-[10px] text-muted-foreground/40 italic">
+            Fewer hints shown as you gain mastery
+          </p>
+        )}
       </div>
     );
   };
@@ -450,7 +486,10 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <div className={cn(
+          "mx-auto max-w-3xl px-4 py-8 sm:px-6 transition-all duration-200",
+          blockTransition ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100",
+        )}>
           {/* Error state */}
           {blockError && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">

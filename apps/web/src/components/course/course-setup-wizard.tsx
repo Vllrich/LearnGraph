@@ -192,11 +192,38 @@ const GENERATION_STAGES = [
 // Component
 // ---------------------------------------------------------------------------
 
+const ONBOARDING_STAGES: { id: EducationStage; label: string; icon: string }[] = [
+  { id: "elementary", label: "Elementary school", icon: "🧒" },
+  { id: "high_school", label: "High school", icon: "🎒" },
+  { id: "university", label: "University", icon: "🎓" },
+  { id: "professional", label: "Professional", icon: "💼" },
+  { id: "self_learner", label: "Self-directed learner", icon: "🌟" },
+];
+
 export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWizardProps) {
   const router = useRouter();
   const { data: learnerProfileData } = trpc.user.getLearnerProfile.useQuery();
+  const updateProfile = trpc.user.updateLearnerProfile.useMutation();
+
+  const hasProfile = !!learnerProfileData;
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStage, setOnboardingStage] = useState<EducationStage | null>(null);
+
+  useEffect(() => {
+    if (open && !hasProfile) {
+      setShowOnboarding(true);
+    }
+  }, [open, hasProfile]);
+
+  function completeOnboarding() {
+    if (onboardingStage) {
+      updateProfile.mutate({ educationStage: onboardingStage });
+    }
+    setShowOnboarding(false);
+  }
 
   const userStage: EducationStage =
+    onboardingStage ??
     (learnerProfileData as { educationStage?: EducationStage } | null)?.educationStage ?? "self_learner";
 
   // Step 0: Purpose
@@ -395,6 +422,8 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
       setSessionMinutes(15);
       setDaysPerWeek(5);
       setCustomizeOpen(false);
+      setShowOnboarding(false);
+      setOnboardingStage(null);
       setGenerating(false);
       setGenStage(0);
       setError(null);
@@ -435,8 +464,46 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-xl px-6 py-8">
+          {/* First-time onboarding */}
+          {showOnboarding && (
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
+                  Quick question before we start
+                </p>
+                <h2 className="text-xl font-semibold font-(family-name:--font-source-serif)">
+                  What best describes you?
+                </h2>
+              </div>
+              <div className="space-y-2">
+                {ONBOARDING_STAGES.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setOnboardingStage(opt.id)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                      onboardingStage === opt.id
+                        ? "border-primary/50 bg-primary/5"
+                        : "border-border/30 hover:border-border/60",
+                    )}
+                  >
+                    <span className="text-lg">{opt.icon}</span>
+                    <span className="text-sm font-medium">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={completeOnboarding}
+                disabled={!onboardingStage}
+                className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-40"
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
           {/* Step 0: Purpose */}
-          {step === 0 && (
+          {!showOnboarding && step === 0 && (
             <div className="space-y-5">
               <div>
                 <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
@@ -509,7 +576,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
           )}
 
           {/* Step 1: Familiarity */}
-          {step === 1 && (
+          {!showOnboarding && step === 1 && (
             <div className="space-y-5">
               <div>
                 <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
@@ -541,7 +608,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
           )}
 
           {/* Step 2: Topic Scope */}
-          {step === 2 && (
+          {!showOnboarding && step === 2 && (
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
@@ -559,47 +626,77 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
                 </div>
               ) : (
                 <>
-                  <div className="space-y-1.5">
-                    {topics.map((t, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "flex items-start gap-2 rounded-lg border px-3 py-2 transition-all",
-                          t.enabled
-                            ? "border-border/30 bg-card"
-                            : "border-border/15 bg-muted/20 opacity-50",
-                        )}
-                      >
-                        <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/30" />
-                        <button
-                          onClick={() => toggleTopic(i)}
-                          className={cn(
-                            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-all",
-                            t.enabled
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border/50",
-                          )}
-                        >
-                          {t.enabled && <Check className="size-2.5" />}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] font-medium leading-tight">{t.title}</p>
-                          <p className="text-[11px] text-muted-foreground/50 leading-tight">
-                            {t.description}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-[10px] text-muted-foreground/40">
-                          {t.estimatedMinutes}m
-                        </span>
-                        <button
-                          onClick={() => removeTopic(i)}
-                          className="mt-0.5 shrink-0 text-muted-foreground/30 hover:text-destructive"
-                        >
-                          <X className="size-3" />
-                        </button>
+                  {/* Topics grouped into module clusters */}
+                  {(() => {
+                    const groupSize = Math.max(2, Math.ceil(topics.length / 3));
+                    const groups = [
+                      { label: "Foundations", topics: topics.slice(0, groupSize) },
+                      { label: "Core Concepts", topics: topics.slice(groupSize, groupSize * 2) },
+                      { label: "Advanced", topics: topics.slice(groupSize * 2) },
+                    ].filter((g) => g.topics.length > 0);
+
+                    return (
+                      <div className="space-y-4">
+                        {groups.map((group, gi) => (
+                          <div key={gi}>
+                            <div className="mb-1.5 flex items-center gap-2">
+                              <div className="size-1.5 rounded-full bg-primary/40" />
+                              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                {group.label}
+                              </span>
+                              {gi > 0 && (
+                                <div className="flex-1 border-t border-dashed border-border/20" />
+                              )}
+                            </div>
+                            <div className="space-y-1.5">
+                              {group.topics.map((t) => {
+                                const idx = topics.indexOf(t);
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={cn(
+                                      "flex items-start gap-2 rounded-lg border px-3 py-2 transition-all",
+                                      t.enabled
+                                        ? "border-border/30 bg-card"
+                                        : "border-border/15 bg-muted/20 opacity-50",
+                                    )}
+                                  >
+                                    <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/30" />
+                                    <button
+                                      onClick={() => toggleTopic(idx)}
+                                      className={cn(
+                                        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-all",
+                                        t.enabled
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border/50",
+                                      )}
+                                    >
+                                      {t.enabled && <Check className="size-2.5" />}
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[13px] font-medium leading-tight">{t.title}</p>
+                                      <p className="text-[11px] text-muted-foreground/50 leading-tight">
+                                        {t.description}
+                                      </p>
+                                    </div>
+                                    <span className="shrink-0 text-[10px] text-muted-foreground/40">
+                                      {t.estimatedMinutes}m
+                                    </span>
+                                    <button
+                                      onClick={() => removeTopic(idx)}
+                                      className="mt-0.5 shrink-0 text-muted-foreground/30 hover:text-destructive"
+                                    >
+                                      <X className="size-3" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
 
                   <div className="flex items-center gap-2">
                     <input
@@ -619,9 +716,20 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground/50">
-                    <span>{enabledTopics.length} topics selected</span>
-                    <span>~{estimatedWeeks} week{estimatedWeeks !== 1 ? "s" : ""} at {sessionMinutes}min/day</span>
+                  {/* Estimated structure preview */}
+                  <div className="rounded-lg border border-border/20 bg-muted/10 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground/60">
+                      <span>{enabledTopics.length} topics</span>
+                      <span className="text-border/50">·</span>
+                      <span>~{Math.max(3, Math.ceil(enabledTopics.length / 2))} modules</span>
+                      <span className="text-border/50">·</span>
+                      <span>~{Math.max(6, enabledTopics.length * 2)} lessons</span>
+                      <span className="text-border/50">·</span>
+                      <span>~{Math.max(18, enabledTopics.length * 5)} blocks</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground/40">
+                      ~{estimatedWeeks} week{estimatedWeeks !== 1 ? "s" : ""} at {sessionMinutes}min/day, {daysPerWeek} days/week
+                    </p>
                   </div>
                 </>
               )}
@@ -629,7 +737,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
           )}
 
           {/* Step 3: Learning Mode (adaptive per education stage) */}
-          {step === 3 && !skipModeStep && (
+          {!showOnboarding && step === 3 && !skipModeStep && (
             <div className="space-y-5">
               <div>
                 <p className="text-sm text-muted-foreground/60 font-(family-name:--font-source-serif)">
@@ -748,7 +856,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
           )}
 
           {/* Step 4: Review & Generate */}
-          {step === 4 && (
+          {!showOnboarding && step === 4 && (
             <div className="space-y-5">
               {generating ? (
                 <div className="flex flex-col items-center gap-6 py-12">
