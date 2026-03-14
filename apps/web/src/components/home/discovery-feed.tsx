@@ -1,14 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import {
-  Sparkles,
-  Puzzle,
-  ChevronDown,
-  TrendingUp,
-  Loader2,
-  Dices,
-} from "lucide-react";
+import { useState, useCallback, useMemo } from "react";
+import { Sparkles, Puzzle, TrendingUp, Loader2, Dices, LayoutGrid } from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import {
@@ -60,15 +53,17 @@ const STATIC_TOPICS: Record<string, { title: string; subtitle: string }[]> = {
   ],
 };
 
+type Tab = {
+  id: string;
+  label: string;
+  icon: typeof Sparkles;
+};
+
 type DiscoveryFeedProps = {
   onSelectTopic: (topic: string) => void;
 };
 
 export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
-  const [activeStaticTab, setActiveStaticTab] = useState(
-    Object.keys(STATIC_TOPICS)[0]!
-  );
-
   const utils = trpc.useUtils();
 
   const {
@@ -96,6 +91,25 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
   });
 
   const [surpriseVisible, setSurpriseVisible] = useState(false);
+  const [browseCategory, setBrowseCategory] = useState(
+    Object.keys(STATIC_TOPICS)[0]!
+  );
+
+  const hasForYou = (suggestions?.forYou?.length ?? 0) > 0;
+  const hasTrending = (suggestions?.trending?.length ?? 0) > 0;
+  const hasGaps = (suggestions?.gaps?.length ?? 0) > 0;
+
+  const tabs = useMemo<Tab[]>(() => {
+    const t: Tab[] = [];
+    if (hasForYou || isLoading) t.push({ id: "for-you", label: "For you", icon: Sparkles });
+    if (hasTrending) t.push({ id: "trending", label: "Trending", icon: TrendingUp });
+    if (hasGaps) t.push({ id: "gaps", label: "Fill gaps", icon: Puzzle });
+    t.push({ id: "browse", label: "Browse", icon: LayoutGrid });
+    return t;
+  }, [hasForYou, hasTrending, hasGaps, isLoading]);
+
+  const [activeTab, setActiveTab] = useState("for-you");
+  const resolvedTab = tabs.find((t) => t.id === activeTab) ? activeTab : tabs[0]?.id ?? "browse";
 
   const handleDismiss = useCallback(
     (type: SuggestionVariant, key: string) => {
@@ -119,42 +133,73 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
     setSurpriseVisible(true);
   }, [refetchRandom]);
 
-  const hasForYou = (suggestions?.forYou?.length ?? 0) > 0;
-  const hasTrending = (suggestions?.trending?.length ?? 0) > 0;
-  const hasGaps = (suggestions?.gaps?.length ?? 0) > 0;
-  const hasAnySuggestion = hasForYou || hasTrending || hasGaps;
-
   if (error && !suggestions) {
-    return <StaticBrowse
-      activeTab={activeStaticTab}
-      onTabChange={setActiveStaticTab}
-      onSelect={onSelectTopic}
-      defaultOpen
-    />;
+    return (
+      <div className="mt-8 w-full max-w-2xl pt-4">
+        <BrowseContent
+          activeCategory={browseCategory}
+          onCategoryChange={setBrowseCategory}
+          onSelect={onSelectTopic}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="mt-8 w-full max-w-2xl space-y-6 pt-4">
-      {/* Loading state */}
-      {isLoading && (
-        <section>
-          <SectionHeader
-            icon={Sparkles}
-            label="Discovering topics for you..."
-          />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
+    <div className="mt-8 w-full max-w-2xl pt-4">
+      <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Explore topics
+      </p>
+
+      {/* Tab pills */}
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all",
+                resolvedTab === tab.id
+                  ? "border border-primary/40 bg-primary/10 text-primary"
+                  : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
+              )}
+            >
+              <Icon className="size-3" />
+              {tab.label}
+            </button>
+          );
+        })}
+
+        <button
+          onClick={handleSurpriseMe}
+          disabled={randomLoading}
+          className="flex items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
+        >
+          {randomLoading ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Dices className="size-3" />
+          )}
+          Surprise me
+        </button>
+      </div>
+
+      {/* Tab content */}
+      <div className="min-h-[52px]">
+        {/* Loading */}
+        {isLoading && resolvedTab === "for-you" && (
+          <div className="flex flex-wrap justify-center gap-2">
+            {Array.from({ length: 8 }).map((_, i) => (
               <SuggestionCardSkeleton key={i} />
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* For You (AI-personalized) */}
-      {!isLoading && hasForYou && (
-        <section>
-          <SectionHeader icon={Sparkles} label="For you" />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* For You */}
+        {!isLoading && resolvedTab === "for-you" && hasForYou && (
+          <div className="flex flex-wrap justify-center gap-2">
             {suggestions!.forYou.map((topic) => (
               <SuggestionCard
                 key={topic.title}
@@ -167,14 +212,11 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
               />
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* Trending */}
-      {!isLoading && hasTrending && (
-        <section>
-          <SectionHeader icon={TrendingUp} label="Trending this month" />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* Trending */}
+        {resolvedTab === "trending" && hasTrending && (
+          <div className="flex flex-wrap justify-center gap-2">
             {suggestions!.trending.map((topic) => (
               <SuggestionCard
                 key={topic.title}
@@ -187,14 +229,11 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
               />
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* Fill the Gap */}
-      {!isLoading && hasGaps && (
-        <section>
-          <SectionHeader icon={Puzzle} label="Fill the gap" />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* Fill the Gap */}
+        {resolvedTab === "gaps" && hasGaps && (
+          <div className="flex flex-wrap justify-center gap-2">
             {suggestions!.gaps.map((gap) => (
               <SuggestionCard
                 key={gap.conceptId}
@@ -207,26 +246,20 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
               />
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      {/* Surprise Me */}
-      <section className="flex flex-col items-center gap-3">
-        <button
-          onClick={handleSurpriseMe}
-          disabled={randomLoading}
-          className="flex items-center gap-2 rounded-full border border-border/40 px-4 py-2 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
-        >
-          {randomLoading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Dices className="size-4" />
-          )}
-          Surprise me
-        </button>
+        {/* Browse */}
+        {resolvedTab === "browse" && (
+          <BrowseContent
+            activeCategory={browseCategory}
+            onCategoryChange={setBrowseCategory}
+            onSelect={onSelectTopic}
+          />
+        )}
 
+        {/* Surprise Me result */}
         {surpriseVisible && randomTopic && (
-          <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="mt-3 flex justify-center animate-in fade-in slide-in-from-bottom-1 duration-200">
             <SuggestionCard
               title={randomTopic.title}
               subtitle={randomTopic.subtitle}
@@ -240,100 +273,49 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
             />
           </div>
         )}
-      </section>
-
-      {/* Browse All Categories (collapsible fallback) */}
-      <StaticBrowse
-        activeTab={activeStaticTab}
-        onTabChange={setActiveStaticTab}
-        onSelect={onSelectTopic}
-        defaultOpen={!hasAnySuggestion && !isLoading}
-      />
+      </div>
     </div>
   );
 }
 
-function SectionHeader({
-  icon: Icon,
-  label,
-}: {
-  icon: typeof Sparkles;
-  label: string;
-}) {
-  return (
-    <div className="mb-3 flex items-center gap-1.5">
-      <Icon className="size-3.5 text-muted-foreground/60" />
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-    </div>
-  );
-}
-
-function StaticBrowse({
-  activeTab,
-  onTabChange,
+function BrowseContent({
+  activeCategory,
+  onCategoryChange,
   onSelect,
-  defaultOpen = false,
 }: {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+  activeCategory: string;
+  onCategoryChange: (cat: string) => void;
   onSelect: (topic: string) => void;
-  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
-    <section>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="mb-3 flex w-full items-center gap-1.5 text-left"
-      >
-        <ChevronDown
-          className={cn(
-            "size-3.5 text-muted-foreground/60 transition-transform duration-200",
-            open && "rotate-180"
-          )}
-        />
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Browse all categories
-        </p>
-      </button>
-
-      {open && (
-        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-          <div className="mb-3 flex flex-wrap justify-center gap-1.5">
-            {Object.keys(STATIC_TOPICS).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => onTabChange(tab)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-all",
-                  activeTab === tab
-                    ? "border border-primary/40 bg-primary/10 text-primary"
-                    : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {(STATIC_TOPICS[activeTab] ?? []).map((topic) => (
-              <button
-                key={topic.title}
-                onClick={() => onSelect(topic.title)}
-                className="flex flex-col items-start rounded-xl border border-border/30 bg-card px-5 py-4 text-left transition-all hover:border-primary/30 hover:shadow-sm"
-              >
-                <span className="text-sm font-medium">{topic.title}</span>
-                <span className="text-[11px] text-muted-foreground/60">
-                  {topic.subtitle}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
+    <div>
+      <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+        {Object.keys(STATIC_TOPICS).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => onCategoryChange(cat)}
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all",
+              activeCategory === cat
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {(STATIC_TOPICS[activeCategory] ?? []).map((topic) => (
+          <button
+            key={topic.title}
+            onClick={() => onSelect(topic.title)}
+            className="rounded-full border border-border/30 px-3 py-1 text-xs font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
+          >
+            {topic.title}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
