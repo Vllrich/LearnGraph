@@ -1,0 +1,50 @@
+---
+description: LearnGraph core stack, invariants, and DO NOT rules — always active
+globs: **/*.{ts,tsx,css,json}
+alwaysApply: true
+---
+
+# LearnGraph — Core Standards
+
+## Stack (exact versions matter)
+- **Runtime**: Next.js 16 (App Router), TypeScript 5 strict mode
+- **Styling**: Tailwind v4 — CSS-native `@theme` in `globals.css`. NEVER use `tailwind.config.ts`
+- **UI**: shadcn/ui (New York style) + Radix primitives
+- **API**: tRPC v11 — ALL procedures require Zod input validation
+- **DB**: Drizzle ORM + Supabase Postgres + pgvector (1536 dims)
+- **Auth**: Supabase Auth
+- **State**: TanStack Query (server) + Zustand (client)
+- **AI**: Vercel AI SDK — Claude Sonnet 4.5 (primary), GPT-4.1-mini (fallback), text-embedding-3-small
+- **Package manager**: pnpm + Turborepo monorepo
+
+## Monorepo Layout
+```
+apps/web/src/         → Next.js app, alias @/
+packages/db/          → @repo/db  — Drizzle schema + client
+packages/ai/          → @repo/ai  — LLM orchestration + ingestion pipeline
+packages/fsrs/        → @repo/fsrs — FSRS-5 scheduler (zero external deps)
+packages/shared/      → @repo/shared — shared types, constants, utils
+```
+
+## Naming & File Conventions
+- `type` over `interface` for data shapes
+- Drizzle inferred types: `typeof table.$inferSelect`
+- tRPC routers: one file per domain in `apps/web/src/server/trpc/routers/`
+- Feature components: `apps/web/src/components/{feature}/*.tsx`
+- DB schema: `packages/db/src/schema/*.ts` — one file per domain
+- All DB tables MUST have `created_at timestamptz`
+- RLS policies: raw `.sql` migration files ONLY — never in Drizzle schema
+
+## NEVER
+- Use default exports for components — always named exports
+- Use `tailwind.config.ts` — Tailwind v4 is CSS-native
+- Use raw text LLM completions — always `generateObject` with a Zod schema
+- Add write-side-effect tools to the AI mentor without explicit review
+- Import `toast` from anywhere except `@/components/ui/sonner`
+- Install new packages without checking the docs first (`context7` MCP)
+
+## ALWAYS
+- Validate tRPC inputs with Zod from day 1
+- Every async UI operation needs loading + error + empty states
+- Check resource ownership before any LLM call or data return
+- Use `hsl(var(--token))` pattern for color values

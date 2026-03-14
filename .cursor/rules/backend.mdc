@@ -1,0 +1,76 @@
+---
+description: tRPC router patterns, Drizzle ORM conventions, and API route structure for LearnGraph
+globs: "{apps/web/src/server/**/*.ts,apps/web/src/app/api/**/*.ts,packages/db/**/*.ts}"
+alwaysApply: false
+---
+
+# Backend — tRPC, Database & API Patterns
+
+## tRPC Router Pattern
+```ts
+// apps/web/src/server/trpc/routers/example.ts
+import { z } from "zod";
+import { protectedProcedure, createTRPCRouter } from "../init";
+
+export const exampleRouter = createTRPCRouter({
+  list: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(20) }))
+    .query(async ({ ctx, input }) => {
+      // ctx.user is the authenticated Supabase user
+      return db.select().from(table).where(eq(table.userId, ctx.user.id)).limit(input.limit);
+    }),
+});
+```
+
+- ALL procedures: Zod input validation, no exceptions
+- Use `protectedProcedure` for any user-specific data
+- One router file per domain — register in `_app.ts`
+
+## Next.js API Route Pattern
+```ts
+// apps/web/src/app/api/[feature]/route.ts
+export const maxDuration = 300; // long-running jobs only
+
+export async function POST(req: Request) {
+  const { user, error } = await getAuthUser(req);
+  if (error || !user) return new Response("Unauthorized", { status: 401 });
+
+  // IMPORTANT: always verify ownership before LLM calls
+  const body = await req.json();
+  // validate, check ownership, then proceed
+}
+```
+
+## Drizzle Schema Conventions
+```ts
+// packages/db/src/schema/example.ts
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+
+export const examples = pgTable("examples", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Example = typeof examples.$inferSelect;
+export type NewExample = typeof examples.$inferInsert;
+```
+
+- `created_at timestamptz` is REQUIRED on every table
+- Export both `$inferSelect` and `$inferInsert` types
+- RLS policies: `supabase migration new <name>` → raw SQL only, never in Drizzle
+
+## pgvector
+- Embedding dimension: 1536 (text-embedding-3-small)
+- Cosine similarity for concept dedup threshold: ≥ 0.92
+- Column type: `vector(1536)` via `pgvector` extension
+
+## Auth Pattern
+```ts
+import { createClient } from "@/lib/supabase/server";
+
+const supabase = createClient();
+const { data: { user } } = await supabase.auth.getUser();
+if (!user) redirect("/auth/login");
+```

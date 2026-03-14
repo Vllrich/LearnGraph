@@ -1,0 +1,54 @@
+---
+description: React component patterns, Tailwind v4 styling, and UI conventions for LearnGraph
+globs: apps/web/src/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend — Component & Styling Patterns
+
+## Component Structure
+```tsx
+// Named export, props type co-located, no React import needed (Next.js 16)
+type CardProps = { title: string; isLoading?: boolean };
+
+export function Card({ title, isLoading = false }: CardProps) {
+  if (isLoading) return <CardSkeleton />;
+  return <div className="...">{title}</div>;
+}
+```
+
+- Every data-fetching component MUST handle: loading skeleton, error boundary/message, empty state
+- Co-locate sub-components in the same file if under ~80 lines total; extract to own file when larger
+- Keep components under 200 lines — extract hooks for logic
+
+## Tailwind v4
+- Design tokens defined in `apps/web/src/app/globals.css` via `@theme`
+- Colors use CSS custom properties: `hsl(var(--background))`, `hsl(var(--foreground))`
+- Mastery colors: `mastery-0` through `mastery-5` (CSS vars, NOT hardcoded hex)
+- Dark mode: `next-themes` class strategy — use `.dark` selector in CSS, NOT `dark:` variant on every element when a CSS var suffices
+
+## Fonts
+- `font-sans` (Inter) — all UI text
+- `font-serif` (Source Serif 4) — AI mentor chat bubbles only
+- `font-mono` (JetBrains Mono) — code blocks only
+
+## shadcn/ui Usage
+- Import from `@/components/ui/[component]` — never directly from Radix
+- Extend with className merging via `cn()` from `@/lib/utils`
+- Toasts: `import { toast } from "@/components/ui/sonner"` — no other toast library
+
+## tRPC Data Fetching Pattern
+```tsx
+// Server component (preferred for initial data)
+const data = await trpc.library.list.query();
+
+// Client component
+const { data, isLoading, error } = api.library.list.useQuery();
+if (isLoading) return <Skeleton />;
+if (error) return <ErrorMessage message={error.message} />;
+if (!data?.length) return <EmptyState />;
+```
+
+## Animations
+Use project-defined keyframes from `globals.css`:
+`animate-cursor-blink`, `animate-shimmer`, `animate-level-up`
