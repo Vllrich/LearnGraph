@@ -23,7 +23,7 @@ export function AppShell({ children, user }: AppShellProps) {
         <Sidebar user={user} />
 
         <div className="flex min-h-screen pt-12 lg:pl-48">
-          <main className={`mx-auto w-full min-w-0 overflow-x-hidden pb-20 lg:pb-0 transition-all duration-300 ${mentorOpen ? "max-w-[900px] lg:mr-[280px]" : "max-w-[1200px]"}`}>
+          <main className={`w-full min-w-0 overflow-x-hidden pb-20 lg:pb-0 transition-all duration-300 ${mentorOpen ? "max-w-[900px] lg:mr-[360px]" : "max-w-[1200px]"}`}>
             {children}
           </main>
           <MentorSidebar open={mentorOpen} onToggle={() => setMentorOpen((v) => !v)} />
