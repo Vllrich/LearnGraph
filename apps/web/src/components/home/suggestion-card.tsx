@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { X, Sparkles, Flame, Puzzle, Shuffle, TrendingUp } from "lucide-react";
+import { X, Flame, Puzzle, Shuffle, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/ui/tooltip-card";
 
-export type SuggestionVariant = "ai" | "trending" | "gap" | "random";
+export type SuggestionVariant = "trending" | "gap" | "random";
 
 function toTitleCase(str: string): string {
   return str
@@ -27,15 +27,8 @@ type SuggestionCardProps = {
 
 const VARIANT_CONFIG: Record<
   SuggestionVariant,
-  { tooltipIcon: typeof Sparkles; bg: string; border: string; iconColor: string; accentBorder: string }
+  { tooltipIcon: typeof TrendingUp; bg: string; border: string; iconColor: string; accentBorder: string }
 > = {
-  ai: {
-    tooltipIcon: Sparkles,
-    bg: "hover:bg-violet-500/10",
-    border: "border-violet-500/20 hover:border-violet-500/40",
-    iconColor: "text-violet-500/70",
-    accentBorder: "border-l-violet-500",
-  },
   trending: {
     tooltipIcon: TrendingUp,
     bg: "hover:bg-amber-500/10",

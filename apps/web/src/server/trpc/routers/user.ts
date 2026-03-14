@@ -66,6 +66,7 @@ export const userRouter = createTRPCRouter({
         learningGoal: z.string().max(500).optional(),
         dailyBudget: z.number().min(5).max(50),
         timezone: z.string().max(100),
+        interestTopics: z.array(z.string().max(100)).max(20).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -78,7 +79,37 @@ export const userRouter = createTRPCRouter({
           preferences: {
             dailyReviewBudget: input.dailyBudget,
             learnerProfile: { educationStage: input.educationStage },
+            interestTopics: input.interestTopics ?? [],
           },
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, ctx.userId));
+
+      return { success: true };
+    }),
+
+  saveTopicPreferences: protectedProcedure
+    .input(
+      z.object({
+        interestTopics: z.array(z.string().max(100)).max(20),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [user] = await ctx.db
+        .select({ preferences: users.preferences })
+        .from(users)
+        .where(eq(users.id, ctx.userId))
+        .limit(1);
+
+      const currentPrefs =
+        user?.preferences && typeof user.preferences === "object"
+          ? (user.preferences as Record<string, unknown>)
+          : {};
+
+      await ctx.db
+        .update(users)
+        .set({
+          preferences: { ...currentPrefs, interestTopics: input.interestTopics },
           updatedAt: new Date(),
         })
         .where(eq(users.id, ctx.userId));

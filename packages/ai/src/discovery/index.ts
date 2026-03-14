@@ -1,6 +1,1 @@
-export {
-  generatePersonalizedTopics,
-  generateTopicHook,
-  type PersonalizedTopic,
-  type TopicHook,
-} from "./generate-suggestions";
+export { generateTopicHook, type TopicHook } from "./generate-suggestions";

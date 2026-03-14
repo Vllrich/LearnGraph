@@ -47,7 +47,7 @@ Only extract concepts explicitly in text.
 
 ${batchText}`,
       temperature: 0.2,
-      maxTokens: 1500,
+      maxTokens: 4096,
     });
 
     for (const concept of object.concepts) {

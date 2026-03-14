@@ -1,62 +1,17 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Sparkles, Puzzle, TrendingUp, Loader2, Dices, LayoutGrid } from "lucide-react";
+import { Puzzle, TrendingUp, Loader2, Dices, LayoutGrid, Settings2 } from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
-import {
-  SuggestionCard,
-  SuggestionCardSkeleton,
-  type SuggestionVariant,
-} from "./suggestion-card";
-
-const STATIC_TOPICS: Record<string, { title: string; subtitle: string }[]> = {
-  Programming: [
-    { title: "Python", subtitle: "Beginner friendly" },
-    { title: "JavaScript", subtitle: "Web development" },
-    { title: "TypeScript", subtitle: "Type-safe JS" },
-    { title: "Rust", subtitle: "Systems programming" },
-    { title: "SQL", subtitle: "Databases" },
-    { title: "Go", subtitle: "Cloud native" },
-  ],
-  "AI & Data": [
-    { title: "Machine Learning", subtitle: "Core concepts" },
-    { title: "Deep Learning", subtitle: "Neural networks" },
-    { title: "Statistics", subtitle: "Data science" },
-    { title: "Data Analysis", subtitle: "Pandas & NumPy" },
-    { title: "LLMs & Prompting", subtitle: "Generative AI" },
-    { title: "Computer Vision", subtitle: "Image models" },
-  ],
-  Technology: [
-    { title: "AWS Cloud", subtitle: "Certification" },
-    { title: "Docker & K8s", subtitle: "DevOps" },
-    { title: "System Design", subtitle: "Architecture" },
-    { title: "Networking", subtitle: "TCP/IP & DNS" },
-    { title: "Linux", subtitle: "Command line" },
-    { title: "Git", subtitle: "Version control" },
-  ],
-  Science: [
-    { title: "Calculus", subtitle: "Exam prep" },
-    { title: "Linear Algebra", subtitle: "Foundations" },
-    { title: "Physics", subtitle: "Mechanics & more" },
-    { title: "Chemistry", subtitle: "Core concepts" },
-    { title: "Biology", subtitle: "Life sciences" },
-    { title: "Probability", subtitle: "Theory & practice" },
-  ],
-  Business: [
-    { title: "Product Management", subtitle: "PM fundamentals" },
-    { title: "Marketing", subtitle: "Growth & strategy" },
-    { title: "Finance", subtitle: "Basics & valuation" },
-    { title: "Entrepreneurship", subtitle: "Build a startup" },
-    { title: "Economics", subtitle: "Micro & macro" },
-    { title: "Leadership", subtitle: "People & teams" },
-  ],
-};
+import { SuggestionCard, SuggestionCardSkeleton, type SuggestionVariant } from "./suggestion-card";
+import { TopicPreferencesModal } from "./topic-preferences-modal";
+import { TOPIC_CATEGORIES } from "@/config/topics";
 
 type Tab = {
   id: string;
   label: string;
-  icon: typeof Sparkles;
+  icon: typeof TrendingUp;
 };
 
 type DiscoveryFeedProps = {
@@ -66,19 +21,20 @@ type DiscoveryFeedProps = {
 export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
   const utils = trpc.useUtils();
 
-  const {
-    data: suggestions,
-    isLoading,
-    error,
-  } = trpc.discovery.getSuggestions.useQuery(undefined, {
+  const { data: suggestions, isLoading } = trpc.discovery.getSuggestions.useQuery(undefined, {
     staleTime: 30 * 60 * 1000,
     retry: 1,
   });
 
+  const { data: profile } = trpc.user.getProfile.useQuery();
+  const interestTopics = useMemo(() => {
+    const prefs = profile?.preferences as Record<string, unknown> | null | undefined;
+    const raw = prefs?.interestTopics;
+    return Array.isArray(raw) ? (raw as string[]) : [];
+  }, [profile]);
+
   const dismissMutation = trpc.discovery.dismiss.useMutation({
-    onSuccess: () => {
-      void utils.discovery.getSuggestions.invalidate();
-    },
+    onSuccess: () => void utils.discovery.getSuggestions.invalidate(),
   });
 
   const {
@@ -91,36 +47,32 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
   });
 
   const [surpriseVisible, setSurpriseVisible] = useState(false);
-  const [browseCategory, setBrowseCategory] = useState(
-    Object.keys(STATIC_TOPICS)[0]!
-  );
+  const [browseCategory, setBrowseCategory] = useState(TOPIC_CATEGORIES[0]!.id);
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
-  const hasForYou = (suggestions?.forYou?.length ?? 0) > 0;
   const hasTrending = (suggestions?.trending?.length ?? 0) > 0;
   const hasGaps = (suggestions?.gaps?.length ?? 0) > 0;
 
   const tabs = useMemo<Tab[]>(() => {
     const t: Tab[] = [];
-    if (hasForYou || isLoading) t.push({ id: "for-you", label: "For you", icon: Sparkles });
     if (hasTrending) t.push({ id: "trending", label: "Trending", icon: TrendingUp });
     if (hasGaps) t.push({ id: "gaps", label: "Fill gaps", icon: Puzzle });
     t.push({ id: "browse", label: "Browse", icon: LayoutGrid });
     return t;
-  }, [hasForYou, hasTrending, hasGaps, isLoading]);
+  }, [hasTrending, hasGaps]);
 
-  const [activeTab, setActiveTab] = useState("for-you");
-  const resolvedTab = tabs.find((t) => t.id === activeTab) ? activeTab : tabs[0]?.id ?? "browse";
+  const [activeTab, setActiveTab] = useState("browse");
+  const resolvedTab = tabs.find((t) => t.id === activeTab) ? activeTab : (tabs[0]?.id ?? "browse");
 
   const handleDismiss = useCallback(
     (type: SuggestionVariant, key: string) => {
       const typeMap: Record<SuggestionVariant, string> = {
-        ai: "ai_topic",
         trending: "trending",
         gap: "gap",
         random: "random",
       };
       dismissMutation.mutate({
-        suggestionType: typeMap[type] as "ai_topic" | "trending" | "gap" | "random",
+        suggestionType: typeMap[type] as "trending" | "gap" | "random",
         suggestionKey: key,
       });
     },
@@ -133,88 +85,62 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
     setSurpriseVisible(true);
   }, [refetchRandom]);
 
-  if (error && !suggestions) {
-    return (
-      <div className="mt-8 w-full max-w-2xl pt-4">
-        <BrowseContent
-          activeCategory={browseCategory}
-          onCategoryChange={setBrowseCategory}
-          onSelect={onSelectTopic}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="mt-8 w-full max-w-2xl pt-4">
-      <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Explore topics
-      </p>
+      <div className="mb-3 flex items-center justify-center gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Explore topics
+        </p>
+        <button
+          onClick={() => setPrefsOpen(true)}
+          title="Edit interests"
+          className="rounded-md p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted/40 hover:text-foreground"
+        >
+          <Settings2 className="size-3.5" />
+        </button>
+      </div>
 
       {/* Tab pills */}
       <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all",
-                resolvedTab === tab.id
-                  ? "border border-primary/40 bg-primary/10 text-primary"
-                  : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
-              )}
-            >
-              <Icon className="size-3" />
-              {tab.label}
-            </button>
-          );
-        })}
+        {isLoading && (
+          <div className="flex gap-1.5">
+            {[0, 1].map((i) => (
+              <div key={i} className="h-6 w-20 animate-pulse rounded-full bg-muted/50" />
+            ))}
+          </div>
+        )}
+        {!isLoading &&
+          tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all",
+                  resolvedTab === tab.id
+                    ? "border border-primary/40 bg-primary/10 text-primary"
+                    : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
+                )}
+              >
+                <Icon className="size-3" />
+                {tab.label}
+              </button>
+            );
+          })}
 
         <button
           onClick={handleSurpriseMe}
           disabled={randomLoading}
           className="flex items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
         >
-          {randomLoading ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <Dices className="size-3" />
-          )}
+          {randomLoading ? <Loader2 className="size-3 animate-spin" /> : <Dices className="size-3" />}
           Surprise me
         </button>
       </div>
 
       {/* Tab content */}
       <div className="min-h-[52px]">
-        {/* Loading */}
-        {isLoading && resolvedTab === "for-you" && (
-          <div className="flex flex-wrap justify-center gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <SuggestionCardSkeleton key={i} />
-            ))}
-          </div>
-        )}
-
-        {/* For You */}
-        {!isLoading && resolvedTab === "for-you" && hasForYou && (
-          <div className="flex flex-wrap justify-center gap-2">
-            {suggestions!.forYou.map((topic) => (
-              <SuggestionCard
-                key={topic.title}
-                title={topic.title}
-                subtitle={topic.subtitle}
-                reason={topic.reason}
-                variant="ai"
-                onSelect={onSelectTopic}
-                onDismiss={() => handleDismiss("ai", topic.title)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Trending */}
         {resolvedTab === "trending" && hasTrending && (
           <div className="flex flex-wrap justify-center gap-2">
             {suggestions!.trending.map((topic) => (
@@ -231,7 +157,6 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
           </div>
         )}
 
-        {/* Fill the Gap */}
         {resolvedTab === "gaps" && hasGaps && (
           <div className="flex flex-wrap justify-center gap-2">
             {suggestions!.gaps.map((gap) => (
@@ -248,16 +173,15 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
           </div>
         )}
 
-        {/* Browse */}
         {resolvedTab === "browse" && (
           <BrowseContent
             activeCategory={browseCategory}
             onCategoryChange={setBrowseCategory}
             onSelect={onSelectTopic}
+            interestTopicIds={interestTopics}
           />
         )}
 
-        {/* Surprise Me result */}
         {surpriseVisible && randomTopic && (
           <div className="mt-3 flex justify-center animate-in fade-in slide-in-from-bottom-1 duration-200">
             <SuggestionCard
@@ -274,6 +198,12 @@ export function DiscoveryFeed({ onSelectTopic }: DiscoveryFeedProps) {
           </div>
         )}
       </div>
+
+      <TopicPreferencesModal
+        open={prefsOpen}
+        onOpenChange={setPrefsOpen}
+        initialSelected={interestTopics}
+      />
     </div>
   );
 }
@@ -282,37 +212,46 @@ function BrowseContent({
   activeCategory,
   onCategoryChange,
   onSelect,
+  interestTopicIds,
 }: {
   activeCategory: string;
   onCategoryChange: (cat: string) => void;
   onSelect: (topic: string) => void;
+  interestTopicIds: string[];
 }) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap justify-center gap-1.5">
-        {Object.keys(STATIC_TOPICS).map((cat) => (
+        {TOPIC_CATEGORIES.map((cat) => (
           <button
-            key={cat}
-            onClick={() => onCategoryChange(cat)}
+            key={cat.id}
+            onClick={() => onCategoryChange(cat.id)}
             className={cn(
               "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all",
-              activeCategory === cat
+              activeCategory === cat.id
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {cat}
+            {cat.label}
           </button>
         ))}
       </div>
+
       <div className="flex flex-wrap justify-center gap-2">
-        {(STATIC_TOPICS[activeCategory] ?? []).map((topic) => (
+        {(TOPIC_CATEGORIES.find((c) => c.id === activeCategory)?.topics ?? []).map((topic) => (
           <button
-            key={topic.title}
-            onClick={() => onSelect(topic.title)}
-            className="rounded-full border border-border/30 px-3 py-1 text-xs font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
+            key={topic.id}
+            onClick={() => onSelect(topic.label)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all",
+              interestTopicIds.includes(topic.id)
+                ? "border-foreground/20 bg-foreground/5 hover:border-primary/40 hover:bg-primary/5"
+                : "border-border/30 hover:border-primary/30 hover:bg-primary/5"
+            )}
           >
-            {topic.title}
+            <topic.icon className="size-3 shrink-0" />
+            {topic.label}
           </button>
         ))}
       </div>

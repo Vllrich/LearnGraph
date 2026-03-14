@@ -1,4 +1,5 @@
 import { extractText, getMeta } from "unpdf";
+import { PDFParse } from "pdf-parse";
 
 export type PdfResult = {
   text: string;
@@ -6,6 +7,8 @@ export type PdfResult = {
   title: string | null;
   pageOffsets: Map<number, number>;
 };
+
+const MIN_USEFUL_TEXT = 100;
 
 export async function extractPdfText(buffer: Buffer): Promise<PdfResult> {
   const uint8 = new Uint8Array(buffer);
@@ -23,7 +26,21 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfResult> {
     offset += (pages[i]?.length ?? 0) + 2;
   }
 
-  const fullText = pages.join("\n\n");
+  let fullText = pages.join("\n\n");
+
+  // Fallback: if unpdf returned too little text (font-handling issues), try pdf-parse
+  if (normalizeText(fullText).length < MIN_USEFUL_TEXT) {
+    try {
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      const result = await parser.getText();
+      if (result.text && normalizeText(result.text).length > normalizeText(fullText).length) {
+        fullText = result.text;
+      }
+      await parser.destroy();
+    } catch {
+      // keep whatever unpdf returned
+    }
+  }
 
   let title: string | null = null;
   try {

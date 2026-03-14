@@ -4,64 +4,15 @@ import {
   db,
   suggestionDismissals,
   learningGoals,
-  learnerProfiles,
   concepts,
   userConceptState,
   conceptEdges,
 } from "@repo/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
-import {
-  generatePersonalizedTopics,
-  generateTopicHook,
-  type PersonalizedTopic,
-} from "@repo/ai";
-import type { LearnerProfile, EducationStage } from "@repo/shared";
+import { generateTopicHook } from "@repo/ai";
 
 const SUGGESTION_TYPES = ["ai_topic", "trending", "gap", "random"] as const;
 type SuggestionType = (typeof SUGGESTION_TYPES)[number];
-
-const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
-  educationStage: "self_learner",
-  nativeLanguage: "en",
-  contentLanguage: "en",
-  communicationStyle: "balanced",
-  explanationDepth: "standard",
-  mentorTone: "encouraging",
-  expertiseDomains: [],
-  learningMotivations: [],
-  accessibilityNeeds: {},
-  inferredReadingLevel: null,
-  inferredOptimalSessionMin: null,
-  inferredBloomCeiling: null,
-  inferredPace: null,
-  calibrationConfidence: 0,
-};
-
-function rowToProfile(
-  row: typeof learnerProfiles.$inferSelect
-): LearnerProfile {
-  return {
-    educationStage: row.educationStage as EducationStage,
-    nativeLanguage: row.nativeLanguage,
-    contentLanguage: row.contentLanguage,
-    communicationStyle:
-      row.communicationStyle as LearnerProfile["communicationStyle"],
-    explanationDepth:
-      row.explanationDepth as LearnerProfile["explanationDepth"],
-    mentorTone: row.mentorTone as LearnerProfile["mentorTone"],
-    expertiseDomains: row.expertiseDomains ?? [],
-    learningMotivations: (row.learningMotivations ??
-      []) as LearnerProfile["learningMotivations"],
-    accessibilityNeeds: (row.accessibilityNeeds ??
-      {}) as LearnerProfile["accessibilityNeeds"],
-    inferredReadingLevel: row.inferredReadingLevel,
-    inferredOptimalSessionMin: row.inferredOptimalSessionMin,
-    inferredBloomCeiling:
-      row.inferredBloomCeiling as LearnerProfile["inferredBloomCeiling"],
-    inferredPace: row.inferredPace as LearnerProfile["inferredPace"],
-    calibrationConfidence: row.calibrationConfidence ?? 0,
-  };
-}
 
 function normalizeKey(key: string): string {
   return key.toLowerCase().trim();
@@ -196,44 +147,12 @@ export const discoveryRouter = createTRPCRouter({
   getSuggestions: protectedProcedure.query(async ({ ctx }) => {
     const allDismissed = await getDismissedKeys(ctx.userId).catch(() => new Set<string>());
 
-    const [profileRow] = await db
-      .select()
-      .from(learnerProfiles)
-      .where(eq(learnerProfiles.userId, ctx.userId))
-      .limit(1)
-      .catch(() => [undefined]);
-    const profile = profileRow
-      ? rowToProfile(profileRow)
-      : DEFAULT_LEARNER_PROFILE;
-    const hasProfile = !!profileRow;
-
-    const goalRows = await db
-      .select({ title: learningGoals.title })
-      .from(learningGoals)
-      .where(
-        and(
-          eq(learningGoals.userId, ctx.userId),
-          eq(learningGoals.status, "active")
-        )
-      )
-      .catch(() => [] as { title: string }[]);
-    const existingTitles = goalRows.map((g) => g.title);
-
-    const [forYou, trending, gaps] = await Promise.all([
-      generatePersonalizedTopics(
-        profile,
-        existingTitles,
-        Array.from(allDismissed),
-        8
-      ).catch((err) => {
-        console.error("[discovery] AI topic generation failed:", err);
-        return [] as PersonalizedTopic[];
-      }),
+    const [trending, gaps] = await Promise.all([
       getTrendingTopics(allDismissed, 6).catch(() => []),
       getGapSuggestions(ctx.userId, allDismissed, 4).catch(() => []),
     ]);
 
-    return { forYou, trending, gaps, hasProfile };
+    return { trending, gaps };
   }),
 
   dismiss: protectedProcedure

@@ -6,6 +6,7 @@ import { trpc } from "@/trpc/client";
 import Image from "next/image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TopicPicker } from "@/components/home/topic-picker";
 import type { EducationStage } from "@repo/shared";
 
 const EDUCATION_STAGES: {
@@ -46,6 +47,8 @@ const EDUCATION_STAGES: {
   },
 ];
 
+const TOTAL_STEPS = 5;
+
 export default function OnboardingPage() {
   const router = useRouter();
   const updateMutation = trpc.user.completeOnboarding.useMutation({
@@ -58,6 +61,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState("");
   const [educationStage, setEducationStage] = useState<EducationStage | null>(null);
+  const [interestTopics, setInterestTopics] = useState<string[]>([]);
   const [learningGoal, setLearningGoal] = useState("");
   const [dailyBudget, setDailyBudget] = useState(20);
 
@@ -66,6 +70,7 @@ export default function OnboardingPage() {
     updateMutation.mutate({
       displayName: displayName.trim(),
       educationStage,
+      interestTopics,
       learningGoal: learningGoal.trim(),
       dailyBudget,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -146,6 +151,32 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <div className="space-y-4">
+            <div>
+              <h1 className="text-xl font-medium">Pick a few interests</h1>
+              <p className="mt-1 text-[13px] text-muted-foreground/60">
+                Select topics you want to explore. We&apos;ll use these to personalize your recommendations.
+              </p>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto rounded-xl border border-border/20 p-3">
+              <TopicPicker selected={interestTopics} onChange={setInterestTopics} />
+            </div>
+            <button
+              onClick={() => setStep(3)}
+              className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+            >
+              {interestTopics.length === 0 ? "Skip for now" : `Continue (${interestTopics.length} selected)`}
+            </button>
+            <button
+              onClick={() => setStep(1)}
+              className="w-full text-[12px] text-muted-foreground/50 hover:text-foreground"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
             <h1 className="text-xl font-medium">What do you want to learn?</h1>
             <p className="text-[13px] text-muted-foreground/60">
               This helps us tailor your experience. You can change it later.
@@ -159,13 +190,13 @@ export default function OnboardingPage() {
               className="w-full resize-none rounded-xl border border-border/30 bg-transparent px-4 py-3 text-[14px] placeholder:text-muted-foreground/30 focus:border-foreground/20 focus:outline-none"
             />
             <button
-              onClick={() => setStep(3)}
+              onClick={() => setStep(4)}
               className="w-full rounded-xl bg-foreground py-3 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
             >
               Continue
             </button>
             <button
-              onClick={() => setStep(1)}
+              onClick={() => setStep(2)}
               className="w-full text-[12px] text-muted-foreground/50 hover:text-foreground"
             >
               Back
@@ -173,7 +204,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-4">
             <h1 className="text-xl font-medium">Daily review budget</h1>
             <p className="text-[13px] text-muted-foreground/60">
@@ -205,7 +236,7 @@ export default function OnboardingPage() {
               {updateMutation.isPending ? "Setting up..." : "Get Started"}
             </button>
             <button
-              onClick={() => setStep(2)}
+              onClick={() => setStep(3)}
               className="w-full text-[12px] text-muted-foreground/50 hover:text-foreground"
             >
               Back
@@ -215,7 +246,7 @@ export default function OnboardingPage() {
 
         {/* Progress dots */}
         <div className="mt-8 flex justify-center gap-2">
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => i).map((i) => (
             <div
               key={i}
               className={`size-1.5 rounded-full transition-colors ${
