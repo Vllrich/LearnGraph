@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -184,11 +183,8 @@ export default function LoginPage() {
         </CardContent>
 
         <CardFooter className="justify-center">
-          <p className="text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-brand-primary hover:underline">
-              Sign up
-            </Link>
+          <p className="text-xs text-muted-foreground">
+            Access is by invitation only.
           </p>
         </CardFooter>
       </Card>
