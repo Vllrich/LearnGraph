@@ -1,7 +1,44 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { users } from "@repo/db";
+import { users, learnerProfiles } from "@repo/db";
 import { eq } from "drizzle-orm";
+import type { EducationStage, LearnerProfile } from "@repo/shared";
+
+const DEFAULT_LEARNER_PROFILE: LearnerProfile = {
+  educationStage: "self_learner",
+  nativeLanguage: "en",
+  contentLanguage: "en",
+  communicationStyle: "balanced",
+  explanationDepth: "standard",
+  mentorTone: "encouraging",
+  expertiseDomains: [],
+  learningMotivations: [],
+  accessibilityNeeds: {},
+  inferredReadingLevel: null,
+  inferredOptimalSessionMin: null,
+  inferredBloomCeiling: null,
+  inferredPace: null,
+  calibrationConfidence: 0,
+};
+
+function rowToProfile(row: typeof learnerProfiles.$inferSelect): LearnerProfile {
+  return {
+    educationStage: row.educationStage as EducationStage,
+    nativeLanguage: row.nativeLanguage,
+    contentLanguage: row.contentLanguage,
+    communicationStyle: row.communicationStyle as LearnerProfile["communicationStyle"],
+    explanationDepth: row.explanationDepth as LearnerProfile["explanationDepth"],
+    mentorTone: row.mentorTone as LearnerProfile["mentorTone"],
+    expertiseDomains: row.expertiseDomains ?? [],
+    learningMotivations: (row.learningMotivations ?? []) as LearnerProfile["learningMotivations"],
+    accessibilityNeeds: (row.accessibilityNeeds ?? {}) as LearnerProfile["accessibilityNeeds"],
+    inferredReadingLevel: row.inferredReadingLevel,
+    inferredOptimalSessionMin: row.inferredOptimalSessionMin,
+    inferredBloomCeiling: row.inferredBloomCeiling as LearnerProfile["inferredBloomCeiling"],
+    inferredPace: row.inferredPace as LearnerProfile["inferredPace"],
+    calibrationConfidence: row.calibrationConfidence ?? 0,
+  };
+}
 
 export const userRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -195,4 +232,109 @@ export const userRouter = createTRPCRouter({
       mentorMemory,
     };
   }),
+
+  getLearnerProfile: protectedProcedure.query(async ({ ctx }) => {
+    const [row] = await ctx.db
+      .select()
+      .from(learnerProfiles)
+      .where(eq(learnerProfiles.userId, ctx.userId))
+      .limit(1);
+
+    if (row) return rowToProfile(row);
+
+    // Auto-seed from legacy preferences.learnerProfile if it exists
+    const [user] = await ctx.db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, ctx.userId))
+      .limit(1);
+
+    const prefs = (user?.preferences ?? {}) as Record<string, unknown>;
+    const legacy = prefs.learnerProfile as { educationStage?: string } | undefined;
+    const stage = (legacy?.educationStage ?? "self_learner") as EducationStage;
+
+    const [seeded] = await ctx.db
+      .insert(learnerProfiles)
+      .values({ userId: ctx.userId, educationStage: stage })
+      .onConflictDoNothing()
+      .returning();
+
+    return seeded ? rowToProfile(seeded) : DEFAULT_LEARNER_PROFILE;
+  }),
+
+  updateLearnerProfile: protectedProcedure
+    .input(
+      z.object({
+        educationStage: z
+          .enum(["elementary", "high_school", "university", "professional", "self_learner"])
+          .optional(),
+        nativeLanguage: z.string().min(2).max(10).optional(),
+        contentLanguage: z.string().min(2).max(10).optional(),
+        communicationStyle: z.enum(["casual", "balanced", "formal"]).optional(),
+        explanationDepth: z.enum(["concise", "standard", "thorough"]).optional(),
+        mentorTone: z.enum(["encouraging", "neutral", "challenging"]).optional(),
+        expertiseDomains: z.array(z.string().max(100)).max(20).optional(),
+        learningMotivations: z
+          .array(z.enum(["career", "curiosity", "exam", "hobby", "academic"]))
+          .max(5)
+          .optional(),
+        accessibilityNeeds: z
+          .object({
+            dyslexia: z.boolean().optional(),
+            adhd: z.boolean().optional(),
+            visualImpairment: z.boolean().optional(),
+            reducedMotion: z.boolean().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const setFields: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (input.educationStage !== undefined) setFields.educationStage = input.educationStage;
+      if (input.nativeLanguage !== undefined) setFields.nativeLanguage = input.nativeLanguage;
+      if (input.contentLanguage !== undefined) setFields.contentLanguage = input.contentLanguage;
+      if (input.communicationStyle !== undefined) setFields.communicationStyle = input.communicationStyle;
+      if (input.explanationDepth !== undefined) setFields.explanationDepth = input.explanationDepth;
+      if (input.mentorTone !== undefined) setFields.mentorTone = input.mentorTone;
+      if (input.expertiseDomains !== undefined) setFields.expertiseDomains = input.expertiseDomains;
+      if (input.learningMotivations !== undefined) setFields.learningMotivations = input.learningMotivations;
+      if (input.accessibilityNeeds !== undefined) setFields.accessibilityNeeds = input.accessibilityNeeds;
+
+      // Upsert: create if missing, update if exists
+      await ctx.db
+        .insert(learnerProfiles)
+        .values({ userId: ctx.userId, ...setFields })
+        .onConflictDoUpdate({
+          target: learnerProfiles.userId,
+          set: setFields,
+        });
+
+      // Keep legacy preferences.learnerProfile in sync for backward compat
+      if (input.educationStage) {
+        const [user] = await ctx.db
+          .select({ preferences: users.preferences })
+          .from(users)
+          .where(eq(users.id, ctx.userId))
+          .limit(1);
+
+        const currentPrefs =
+          user?.preferences && typeof user.preferences === "object"
+            ? (user.preferences as Record<string, unknown>)
+            : {};
+
+        await ctx.db
+          .update(users)
+          .set({
+            preferences: {
+              ...currentPrefs,
+              learnerProfile: { educationStage: input.educationStage },
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, ctx.userId));
+      }
+
+      return { success: true };
+    }),
 });

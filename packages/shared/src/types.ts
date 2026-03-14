@@ -51,7 +51,60 @@ export type MethodPreferences = {
   spacedReview: number;
 };
 
+export type CommunicationStyle = "casual" | "balanced" | "formal";
+
+export type ExplanationDepth = "concise" | "standard" | "thorough";
+
+export type MentorTone = "encouraging" | "neutral" | "challenging";
+
+export type InferredPace = "slow" | "medium" | "fast";
+
+export type LearningMotivation = "career" | "curiosity" | "exam" | "hobby" | "academic";
+
+export type AccessibilityNeeds = {
+  dyslexia?: boolean;
+  adhd?: boolean;
+  visualImpairment?: boolean;
+  reducedMotion?: boolean;
+};
+
 export type LearnerProfile = {
+  educationStage: EducationStage;
+  nativeLanguage: string;
+  contentLanguage: string;
+  communicationStyle: CommunicationStyle;
+  explanationDepth: ExplanationDepth;
+  mentorTone: MentorTone;
+  expertiseDomains: string[];
+  learningMotivations: LearningMotivation[];
+  accessibilityNeeds: AccessibilityNeeds;
+
+  // Inferred by calibration — null until enough data
+  inferredReadingLevel: number | null;
+  inferredOptimalSessionMin: number | null;
+  inferredBloomCeiling: BloomLevel | null;
+  inferredPace: InferredPace | null;
+  calibrationConfidence: number;
+};
+
+/** Subset of LearnerProfile fields the user can edit directly */
+export type LearnerProfileUpdate = Partial<
+  Pick<
+    LearnerProfile,
+    | "educationStage"
+    | "nativeLanguage"
+    | "contentLanguage"
+    | "communicationStyle"
+    | "explanationDepth"
+    | "mentorTone"
+    | "expertiseDomains"
+    | "learningMotivations"
+    | "accessibilityNeeds"
+  >
+>;
+
+/** @deprecated Use LearnerProfile instead — kept for migration compatibility */
+export type LegacyLearnerProfile = {
   educationStage: EducationStage;
   preferredSessionMinutes?: number;
   preferredMethods?: LearningMethod[];

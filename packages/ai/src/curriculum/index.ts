@@ -1,2 +1,2 @@
 export { generateCurriculum, type CurriculumInput } from "./generate";
-export { getMethodDefaults, getEducationStagePrompt, type MethodDefaults } from "./method-defaults";
+export { getMethodDefaults, getEducationStagePrompt, getProfilePrompt, type MethodDefaults } from "./method-defaults";

@@ -3,11 +3,33 @@
 import { useState } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Loader2, Bell, Clock, Shield, Save, Check, GraduationCap } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Bell,
+  Clock,
+  Shield,
+  Save,
+  Check,
+  GraduationCap,
+  MessageSquare,
+  Globe,
+  Sparkles,
+  Accessibility,
+  Brain,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@repo/shared";
-import type { EducationStage } from "@repo/shared";
+import type {
+  EducationStage,
+  CommunicationStyle,
+  ExplanationDepth,
+  MentorTone,
+  LearningMotivation,
+  AccessibilityNeeds,
+} from "@repo/shared";
 
 const EDUCATION_STAGE_OPTIONS: { id: EducationStage; label: string; icon: string }[] = [
   { id: "elementary", label: "Young Learner (5-12)", icon: "🧒" },
@@ -17,21 +39,77 @@ const EDUCATION_STAGE_OPTIONS: { id: EducationStage; label: string; icon: string
   { id: "self_learner", label: "Self-Learner", icon: "🌱" },
 ];
 
+const COMMUNICATION_STYLE_OPTIONS: { id: CommunicationStyle; label: string; desc: string }[] = [
+  { id: "casual", label: "Casual", desc: "Friendly, conversational, light humor" },
+  { id: "balanced", label: "Balanced", desc: "Clear and professional but warm" },
+  { id: "formal", label: "Formal", desc: "Academic, structured, precise" },
+];
+
+const EXPLANATION_DEPTH_OPTIONS: { id: ExplanationDepth; label: string; desc: string }[] = [
+  { id: "concise", label: "Concise", desc: "Bullet points, just the essentials" },
+  { id: "standard", label: "Standard", desc: "Clear explanations with examples" },
+  { id: "thorough", label: "Thorough", desc: "Deep dives with derivations and edge cases" },
+];
+
+const MENTOR_TONE_OPTIONS: { id: MentorTone; label: string; desc: string }[] = [
+  { id: "encouraging", label: "Encouraging", desc: "Celebrates progress, patient with mistakes" },
+  { id: "neutral", label: "Neutral", desc: "Matter-of-fact, focus on correctness" },
+  { id: "challenging", label: "Challenging", desc: "Pushes you harder, asks follow-ups" },
+];
+
+const MOTIVATION_OPTIONS: { id: LearningMotivation; label: string; icon: string }[] = [
+  { id: "career", label: "Career Growth", icon: "💼" },
+  { id: "curiosity", label: "Pure Curiosity", icon: "🔍" },
+  { id: "exam", label: "Exam Prep", icon: "📝" },
+  { id: "hobby", label: "Hobby / Fun", icon: "🎨" },
+  { id: "academic", label: "Academic Research", icon: "🔬" },
+];
+
+const COMMON_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "pt", label: "Portuguese" },
+  { code: "it", label: "Italian" },
+  { code: "nl", label: "Dutch" },
+  { code: "ru", label: "Russian" },
+  { code: "zh", label: "Chinese" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "ar", label: "Arabic" },
+  { code: "hi", label: "Hindi" },
+  { code: "tr", label: "Turkish" },
+  { code: "pl", label: "Polish" },
+  { code: "sv", label: "Swedish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "th", label: "Thai" },
+  { code: "id", label: "Indonesian" },
+];
+
 export default function SettingsPage() {
-  const { data: profile, isLoading } = trpc.user.getProfile.useQuery();
+  const { data: userProfile, isLoading: isLoadingUser } = trpc.user.getProfile.useQuery();
+  const { data: learnerProfile, isLoading: isLoadingProfile } =
+    trpc.user.getLearnerProfile.useQuery();
   const { data: streak } = trpc.gamification.getStreakAndXp.useQuery();
-  const updatePrefs = trpc.user.updatePreferences.useMutation({
-    onSuccess: () => toast.success("Settings saved"),
-  });
-  const updateGoal = trpc.gamification.updateWeeklyGoal.useMutation({
-    onSuccess: () => toast.success("Weekly goal updated"),
-  });
+
+  const updatePrefs = trpc.user.updatePreferences.useMutation();
+  const updateGoal = trpc.gamification.updateWeeklyGoal.useMutation();
+  const updateProfile = trpc.user.updateLearnerProfile.useMutation();
   const utils = trpc.useUtils();
 
-  const prefs = profile?.preferences as Record<string, unknown> | undefined;
+  const prefs = userProfile?.preferences as Record<string, unknown> | undefined;
   const notifs = (prefs?.notifications ??
     DEFAULT_NOTIFICATION_PREFERENCES) as typeof DEFAULT_NOTIFICATION_PREFERENCES;
 
+  // Study preferences
+  const resolvedWeeklyGoal = streak?.weeklyReviewGoal ?? 50;
+  const resolvedDailyBudget = (prefs?.dailyReviewBudget as number) ?? 20;
+  const [weeklyGoal, setWeeklyGoal] = useState(resolvedWeeklyGoal);
+  const [dailyBudget, setDailyBudget] = useState(resolvedDailyBudget);
+
+  // Notification state
   const [emailReminders, setEmailReminders] = useState<boolean | null>(null);
   const [pushNotifications, setPushNotifications] = useState<boolean | null>(null);
   const [reminderTime, setReminderTime] = useState<string | null>(null);
@@ -39,59 +117,111 @@ export default function SettingsPage() {
   const [smartNudges, setSmartNudges] = useState<boolean | null>(null);
   const [quietStart, setQuietStart] = useState<string | null>(null);
   const [quietEnd, setQuietEnd] = useState<string | null>(null);
+
+  // Learner profile state (null = unchanged from server)
+  const [educationStage, setEducationStage] = useState<EducationStage | null>(null);
+  const [nativeLanguage, setNativeLanguage] = useState<string | null>(null);
+  const [contentLanguage, setContentLanguage] = useState<string | null>(null);
+  const [communicationStyle, setCommunicationStyle] = useState<CommunicationStyle | null>(null);
+  const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth | null>(null);
+  const [mentorTone, setMentorTone] = useState<MentorTone | null>(null);
+  const [expertiseDomains, setExpertiseDomains] = useState<string[] | null>(null);
+  const [domainInput, setDomainInput] = useState("");
+  const [learningMotivations, setLearningMotivations] = useState<LearningMotivation[] | null>(null);
+  const [accessibilityNeeds, setAccessibilityNeeds] = useState<AccessibilityNeeds | null>(null);
+
   const [saved, setSaved] = useState(false);
 
-  const resolvedWeeklyGoal = streak?.weeklyReviewGoal ?? 50;
-  const resolvedDailyBudget = (prefs?.dailyReviewBudget as number) ?? 20;
+  // Resolved values (local override ?? server ?? defaults)
+  const eff = {
+    educationStage: educationStage ?? learnerProfile?.educationStage ?? "self_learner",
+    nativeLanguage: nativeLanguage ?? learnerProfile?.nativeLanguage ?? "en",
+    contentLanguage: contentLanguage ?? learnerProfile?.contentLanguage ?? "en",
+    communicationStyle: communicationStyle ?? learnerProfile?.communicationStyle ?? "balanced",
+    explanationDepth: explanationDepth ?? learnerProfile?.explanationDepth ?? "standard",
+    mentorTone: mentorTone ?? learnerProfile?.mentorTone ?? "encouraging",
+    expertiseDomains: expertiseDomains ?? learnerProfile?.expertiseDomains ?? [],
+    learningMotivations: learningMotivations ?? learnerProfile?.learningMotivations ?? [],
+    accessibilityNeeds: accessibilityNeeds ?? learnerProfile?.accessibilityNeeds ?? {},
+  };
 
   const notifsFromPrefs = prefs ? ((prefs.notifications ?? {}) as Record<string, unknown>) : {};
-  const resolvedEmailReminders =
-    (notifsFromPrefs.emailReminders as boolean) ?? notifs.emailReminders;
-  const resolvedPushNotifications =
-    (notifsFromPrefs.pushNotifications as boolean) ?? notifs.pushNotifications;
-  const resolvedReminderTime = (notifsFromPrefs.reminderTime as string) ?? notifs.reminderTime;
-  const resolvedFrequency = (notifsFromPrefs.frequency as typeof frequency) ?? notifs.frequency;
-  const resolvedSmartNudges = (notifsFromPrefs.smartNudges as boolean) ?? notifs.smartNudges;
-  const resolvedQuietStart = (notifsFromPrefs.quietHoursStart as string) ?? notifs.quietHoursStart;
-  const resolvedQuietEnd = (notifsFromPrefs.quietHoursEnd as string) ?? notifs.quietHoursEnd;
+  const effNotifs = {
+    email: emailReminders ?? (notifsFromPrefs.emailReminders as boolean) ?? notifs.emailReminders,
+    push:
+      pushNotifications ??
+      (notifsFromPrefs.pushNotifications as boolean) ??
+      notifs.pushNotifications,
+    reminderTime: reminderTime ?? (notifsFromPrefs.reminderTime as string) ?? notifs.reminderTime,
+    frequency:
+      frequency ?? (notifsFromPrefs.frequency as typeof frequency) ?? notifs.frequency,
+    smartNudges:
+      smartNudges ?? (notifsFromPrefs.smartNudges as boolean) ?? notifs.smartNudges,
+    quietStart:
+      quietStart ?? (notifsFromPrefs.quietHoursStart as string) ?? notifs.quietHoursStart,
+    quietEnd: quietEnd ?? (notifsFromPrefs.quietHoursEnd as string) ?? notifs.quietHoursEnd,
+  };
 
-  const currentLearnerProfile = prefs?.learnerProfile as { educationStage: EducationStage } | undefined;
-  const [educationStage, setEducationStage] = useState<EducationStage | null>(null);
-  const effectiveStage = educationStage ?? currentLearnerProfile?.educationStage ?? "self_learner";
+  function toggleMotivation(m: LearningMotivation) {
+    const current = eff.learningMotivations;
+    const next = current.includes(m) ? current.filter((x) => x !== m) : [...current, m];
+    setLearningMotivations(next);
+  }
 
-  const [weeklyGoal, setWeeklyGoal] = useState(resolvedWeeklyGoal);
-  const [dailyBudget, setDailyBudget] = useState(resolvedDailyBudget);
+  function addDomain() {
+    const trimmed = domainInput.trim();
+    if (!trimmed || eff.expertiseDomains.includes(trimmed)) return;
+    setExpertiseDomains([...eff.expertiseDomains, trimmed]);
+    setDomainInput("");
+  }
 
-  const effectiveEmail = emailReminders ?? resolvedEmailReminders;
-  const effectivePush = pushNotifications ?? resolvedPushNotifications;
-  const effectiveReminderTime = reminderTime ?? resolvedReminderTime;
-  const effectiveFrequency = frequency ?? resolvedFrequency;
-  const effectiveSmartNudges = smartNudges ?? resolvedSmartNudges;
-  const effectiveQuietStart = quietStart ?? resolvedQuietStart;
-  const effectiveQuietEnd = quietEnd ?? resolvedQuietEnd;
+  function removeDomain(d: string) {
+    setExpertiseDomains(eff.expertiseDomains.filter((x) => x !== d));
+  }
+
+  function setA11y(key: keyof AccessibilityNeeds, val: boolean) {
+    setAccessibilityNeeds({ ...eff.accessibilityNeeds, [key]: val });
+  }
+
+  const isSaving = updatePrefs.isPending || updateGoal.isPending || updateProfile.isPending;
 
   async function handleSave() {
-    await updatePrefs.mutateAsync({
-      dailyReviewBudget: dailyBudget,
-      learnerProfile: { educationStage: effectiveStage },
-      notifications: {
-        emailReminders: effectiveEmail,
-        pushNotifications: effectivePush,
-        reminderTime: effectiveReminderTime,
-        frequency: effectiveFrequency,
-        smartNudges: effectiveSmartNudges,
-        quietHoursStart: effectiveQuietStart,
-        quietHoursEnd: effectiveQuietEnd,
-      },
-    });
-    await updateGoal.mutateAsync({ goal: weeklyGoal });
+    await Promise.all([
+      updateProfile.mutateAsync({
+        educationStage: eff.educationStage,
+        nativeLanguage: eff.nativeLanguage,
+        contentLanguage: eff.contentLanguage,
+        communicationStyle: eff.communicationStyle,
+        explanationDepth: eff.explanationDepth,
+        mentorTone: eff.mentorTone,
+        expertiseDomains: eff.expertiseDomains,
+        learningMotivations: eff.learningMotivations,
+        accessibilityNeeds: eff.accessibilityNeeds,
+      }),
+      updatePrefs.mutateAsync({
+        dailyReviewBudget: dailyBudget,
+        learnerProfile: { educationStage: eff.educationStage },
+        notifications: {
+          emailReminders: effNotifs.email,
+          pushNotifications: effNotifs.push,
+          reminderTime: effNotifs.reminderTime,
+          frequency: effNotifs.frequency,
+          smartNudges: effNotifs.smartNudges,
+          quietHoursStart: effNotifs.quietStart,
+          quietHoursEnd: effNotifs.quietEnd,
+        },
+      }),
+      updateGoal.mutateAsync({ goal: weeklyGoal }),
+    ]);
     utils.user.getProfile.invalidate();
+    utils.user.getLearnerProfile.invalidate();
     utils.gamification.getStreakAndXp.invalidate();
+    toast.success("Settings saved");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
-  if (isLoading) {
+  if (isLoadingUser || isLoadingProfile) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -102,7 +232,10 @@ export default function SettingsPage() {
   return (
     <div className="flex h-screen flex-col bg-background">
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border/30 px-4">
-        <Link href="/" className="text-muted-foreground/60 hover:text-foreground transition-colors">
+        <Link
+          href="/"
+          className="text-muted-foreground/60 hover:text-foreground transition-colors"
+        >
           <ArrowLeft className="size-4" />
         </Link>
         <span className="text-[13px] font-medium">Settings</span>
@@ -110,7 +243,289 @@ export default function SettingsPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-6 py-8 space-y-8">
-          {/* Study Preferences */}
+          {/* ── Learner Profile ─────────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <GraduationCap className="size-4 text-violet-500" />
+              Learner Profile
+            </h2>
+            <div className="space-y-2 rounded-xl border border-border/30 p-4">
+              <p className="text-[11px] text-muted-foreground/50 mb-3">
+                This shapes how the mentor talks to you, how courses are structured, and which
+                learning methods are emphasized.
+              </p>
+              {EDUCATION_STAGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setEducationStage(opt.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all",
+                    eff.educationStage === opt.id
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border/20 hover:border-border/50"
+                  )}
+                >
+                  <span className="text-base">{opt.icon}</span>
+                  <span className="text-[13px] font-medium">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* ── Language ────────────────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <Globe className="size-4 text-blue-500" />
+              Language
+            </h2>
+            <div className="space-y-4 rounded-xl border border-border/30 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-medium">Native language</p>
+                  <p className="text-[11px] text-muted-foreground/50">
+                    Your primary spoken language
+                  </p>
+                </div>
+                <select
+                  value={eff.nativeLanguage}
+                  onChange={(e) => setNativeLanguage(e.target.value)}
+                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                >
+                  {COMMON_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-medium">Learning language</p>
+                  <p className="text-[11px] text-muted-foreground/50">
+                    Language the mentor teaches in
+                  </p>
+                </div>
+                <select
+                  value={eff.contentLanguage}
+                  onChange={(e) => setContentLanguage(e.target.value)}
+                  className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
+                >
+                  {COMMON_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Mentor Style ───────────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <MessageSquare className="size-4 text-emerald-500" />
+              Mentor Style
+            </h2>
+            <div className="space-y-5 rounded-xl border border-border/30 p-4">
+              <OptionGrid
+                label="Communication"
+                description="How the mentor phrases things"
+                options={COMMUNICATION_STYLE_OPTIONS}
+                value={eff.communicationStyle}
+                onChange={(v) => setCommunicationStyle(v as CommunicationStyle)}
+              />
+              <OptionGrid
+                label="Explanation depth"
+                description="How much detail per concept"
+                options={EXPLANATION_DEPTH_OPTIONS}
+                value={eff.explanationDepth}
+                onChange={(v) => setExplanationDepth(v as ExplanationDepth)}
+              />
+              <OptionGrid
+                label="Tone"
+                description="How the mentor motivates you"
+                options={MENTOR_TONE_OPTIONS}
+                value={eff.mentorTone}
+                onChange={(v) => setMentorTone(v as MentorTone)}
+              />
+            </div>
+          </section>
+
+          {/* ── Motivations ────────────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <Sparkles className="size-4 text-amber-500" />
+              Learning Motivations
+            </h2>
+            <div className="rounded-xl border border-border/30 p-4">
+              <p className="text-[11px] text-muted-foreground/50 mb-3">
+                Select all that apply — this influences how concepts are framed and which examples
+                are used.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {MOTIVATION_OPTIONS.map((opt) => {
+                  const active = eff.learningMotivations.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleMotivation(opt.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all",
+                        active
+                          ? "border-primary/50 bg-primary/10 text-primary"
+                          : "border-border/30 text-muted-foreground hover:border-border/50"
+                      )}
+                    >
+                      <span>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* ── Expertise Domains ──────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <Brain className="size-4 text-purple-500" />
+              Expertise Domains
+            </h2>
+            <div className="rounded-xl border border-border/30 p-4">
+              <p className="text-[11px] text-muted-foreground/50 mb-3">
+                Subjects you already know well — the mentor will draw analogies from these and skip
+                overlapping prerequisites.
+              </p>
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder="e.g. Physics, Web Development, Music Theory..."
+                  value={domainInput}
+                  onChange={(e) => setDomainInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addDomain())}
+                  className="flex-1 rounded-lg border border-border/30 bg-transparent px-3 py-1.5 text-[13px] placeholder:text-muted-foreground/30 focus:border-primary/40 focus:outline-none"
+                />
+                <button
+                  onClick={addDomain}
+                  disabled={!domainInput.trim()}
+                  className="rounded-lg border border-border/30 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground disabled:opacity-30 transition-all"
+                >
+                  Add
+                </button>
+              </div>
+              {eff.expertiseDomains.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {eff.expertiseDomains.map((d) => (
+                    <span
+                      key={d}
+                      className="flex items-center gap-1 rounded-full border border-border/30 bg-muted/30 px-2.5 py-1 text-[12px]"
+                    >
+                      {d}
+                      <button
+                        onClick={() => removeDomain(d)}
+                        className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ── Accessibility ──────────────────────────────────── */}
+          <section>
+            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+              <Accessibility className="size-4 text-teal-500" />
+              Accessibility
+            </h2>
+            <div className="space-y-4 rounded-xl border border-border/30 p-4">
+              <p className="text-[11px] text-muted-foreground/50">
+                The mentor adapts its output format to your needs.
+              </p>
+              <ToggleRow
+                label="Dyslexia-friendly"
+                description="Shorter paragraphs, bullet lists, bolded key terms"
+                checked={!!eff.accessibilityNeeds.dyslexia}
+                onChange={(v) => setA11y("dyslexia", v)}
+              />
+              <ToggleRow
+                label="ADHD-friendly"
+                description="Frequent micro-checkpoints, shorter explanations, more quizzes"
+                checked={!!eff.accessibilityNeeds.adhd}
+                onChange={(v) => setA11y("adhd", v)}
+              />
+              <ToggleRow
+                label="Visual impairment"
+                description="Detailed text descriptions of diagrams and visual concepts"
+                checked={!!eff.accessibilityNeeds.visualImpairment}
+                onChange={(v) => setA11y("visualImpairment", v)}
+              />
+              <ToggleRow
+                label="Reduced motion"
+                description="Fewer animations and transitions in the UI"
+                checked={!!eff.accessibilityNeeds.reducedMotion}
+                onChange={(v) => setA11y("reducedMotion", v)}
+              />
+            </div>
+          </section>
+
+          {/* ── Inferred Profile (read-only) ───────────────────── */}
+          {learnerProfile && learnerProfile.calibrationConfidence > 0 && (
+            <section>
+              <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                AI-Inferred Profile
+              </h2>
+              <div className="rounded-xl border border-border/30 bg-muted/10 p-4">
+                <p className="text-[11px] text-muted-foreground/50 mb-3">
+                  Based on your review sessions, the system has calibrated these parameters.
+                  They blend with your declared settings above.
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-[12px]">
+                  {learnerProfile.inferredPace && (
+                    <div>
+                      <span className="text-muted-foreground/60">Pace:</span>{" "}
+                      <span className="font-medium capitalize">{learnerProfile.inferredPace}</span>
+                    </div>
+                  )}
+                  {learnerProfile.inferredBloomCeiling && (
+                    <div>
+                      <span className="text-muted-foreground/60">Bloom ceiling:</span>{" "}
+                      <span className="font-medium capitalize">
+                        {learnerProfile.inferredBloomCeiling}
+                      </span>
+                    </div>
+                  )}
+                  {learnerProfile.inferredOptimalSessionMin && (
+                    <div>
+                      <span className="text-muted-foreground/60">Optimal session:</span>{" "}
+                      <span className="font-medium">
+                        {learnerProfile.inferredOptimalSessionMin} min
+                      </span>
+                    </div>
+                  )}
+                  {learnerProfile.inferredReadingLevel && (
+                    <div>
+                      <span className="text-muted-foreground/60">Reading level:</span>{" "}
+                      <span className="font-medium">
+                        Grade {Math.round(learnerProfile.inferredReadingLevel)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground/60">Calibration confidence:</span>{" "}
+                    <span className="font-medium">
+                      {Math.round(learnerProfile.calibrationConfidence * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ── Study Preferences ──────────────────────────────── */}
           <section>
             <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
               <Clock className="size-4 text-primary" />
@@ -150,35 +565,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Learner Profile */}
-          <section>
-            <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
-              <GraduationCap className="size-4 text-violet-500" />
-              Learner Profile
-            </h2>
-            <div className="space-y-2 rounded-xl border border-border/30 p-4">
-              <p className="text-[11px] text-muted-foreground/50 mb-3">
-                This shapes how courses are structured and which learning methods are emphasized.
-              </p>
-              {EDUCATION_STAGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setEducationStage(opt.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all",
-                    effectiveStage === opt.id
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-border/20 hover:border-border/50"
-                  )}
-                >
-                  <span className="text-base">{opt.icon}</span>
-                  <span className="text-[13px] font-medium">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* Notifications */}
+          {/* ── Notifications ──────────────────────────────────── */}
           <section>
             <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
               <Bell className="size-4 text-amber-500" />
@@ -188,19 +575,19 @@ export default function SettingsPage() {
               <ToggleRow
                 label="Email reminders"
                 description="Daily digest of due reviews"
-                checked={effectiveEmail}
+                checked={effNotifs.email}
                 onChange={setEmailReminders}
               />
               <ToggleRow
                 label="Push notifications"
                 description="Browser push at study time"
-                checked={effectivePush}
+                checked={effNotifs.push}
                 onChange={setPushNotifications}
               />
               <ToggleRow
                 label="Smart nudges"
                 description="Alert when concepts are fading"
-                checked={effectiveSmartNudges}
+                checked={effNotifs.smartNudges}
                 onChange={setSmartNudges}
               />
               <div className="flex items-center justify-between">
@@ -212,7 +599,7 @@ export default function SettingsPage() {
                 </div>
                 <input
                   type="time"
-                  value={effectiveReminderTime}
+                  value={effNotifs.reminderTime}
                   onChange={(e) => setReminderTime(e.target.value)}
                   className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
                 />
@@ -222,7 +609,7 @@ export default function SettingsPage() {
                   <p className="text-[13px] font-medium">Frequency</p>
                 </div>
                 <select
-                  value={effectiveFrequency}
+                  value={effNotifs.frequency ?? "daily"}
                   onChange={(e) =>
                     setFrequency(e.target.value as "daily" | "every_other_day" | "weekly")
                   }
@@ -236,7 +623,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Quiet hours */}
+          {/* ── Quiet Hours ────────────────────────────────────── */}
           <section>
             <h2 className="text-[13px] font-medium mb-4 flex items-center gap-2">
               <Shield className="size-4 text-violet-500" />
@@ -249,14 +636,14 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3">
                 <input
                   type="time"
-                  value={effectiveQuietStart}
+                  value={effNotifs.quietStart}
                   onChange={(e) => setQuietStart(e.target.value)}
                   className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
                 />
                 <span className="text-[12px] text-muted-foreground/40">to</span>
                 <input
                   type="time"
-                  value={effectiveQuietEnd}
+                  value={effNotifs.quietEnd}
                   onChange={(e) => setQuietEnd(e.target.value)}
                   className="rounded-lg border border-border/30 bg-transparent px-2 py-1.5 text-[13px] focus:border-primary/40 focus:outline-none"
                 />
@@ -264,10 +651,10 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Save */}
+          {/* ── Save ───────────────────────────────────────────── */}
           <button
             onClick={handleSave}
-            disabled={updatePrefs.isPending || updateGoal.isPending}
+            disabled={isSaving}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-[13px] font-medium text-background disabled:opacity-50 transition-opacity"
           >
             {saved ? (
@@ -275,7 +662,7 @@ export default function SettingsPage() {
                 <Check className="size-4" />
                 Saved
               </>
-            ) : updatePrefs.isPending || updateGoal.isPending ? (
+            ) : isSaving ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <>
@@ -285,6 +672,46 @@ export default function SettingsPage() {
             )}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reusable components ─────────────────────────────────────────────
+
+function OptionGrid<T extends string>({
+  label,
+  description,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  options: { id: T; label: string; desc: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div>
+      <p className="text-[13px] font-medium">{label}</p>
+      <p className="text-[11px] text-muted-foreground/50 mb-2">{description}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => onChange(opt.id)}
+            className={cn(
+              "rounded-lg border px-3 py-2 text-left transition-all",
+              value === opt.id
+                ? "border-primary/50 bg-primary/5"
+                : "border-border/20 hover:border-border/50"
+            )}
+          >
+            <p className="text-[12px] font-medium">{opt.label}</p>
+            <p className="text-[10px] text-muted-foreground/50 mt-0.5">{opt.desc}</p>
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -6,3 +6,4 @@ export {
   type MentorMessage,
   type MentorStreamOpts,
 } from "./chat";
+export { buildPersonaBlock } from "./persona";

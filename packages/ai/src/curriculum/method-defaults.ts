@@ -1,4 +1,4 @@
-import type { EducationStage, GoalType, MethodPreferences, FocusMode } from "@repo/shared";
+import type { EducationStage, GoalType, MethodPreferences, FocusMode, LearnerProfile } from "@repo/shared";
 
 export type MethodDefaults = {
   methods: MethodPreferences;
@@ -99,4 +99,68 @@ export function getEducationStagePrompt(stage: EducationStage): string {
     self_learner: `The learner is a self-directed lifelong learner. Follow their curiosity — cover interesting and surprising aspects. Provide structure but allow flexibility. Encourage self-assessment and reflection. Balance breadth with depth based on their interests.`,
   };
   return prompts[stage];
+}
+
+/**
+ * Builds a richer curriculum-generation prompt that incorporates the full
+ * learner profile, not just the education stage.
+ */
+export function getProfilePrompt(profile: LearnerProfile): string {
+  const parts: string[] = [getEducationStagePrompt(profile.educationStage)];
+
+  if (profile.contentLanguage !== "en") {
+    parts.push(
+      `Generate all curriculum item titles and descriptions in ${profile.contentLanguage}. ` +
+        `Keep technical terms in English with a translation in parentheses.`
+    );
+  }
+
+  const depthMap: Record<string, string> = {
+    concise: "Keep descriptions brief and action-oriented (1-2 sentences each).",
+    standard: "Provide clear, moderate-length descriptions (2-3 sentences each).",
+    thorough:
+      "Provide detailed descriptions with learning objectives, key sub-topics, and expected outcomes.",
+  };
+  parts.push(depthMap[profile.explanationDepth] ?? depthMap.standard);
+
+  if (profile.expertiseDomains.length > 0) {
+    parts.push(
+      `The learner already has expertise in: ${profile.expertiseDomains.join(", ")}. ` +
+        `Skip or abbreviate prerequisites that overlap with these domains. ` +
+        `Use cross-domain analogies from their expertise to introduce new concepts.`
+    );
+  }
+
+  const motivationHints: Record<string, string> = {
+    career: "Prioritize professionally applicable skills and industry-relevant examples.",
+    curiosity: "Include surprising connections and 'aha moment' concepts.",
+    exam: "Order by exam likelihood. Include review/practice-testing items for high-value topics.",
+    hobby: "Keep it fun, project-oriented, and low-pressure.",
+    academic: "Include theoretical foundations and connections to the broader field.",
+  };
+  const motHints = profile.learningMotivations
+    .map((m) => motivationHints[m])
+    .filter(Boolean);
+  if (motHints.length > 0) parts.push(motHints.join(" "));
+
+  if (profile.inferredPace === "slow" && profile.calibrationConfidence > 0.3) {
+    parts.push(
+      "Break concepts into smaller-than-usual chunks. " +
+        "Add explicit review checkpoints between concept groups."
+    );
+  } else if (profile.inferredPace === "fast" && profile.calibrationConfidence > 0.3) {
+    parts.push(
+      "This learner progresses quickly — you can combine related basics into single units " +
+        "and allocate more time to advanced topics."
+    );
+  }
+
+  if (profile.accessibilityNeeds.adhd) {
+    parts.push(
+      "Keep each concept unit short (max 10 minutes). " +
+        "Alternate between methods frequently to maintain engagement."
+    );
+  }
+
+  return parts.join("\n");
 }

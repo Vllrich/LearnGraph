@@ -2,8 +2,8 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { primaryModel } from "../models";
 import { db, learningGoals, curriculumItems } from "@repo/db";
-import type { GoalType, LearnerLevel, EducationStage, MethodPreferences, FocusMode } from "@repo/shared";
-import { getEducationStagePrompt, getMethodDefaults } from "./method-defaults";
+import type { GoalType, LearnerLevel, EducationStage, MethodPreferences, FocusMode, LearnerProfile } from "@repo/shared";
+import { getEducationStagePrompt, getMethodDefaults, getProfilePrompt } from "./method-defaults";
 
 const curriculumSchema = z.object({
   concepts: z.array(
@@ -40,6 +40,7 @@ export type CurriculumInput = {
   examDate?: string;
   examName?: string;
   contextNote?: string;
+  learnerProfile?: LearnerProfile;
 };
 
 export async function generateCurriculum(input: CurriculumInput) {
@@ -47,6 +48,7 @@ export async function generateCurriculum(input: CurriculumInput) {
     topic, goalType, currentLevel, userId, timeBudgetMinutes,
     educationStage, selectedTopics, methodPreferences, focusMode,
     sessionMinutes, daysPerWeek, targetDate, examDate, examName, contextNote,
+    learnerProfile,
   } = input;
 
   const stage = educationStage ?? "self_learner";
@@ -107,7 +109,7 @@ Distribute methods roughly according to these weights across the curriculum.`;
 ${levelContext}
 ${goalContext}
 ${focusContext}
-${getEducationStagePrompt(stage)}
+${learnerProfile ? getProfilePrompt(learnerProfile) : getEducationStagePrompt(stage)}
 
 ${topicScopeInstruction}
 

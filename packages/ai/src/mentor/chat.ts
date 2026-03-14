@@ -2,12 +2,30 @@ import { streamText, tool } from "ai";
 import { z } from "zod";
 import { primaryModel } from "../models";
 import { retrieveChunks } from "../rag";
-import { db, mentorConversations, userConceptState, concepts, questions, learningObjects } from "@repo/db";
+import { db, mentorConversations, userConceptState, concepts, questions, learningObjects, learnerProfiles } from "@repo/db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { MASTERY_LABELS } from "@repo/shared";
-import type { MasteryLevel } from "@repo/shared";
+import type { MasteryLevel, LearnerProfile } from "@repo/shared";
+import { buildPersonaBlock } from "./persona";
 
 const GROUNDING_THRESHOLD = 0.12;
+
+const DEFAULT_PROFILE: LearnerProfile = {
+  educationStage: "self_learner",
+  nativeLanguage: "en",
+  contentLanguage: "en",
+  communicationStyle: "balanced",
+  explanationDepth: "standard",
+  mentorTone: "encouraging",
+  expertiseDomains: [],
+  learningMotivations: [],
+  accessibilityNeeds: {},
+  inferredReadingLevel: null,
+  inferredOptimalSessionMin: null,
+  inferredBloomCeiling: null,
+  inferredPace: null,
+  calibrationConfidence: 0,
+};
 
 export type MentorMessage = {
   role: "user" | "assistant";
@@ -49,7 +67,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
 
   const topK = learningObjectId ? 6 : 10;
 
-  const [chunks, userMaterials, masteryOverview] = await Promise.all([
+  const [chunks, userMaterials, masteryOverview, profileRow] = await Promise.all([
     retrieveChunks(message, {
       learningObjectId: learningObjectId ?? undefined,
       userId,
@@ -64,7 +82,34 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
     db.execute<{ mastery_level: number; cnt: string }>(
       sql`SELECT mastery_level, COUNT(*)::text AS cnt FROM user_concept_state WHERE user_id = ${userId} GROUP BY mastery_level ORDER BY mastery_level`
     ),
+    db
+      .select()
+      .from(learnerProfiles)
+      .where(eq(learnerProfiles.userId, userId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
   ]);
+
+  const profile: LearnerProfile = profileRow
+    ? {
+        educationStage: profileRow.educationStage as LearnerProfile["educationStage"],
+        nativeLanguage: profileRow.nativeLanguage,
+        contentLanguage: profileRow.contentLanguage,
+        communicationStyle: profileRow.communicationStyle as LearnerProfile["communicationStyle"],
+        explanationDepth: profileRow.explanationDepth as LearnerProfile["explanationDepth"],
+        mentorTone: profileRow.mentorTone as LearnerProfile["mentorTone"],
+        expertiseDomains: profileRow.expertiseDomains ?? [],
+        learningMotivations: (profileRow.learningMotivations ?? []) as LearnerProfile["learningMotivations"],
+        accessibilityNeeds: (profileRow.accessibilityNeeds ?? {}) as LearnerProfile["accessibilityNeeds"],
+        inferredReadingLevel: profileRow.inferredReadingLevel,
+        inferredOptimalSessionMin: profileRow.inferredOptimalSessionMin,
+        inferredBloomCeiling: profileRow.inferredBloomCeiling as LearnerProfile["inferredBloomCeiling"],
+        inferredPace: profileRow.inferredPace as LearnerProfile["inferredPace"],
+        calibrationConfidence: profileRow.calibrationConfidence ?? 0,
+      }
+    : DEFAULT_PROFILE;
+
+  const personaBlock = buildPersonaBlock(profile);
 
   const materialsBlock = userMaterials.length > 0
     ? userMaterials.map((m) => `- "${m.title}" (${m.sourceType})${m.summaryTldr ? `: ${m.summaryTldr.slice(0, 150)}` : ""}`).join("\n")
@@ -105,7 +150,7 @@ ${learningObjectId ? `Currently viewing: ${userMaterials.find((m) => m.id === le
 
   const result = streamText({
     model: primaryModel,
-    system: `${SYSTEM_PROMPT}\n\n${userContextBlock}\n\n--- RETRIEVED CONTEXT ---\n${contextBlock}\n--- END CONTEXT ---`,
+    system: `${SYSTEM_PROMPT}\n\n${personaBlock}\n\n${userContextBlock}\n\n--- RETRIEVED CONTEXT ---\n${contextBlock}\n--- END CONTEXT ---`,
     messages,
     tools: {
       retrieve_content: tool({
