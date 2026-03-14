@@ -1,9 +1,22 @@
 import { z } from "zod";
 import crypto from "crypto";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../init";
-import { db, learningGoals, curriculumItems, sharedCurriculums } from "@repo/db";
+import {
+  db,
+  learningGoals,
+  curriculumItems,
+  sharedCurriculums,
+  courseModules,
+  courseLessons,
+  lessonBlocks,
+} from "@repo/db";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import {
+  getNextLesson as getNextLessonEngine,
+  getCourseRoadmap as getCourseRoadmapEngine,
+  isModuleSkipEligible,
+} from "@repo/ai";
 
 export const goalsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -232,6 +245,263 @@ export const goalsRouter = createTRPCRouter({
         }>,
         viewCount: (shared.viewCount ?? 0) + 1,
         createdAt: shared.createdAt,
+      };
+    }),
+
+  // ---------------------------------------------------------------------------
+  // V2 Modular Course Procedures
+  // ---------------------------------------------------------------------------
+
+  getNextLesson: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return getNextLessonEngine(input.goalId, ctx.userId);
+    }),
+
+  getCourseRoadmap: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select()
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const roadmap = await getCourseRoadmapEngine(input.goalId, ctx.userId);
+      return { goal, modules: roadmap };
+    }),
+
+  getLessonBlocks: protectedProcedure
+    .input(z.object({ lessonId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [lesson] = await db
+        .select()
+        .from(courseLessons)
+        .where(eq(courseLessons.id, input.lessonId))
+        .limit(1);
+
+      if (!lesson) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Verify ownership through module → goal chain
+      const [mod] = await db
+        .select()
+        .from(courseModules)
+        .where(eq(courseModules.id, lesson.moduleId))
+        .limit(1);
+      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [goal] = await db
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, mod.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const blocks = await db
+        .select()
+        .from(lessonBlocks)
+        .where(eq(lessonBlocks.lessonId, input.lessonId))
+        .orderBy(asc(lessonBlocks.sequenceOrder));
+
+      return { lesson, blocks };
+    }),
+
+  completeBlock: protectedProcedure
+    .input(z.object({
+      blockId: z.string().uuid(),
+      interactionLog: z.unknown().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [block] = await db
+        .select()
+        .from(lessonBlocks)
+        .where(eq(lessonBlocks.id, input.blockId))
+        .limit(1);
+
+      if (!block) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Verify ownership
+      const [lesson] = await db
+        .select()
+        .from(courseLessons)
+        .where(eq(courseLessons.id, block.lessonId))
+        .limit(1);
+      if (!lesson) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [mod] = await db
+        .select()
+        .from(courseModules)
+        .where(eq(courseModules.id, lesson.moduleId))
+        .limit(1);
+      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [goal] = await db
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, mod.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [updated] = await db
+        .update(lessonBlocks)
+        .set({
+          status: "completed",
+          completedAt: new Date(),
+          interactionLog: input.interactionLog ?? block.interactionLog,
+        })
+        .where(eq(lessonBlocks.id, input.blockId))
+        .returning();
+
+      // Check if all blocks in this lesson are complete
+      const allBlocks = await db
+        .select({ status: lessonBlocks.status })
+        .from(lessonBlocks)
+        .where(eq(lessonBlocks.lessonId, block.lessonId));
+
+      const allComplete = allBlocks.every(
+        (b) => b.status === "completed" || b.status === "skipped",
+      );
+
+      if (allComplete) {
+        await db
+          .update(courseLessons)
+          .set({ status: "completed", completedAt: new Date() })
+          .where(eq(courseLessons.id, block.lessonId));
+
+        // Check if all lessons in module are complete
+        const allLessons = await db
+          .select({ status: courseLessons.status })
+          .from(courseLessons)
+          .where(eq(courseLessons.moduleId, lesson.moduleId));
+
+        const moduleComplete = allLessons.every(
+          (l) => l.status === "completed" || l.status === "skipped",
+        );
+
+        if (moduleComplete) {
+          await db
+            .update(courseModules)
+            .set({ status: "completed", completedAt: new Date() })
+            .where(eq(courseModules.id, lesson.moduleId));
+        }
+      }
+
+      return { block: updated, lessonComplete: allComplete };
+    }),
+
+  skipModule: protectedProcedure
+    .input(z.object({ moduleId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [mod] = await db
+        .select()
+        .from(courseModules)
+        .where(eq(courseModules.id, input.moduleId))
+        .limit(1);
+
+      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [goal] = await db
+        .select({ id: learningGoals.id })
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, mod.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const eligible = await isModuleSkipEligible(input.moduleId, ctx.userId);
+      if (!eligible) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Module is not eligible for skipping. Concept mastery too low.",
+        });
+      }
+
+      await db
+        .update(courseModules)
+        .set({ status: "skipped", completedAt: new Date() })
+        .where(eq(courseModules.id, input.moduleId));
+
+      // Mark all lessons and blocks as skipped
+      const lessons = await db
+        .select({ id: courseLessons.id })
+        .from(courseLessons)
+        .where(eq(courseLessons.moduleId, input.moduleId));
+
+      for (const lesson of lessons) {
+        await db
+          .update(courseLessons)
+          .set({ status: "skipped", completedAt: new Date() })
+          .where(eq(courseLessons.id, lesson.id));
+
+        await db
+          .update(lessonBlocks)
+          .set({ status: "skipped", completedAt: new Date() })
+          .where(eq(lessonBlocks.lessonId, lesson.id));
+      }
+
+      return { success: true };
+    }),
+
+  getCourseProgress: protectedProcedure
+    .input(z.object({ goalId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [goal] = await db
+        .select()
+        .from(learningGoals)
+        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
+        .limit(1);
+
+      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const modules = await db
+        .select()
+        .from(courseModules)
+        .where(eq(courseModules.goalId, input.goalId));
+
+      const totalModules = modules.length;
+      const completedModules = modules.filter(
+        (m) => m.status === "completed" || m.status === "skipped",
+      ).length;
+
+      let totalBlocks = 0;
+      let completedBlocks = 0;
+
+      for (const mod of modules) {
+        const lessons = await db
+          .select({ id: courseLessons.id })
+          .from(courseLessons)
+          .where(eq(courseLessons.moduleId, mod.id));
+
+        for (const lesson of lessons) {
+          const blocks = await db
+            .select({ status: lessonBlocks.status })
+            .from(lessonBlocks)
+            .where(eq(lessonBlocks.lessonId, lesson.id));
+
+          totalBlocks += blocks.length;
+          completedBlocks += blocks.filter(
+            (b) => b.status === "completed" || b.status === "skipped",
+          ).length;
+        }
+      }
+
+      return {
+        totalModules,
+        completedModules,
+        totalBlocks,
+        completedBlocks,
+        moduleProgress: totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0,
+        blockProgress: totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0,
+        isComplete: completedModules === totalModules && totalModules > 0,
       };
     }),
 });

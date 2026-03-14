@@ -1,2 +1,29 @@
 export { generateCurriculum, type CurriculumInput } from "./generate";
-export { getMethodDefaults, getEducationStagePrompt, getProfilePrompt, type MethodDefaults } from "./method-defaults";
+export { generateModularCourse, type ModularCourseInput } from "./generate-modular";
+export {
+  getMethodDefaults,
+  getEducationStagePrompt,
+  getProfilePrompt,
+  getMethodWeights,
+  getDefaultLearningMode,
+  getSessionDefaults,
+  type MethodDefaults,
+} from "./method-defaults";
+export {
+  getNextLesson,
+  evaluateModuleStatus,
+  isModuleSkipEligible,
+  getCourseRoadmap,
+  type NextLessonResult,
+} from "./path-engine";
+export { generateBlockContent } from "./blocks";
+export type {
+  BlockContent,
+  ConceptBlockContent,
+  CheckpointBlockContent,
+  PracticeBlockContent,
+  ReflectionBlockContent,
+  ScenarioBlockContent,
+  WorkedExampleBlockContent,
+  MentorBlockContent,
+} from "./blocks";

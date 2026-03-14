@@ -110,8 +110,10 @@ export type LegacyLearnerProfile = {
   preferredMethods?: LearningMethod[];
 };
 
+/** @deprecated Use LearningMode instead — kept for v1 backward compat */
 export type FocusMode = "concept_mastery" | "breadth" | "exam_readiness";
 
+/** @deprecated Use LearningMode + MethodWeights instead */
 export type LearningMethod =
   | "guided_lesson"
   | "practice_testing"
@@ -119,6 +121,80 @@ export type LearningMethod =
   | "spaced_review"
   | "interleaved_practice"
   | "reflection";
+
+// ---------------------------------------------------------------------------
+// V2 Course System — Learning Modes & Method Weights
+// ---------------------------------------------------------------------------
+
+export type LearningMode =
+  | "understand_first"
+  | "remember_longer"
+  | "apply_faster"
+  | "deep_mastery"
+  | "exam_prep"
+  | "mentor_heavy";
+
+export const LEARNING_MODES = [
+  "understand_first",
+  "remember_longer",
+  "apply_faster",
+  "deep_mastery",
+  "exam_prep",
+  "mentor_heavy",
+] as const satisfies readonly LearningMode[];
+
+export type MethodWeights = {
+  retrievalPractice: number;
+  spacedReview: number;
+  interleaving: number;
+  elaboration: number;
+  dualCoding: number;
+  concreteExamples: number;
+  guidedReflection: number;
+  scaffolding: number;
+};
+
+export type BlockType =
+  | "concept"
+  | "worked_example"
+  | "checkpoint"
+  | "practice"
+  | "reflection"
+  | "scenario"
+  | "mentor";
+
+export const BLOCK_TYPES = [
+  "concept",
+  "worked_example",
+  "checkpoint",
+  "practice",
+  "reflection",
+  "scenario",
+  "mentor",
+] as const satisfies readonly BlockType[];
+
+export type ModuleType = "mandatory" | "remedial" | "advanced" | "enrichment";
+
+export type ModuleStatus =
+  | "locked"
+  | "available"
+  | "in_progress"
+  | "completed"
+  | "skipped";
+
+export type LessonType =
+  | "standard"
+  | "workshop"
+  | "lab"
+  | "case_study"
+  | "revision"
+  | "capstone";
+
+export type LessonStatus = "pending" | "in_progress" | "completed" | "skipped";
+
+export type BlockStatus = "pending" | "in_progress" | "completed" | "skipped";
+
+export type CourseSchemaVersion = 1 | 2;
 
 export type LearningObjectStatus = "processing" | "ready" | "failed";
 
@@ -156,7 +232,13 @@ export type AchievementKey =
   | "explain_back_10"
   | "perfect_session"
   | "quick_5_first"
-  | "weekly_goal_met";
+  | "weekly_goal_met"
+  | "first_module_complete"
+  | "first_course_complete"
+  | "modules_5"
+  | "modules_10"
+  | "blocks_50"
+  | "blocks_100";
 
 export type AchievementDef = {
   key: AchievementKey;

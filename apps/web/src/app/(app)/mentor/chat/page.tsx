@@ -28,36 +28,7 @@ export default function MentorChatPage() {
   const { data: conversations } = trpc.mentor.listConversations.useQuery();
   const generalConvos = (conversations ?? []).filter((c) => c.learningObjectId === null);
 
-  useEffect(() => {
-    if (autoLoadedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const convId = params.get("conv");
-    const prompt = params.get("prompt");
-    if (convId || prompt) {
-      autoLoadedRef.current = true;
-      // Strip params from URL so HMR/remount won't re-trigger
-      window.history.replaceState({}, "", window.location.pathname);
-      if (convId) {
-        void handleLoadConversation(convId);
-      } else if (prompt) {
-        sendMessage(prompt);
-      }
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSend = useCallback(() => {
-    if (!input.trim() || isLoading) return;
-    sendMessage(input.trim());
-    setInput("");
-  }, [input, isLoading, sendMessage]);
-
-  const handleLoadConversation = async (convId: string) => {
+  const handleLoadConversation = useCallback(async (convId: string) => {
     try {
       const res = await fetch(
         `/api/trpc/mentor.getConversation?input=${encodeURIComponent(JSON.stringify({ id: convId }))}`
@@ -77,7 +48,36 @@ export default function MentorChatPage() {
     } catch {
       /* silently ignore */
     }
-  };
+  }, [loadConversation]);
+
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const convId = params.get("conv");
+    const prompt = params.get("prompt");
+    if (convId || prompt) {
+      autoLoadedRef.current = true;
+      // Strip params from URL so HMR/remount won't re-trigger
+      window.history.replaceState({}, "", window.location.pathname);
+      if (convId) {
+        void handleLoadConversation(convId);
+      } else if (prompt) {
+        sendMessage(prompt);
+      }
+    }
+  }, [handleLoadConversation, sendMessage]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = useCallback(() => {
+    if (!input.trim() || isLoading) return;
+    sendMessage(input.trim());
+    setInput("");
+  }, [input, isLoading, sendMessage]);
 
   const suggestedPrompts = [
     "What are the key themes across my courses?",

@@ -23,6 +23,8 @@ export const learningGoals = pgTable("learning_goals", {
   focusMode: text("focus_mode"),
   methodPreferences: jsonb("method_preferences"),
   contextNote: text("context_note"),
+  learningMode: text("learning_mode").default("understand_first"),
+  schemaVersion: integer("schema_version").default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

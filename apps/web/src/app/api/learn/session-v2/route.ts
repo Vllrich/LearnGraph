@@ -1,0 +1,327 @@
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import {
+  streamFeedback,
+  evaluateExplainBack,
+  type SessionContext,
+} from "@repo/ai";
+import { db, learningGoals, lessonBlocks, courseLessons, courseModules } from "@repo/db";
+import { eq, and } from "drizzle-orm";
+
+export const maxDuration = 60;
+
+const rateMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 30;
+
+const blockSessionSchema = z.object({
+  action: z.enum([
+    "stream_concept",
+    "stream_worked_example",
+    "get_checkpoint",
+    "submit_checkpoint",
+    "stream_practice_feedback",
+    "stream_reflection_prompt",
+    "submit_reflection",
+    "get_scenario",
+    "submit_scenario_choice",
+    "stream_mentor",
+  ]),
+  blockId: z.string().uuid(),
+  goalId: z.string().uuid(),
+  userAnswer: z.string().max(8000).optional(),
+  choiceIndex: z.number().min(0).max(5).optional(),
+});
+
+function sseStream(streamable: AsyncIterable<string>) {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of streamable) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk })}\n\n`),
+          );
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+        controller.close();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Stream failed";
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "error", error: msg })}\n\n`),
+        );
+        controller.close();
+      }
+    },
+  });
+}
+
+function sseResponse(stream: ReadableStream) {
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return new Response("Unauthorized", { status: 401 });
+
+  const now = Date.now();
+  const rl = rateMap.get(user.id);
+  if (!rl || now > rl.resetAt) {
+    rateMap.set(user.id, { count: 1, resetAt: now + RATE_WINDOW_MS });
+  } else if (rl.count >= RATE_MAX) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": "60" },
+    });
+  } else {
+    rl.count++;
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
+  }
+
+  const parsed = blockSessionSchema.safeParse(body);
+  if (!parsed.success) {
+    return new Response(
+      JSON.stringify({ error: "Invalid input", details: parsed.error.issues }),
+      { status: 400 },
+    );
+  }
+
+  const { action, blockId, goalId, userAnswer, choiceIndex } = parsed.data;
+
+  // Verify ownership: block → lesson → module → goal → user
+  const [goal] = await db
+    .select({ id: learningGoals.id, title: learningGoals.title })
+    .from(learningGoals)
+    .where(and(eq(learningGoals.id, goalId), eq(learningGoals.userId, user.id)))
+    .limit(1);
+  if (!goal) return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+
+  const [block] = await db
+    .select()
+    .from(lessonBlocks)
+    .where(eq(lessonBlocks.id, blockId))
+    .limit(1);
+  if (!block) return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
+
+  // Verify block belongs to the claimed goal (block → lesson → module → goal)
+  const [lesson] = await db
+    .select({ moduleId: courseLessons.moduleId })
+    .from(courseLessons)
+    .where(eq(courseLessons.id, block.lessonId))
+    .limit(1);
+  if (!lesson) return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
+
+  const [mod] = await db
+    .select({ goalId: courseModules.goalId })
+    .from(courseModules)
+    .where(eq(courseModules.id, lesson.moduleId))
+    .limit(1);
+  if (!mod || mod.goalId !== goalId) {
+    return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
+  }
+
+  const content = block.generatedContent as Record<string, unknown>;
+
+  // Build a session context from block data for streaming functions
+  const ctx: SessionContext = {
+    goalId,
+    topic: goal.title,
+    goalType: "exploration",
+    currentLevel: "some_knowledge",
+    conceptTitle: (content.text as string)?.slice(0, 100) ?? block.blockType,
+    conceptDescription: "",
+    conceptIndex: block.sequenceOrder,
+    totalConcepts: 1,
+    previousConcepts: [],
+    sessionHistory: [],
+  };
+
+  // ─── Concept / Worked Example: stream pre-generated content ─────────
+  if (action === "stream_concept" || action === "stream_worked_example") {
+    const text =
+      action === "stream_concept"
+        ? formatConceptContent(content)
+        : formatWorkedExampleContent(content);
+
+    const stream = sseStream(streamText(text));
+    return sseResponse(stream);
+  }
+
+  // ─── Checkpoint: return questions ──────────────────────────────────
+  if (action === "get_checkpoint") {
+    return new Response(
+      JSON.stringify({ type: "checkpoint", questions: content.questions ?? [] }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ─── Checkpoint answer submission ──────────────────────────────────
+  if (action === "submit_checkpoint") {
+    if (!userAnswer) {
+      return new Response(JSON.stringify({ error: "Missing answer" }), { status: 400 });
+    }
+    const questions = (content.questions ?? []) as Array<{
+      type: string;
+      correctIndex?: number;
+      correctAnswer?: string;
+      explanation: string;
+    }>;
+    const q = questions[0];
+    if (!q) {
+      return new Response(JSON.stringify({ error: "No questions" }), { status: 400 });
+    }
+
+    const isCorrect =
+      q.type === "mcq"
+        ? userAnswer === String(q.correctIndex)
+        : userAnswer.toLowerCase().includes((q.correctAnswer ?? "").toLowerCase());
+
+    return new Response(
+      JSON.stringify({
+        type: "checkpoint_result",
+        correct: isCorrect,
+        explanation: q.explanation,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ─── Practice feedback via AI ──────────────────────────────────────
+  if (action === "stream_practice_feedback") {
+    if (!userAnswer) {
+      return new Response(JSON.stringify({ error: "Missing answer" }), { status: 400 });
+    }
+    const result = streamFeedback(ctx, userAnswer, {
+      type: "short_answer",
+      correctAnswer: (content.solutionSteps as string[])?.join("\n") ?? "",
+    });
+    return sseResponse(sseStream(result.textStream));
+  }
+
+  // ─── Reflection prompt ─────────────────────────────────────────────
+  if (action === "stream_reflection_prompt") {
+    const prompt = content.prompt as string ?? "Reflect on what you've learned.";
+    const guiding = content.guidingQuestions as string[] ?? [];
+    const text = `${prompt}\n\n${guiding.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+    return sseResponse(sseStream(streamText(text)));
+  }
+
+  // ─── Reflection submission ─────────────────────────────────────────
+  if (action === "submit_reflection") {
+    if (!userAnswer) {
+      return new Response(JSON.stringify({ error: "Missing response" }), { status: 400 });
+    }
+    const score = await evaluateExplainBack(ctx, userAnswer);
+    return new Response(JSON.stringify({ type: "reflection_result", score }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // ─── Scenario: return decision tree ────────────────────────────────
+  if (action === "get_scenario") {
+    return new Response(
+      JSON.stringify({
+        type: "scenario",
+        narrative: content.narrative,
+        decisions: content.decisions,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ─── Scenario choice submission ────────────────────────────────────
+  if (action === "submit_scenario_choice") {
+    if (choiceIndex == null) {
+      return new Response(JSON.stringify({ error: "Missing choice" }), { status: 400 });
+    }
+    const decisions = content.decisions as Array<{
+      options: Array<{ outcome: string; isOptimal: boolean }>;
+    }>;
+    const decision = decisions?.[0];
+    const option = decision?.options?.[choiceIndex];
+    return new Response(
+      JSON.stringify({
+        type: "scenario_result",
+        outcome: option?.outcome ?? "No outcome available",
+        isOptimal: option?.isOptimal ?? false,
+        debrief: content.debrief,
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // ─── Mentor: use existing streaming mentor infra ───────────────────
+  if (action === "stream_mentor") {
+    const opening = content.openingPrompt as string ?? "Let's explore this topic together.";
+    if (!userAnswer) {
+      return sseResponse(sseStream(streamText(opening)));
+    }
+    const result = streamFeedback(ctx, userAnswer, {
+      type: "short_answer",
+      correctAnswer: content.targetInsight as string ?? "",
+    });
+    return sseResponse(sseStream(result.textStream));
+  }
+
+  return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400 });
+}
+
+function formatConceptContent(content: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (content.text) parts.push(content.text as string);
+  const keyTerms = content.keyTerms as Array<{ term: string; definition: string }> | undefined;
+  if (keyTerms?.length) {
+    parts.push("\n\n**Key Terms:**");
+    for (const kt of keyTerms) {
+      parts.push(`- **${kt.term}**: ${kt.definition}`);
+    }
+  }
+  if (content.mermaidDiagram) {
+    parts.push(`\n\n\`\`\`mermaid\n${content.mermaidDiagram}\n\`\`\``);
+  }
+  return parts.join("\n");
+}
+
+function formatWorkedExampleContent(content: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (content.problemStatement) parts.push(`**Problem:** ${content.problemStatement}`);
+  const steps = content.steps as Array<{ title: string; explanation: string; keyInsight?: string }> | undefined;
+  if (steps) {
+    for (let i = 0; i < steps.length; i++) {
+      parts.push(`\n### Step ${i + 1}: ${steps[i].title}\n${steps[i].explanation}`);
+      if (steps[i].keyInsight) parts.push(`> **Key insight:** ${steps[i].keyInsight}`);
+    }
+  }
+  if (content.finalAnswer) parts.push(`\n**Answer:** ${content.finalAnswer}`);
+  const mistakes = content.commonMistakes as string[] | undefined;
+  if (mistakes?.length) {
+    parts.push("\n**Common Mistakes to Avoid:**");
+    for (const m of mistakes) parts.push(`- ${m}`);
+  }
+  return parts.join("\n");
+}
+
+async function* streamText(text: string): AsyncIterable<string> {
+  const words = text.split(/(\s+)/);
+  for (let i = 0; i < words.length; i += 3) {
+    yield words.slice(i, i + 3).join("");
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}

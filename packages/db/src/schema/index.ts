@@ -7,3 +7,4 @@ export * from "./mentor";
 export * from "./goals";
 export * from "./gamification";
 export * from "./learner-profiles";
+export * from "./courses";

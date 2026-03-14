@@ -118,11 +118,16 @@ export default function ReviewPage() {
   const currentQuestion = allQuestions[currentIndex];
   const shuffledOptions = useMemo(() => {
     const opts = Array.isArray(currentQuestion?.options) ? [...(currentQuestion.options as string[])] : [];
+    // Seeded shuffle based on question id to keep order stable across re-renders
+    const seed = currentQuestion?.id
+      ? currentQuestion.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)
+      : 0;
     for (let i = opts.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = (seed + i) % (i + 1);
       [opts[i], opts[j]] = [opts[j]!, opts[i]!];
     }
     return opts;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion?.id]);
   const currentSelfRateItem = allItems[selfRateIndex];
   const totalQuestions = useSelfRating ? allItems.length : allQuestions.length;

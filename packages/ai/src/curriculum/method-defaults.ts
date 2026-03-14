@@ -1,4 +1,12 @@
-import type { EducationStage, GoalType, MethodPreferences, FocusMode, LearnerProfile } from "@repo/shared";
+import type {
+  EducationStage,
+  GoalType,
+  MethodPreferences,
+  FocusMode,
+  LearnerProfile,
+  LearningMode,
+  MethodWeights,
+} from "@repo/shared";
 
 export type MethodDefaults = {
   methods: MethodPreferences;
@@ -163,4 +171,179 @@ export function getProfilePrompt(profile: LearnerProfile): string {
   }
 
   return parts.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// V2 — Evidence-based method weights for modular courses
+// ---------------------------------------------------------------------------
+
+const MODE_BASE_WEIGHTS: Record<LearningMode, MethodWeights> = {
+  understand_first: {
+    retrievalPractice: 10,
+    spacedReview: 10,
+    interleaving: 5,
+    elaboration: 10,
+    dualCoding: 20,
+    concreteExamples: 25,
+    guidedReflection: 5,
+    scaffolding: 15,
+  },
+  remember_longer: {
+    retrievalPractice: 25,
+    spacedReview: 25,
+    interleaving: 15,
+    elaboration: 5,
+    dualCoding: 5,
+    concreteExamples: 10,
+    guidedReflection: 5,
+    scaffolding: 10,
+  },
+  apply_faster: {
+    retrievalPractice: 10,
+    spacedReview: 5,
+    interleaving: 20,
+    elaboration: 10,
+    dualCoding: 5,
+    concreteExamples: 25,
+    guidedReflection: 5,
+    scaffolding: 20,
+  },
+  deep_mastery: {
+    retrievalPractice: 20,
+    spacedReview: 10,
+    interleaving: 20,
+    elaboration: 25,
+    dualCoding: 5,
+    concreteExamples: 10,
+    guidedReflection: 5,
+    scaffolding: 5,
+  },
+  exam_prep: {
+    retrievalPractice: 25,
+    spacedReview: 20,
+    interleaving: 15,
+    elaboration: 5,
+    dualCoding: 5,
+    concreteExamples: 15,
+    guidedReflection: 5,
+    scaffolding: 10,
+  },
+  mentor_heavy: {
+    retrievalPractice: 10,
+    spacedReview: 5,
+    interleaving: 5,
+    elaboration: 25,
+    dualCoding: 5,
+    concreteExamples: 10,
+    guidedReflection: 25,
+    scaffolding: 15,
+  },
+};
+
+const STAGE_ADJUSTMENTS: Record<EducationStage, Partial<MethodWeights>> = {
+  elementary: { scaffolding: 20, dualCoding: 15, concreteExamples: 15, elaboration: -15, interleaving: -10 },
+  high_school: { scaffolding: 10, concreteExamples: 10, retrievalPractice: 5 },
+  university: {},
+  professional: { concreteExamples: 10, scaffolding: -10 },
+  self_learner: {},
+};
+
+const GOAL_AUTO_MODE: Record<GoalType, Record<EducationStage, LearningMode>> = {
+  exam_prep: {
+    elementary: "understand_first",
+    high_school: "exam_prep",
+    university: "exam_prep",
+    professional: "exam_prep",
+    self_learner: "exam_prep",
+  },
+  skill_building: {
+    elementary: "understand_first",
+    high_school: "apply_faster",
+    university: "apply_faster",
+    professional: "apply_faster",
+    self_learner: "apply_faster",
+  },
+  course_supplement: {
+    elementary: "understand_first",
+    high_school: "remember_longer",
+    university: "understand_first",
+    professional: "understand_first",
+    self_learner: "understand_first",
+  },
+  exploration: {
+    elementary: "understand_first",
+    high_school: "understand_first",
+    university: "understand_first",
+    professional: "understand_first",
+    self_learner: "understand_first",
+  },
+};
+
+function normalizeMethodWeights(w: MethodWeights): MethodWeights {
+  const keys = Object.keys(w) as (keyof MethodWeights)[];
+  const clamped = {} as MethodWeights;
+  for (const k of keys) clamped[k] = Math.max(0, w[k]);
+  const total = keys.reduce((s, k) => s + clamped[k], 0);
+  if (total === 0) {
+    const even = 100 / keys.length;
+    for (const k of keys) clamped[k] = Math.round(even);
+    return clamped;
+  }
+  const scale = 100 / total;
+  for (const k of keys) clamped[k] = Math.round(clamped[k] * scale);
+  return clamped;
+}
+
+export function getDefaultLearningMode(
+  goalType: GoalType,
+  stage: EducationStage,
+): LearningMode {
+  return GOAL_AUTO_MODE[goalType][stage];
+}
+
+export function getMethodWeights(
+  mode: LearningMode,
+  profile?: LearnerProfile | null,
+): MethodWeights {
+  const base = { ...MODE_BASE_WEIGHTS[mode] };
+  const stage = profile?.educationStage ?? "self_learner";
+  const adj = STAGE_ADJUSTMENTS[stage];
+
+  const keys = Object.keys(base) as (keyof MethodWeights)[];
+  for (const k of keys) {
+    base[k] += adj[k] ?? 0;
+  }
+
+  if (profile?.accessibilityNeeds?.adhd) {
+    base.scaffolding += 10;
+    base.retrievalPractice += 5;
+  }
+  if (profile?.accessibilityNeeds?.dyslexia) {
+    base.dualCoding += 10;
+    base.scaffolding += 5;
+  }
+
+  if (profile?.inferredPace === "slow" && (profile.calibrationConfidence ?? 0) > 0.3) {
+    base.scaffolding += 10;
+    base.interleaving -= 5;
+  } else if (profile?.inferredPace === "fast" && (profile.calibrationConfidence ?? 0) > 0.3) {
+    base.interleaving += 10;
+    base.scaffolding -= 5;
+  }
+
+  return normalizeMethodWeights(base);
+}
+
+export function getSessionDefaults(stage: EducationStage): {
+  sessionMinutes: number;
+  daysPerWeek: number;
+} {
+  const map: Record<EducationStage, { sessionMinutes: number; daysPerWeek: number }> = {
+    elementary: { sessionMinutes: 8, daysPerWeek: 5 },
+    high_school: { sessionMinutes: 15, daysPerWeek: 5 },
+    university: { sessionMinutes: 20, daysPerWeek: 5 },
+    professional: { sessionMinutes: 10, daysPerWeek: 4 },
+    self_learner: { sessionMinutes: 15, daysPerWeek: 3 },
+  };
+  return map[stage];
 }

@@ -731,9 +731,12 @@ CREATE TABLE learning_goals (
     target_date     DATE,
     status          TEXT DEFAULT 'active',
     target_concepts UUID[] DEFAULT '{}',
+    learning_mode   TEXT DEFAULT 'understand_first',  -- V2: one of 6 learning modes
+    schema_version  INTEGER DEFAULT 1,                -- 1 = flat curriculum_items, 2 = modular
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- V1: Flat curriculum items (schema_version = 1)
 CREATE TABLE curriculum_items (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     goal_id         UUID REFERENCES learning_goals(id) ON DELETE CASCADE,
@@ -748,6 +751,54 @@ CREATE TABLE curriculum_items (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_curriculum_goal ON curriculum_items(goal_id, sequence_order);
+```
+
+### 7.9 Modular Course Structure (V2)
+
+For courses with `schema_version = 2`. See `docs/modular-courses.md` for full details.
+
+```sql
+CREATE TABLE course_modules (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    goal_id          UUID REFERENCES learning_goals(id) ON DELETE CASCADE,
+    sequence_order   INTEGER NOT NULL,
+    title            TEXT NOT NULL,
+    description      TEXT,
+    module_type      TEXT DEFAULT 'mandatory',
+    concept_ids      UUID[],
+    unlock_rule      JSONB,
+    estimated_minutes INTEGER,
+    status           TEXT DEFAULT 'locked',
+    completed_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE course_lessons (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_id        UUID REFERENCES course_modules(id) ON DELETE CASCADE,
+    sequence_order   INTEGER NOT NULL,
+    title            TEXT NOT NULL,
+    lesson_type      TEXT DEFAULT 'standard',
+    estimated_minutes INTEGER,
+    status           TEXT DEFAULT 'pending',
+    completed_at     TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE lesson_blocks (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lesson_id         UUID REFERENCES course_lessons(id) ON DELETE CASCADE,
+    sequence_order    INTEGER NOT NULL,
+    block_type        TEXT NOT NULL,
+    concept_ids       UUID[],
+    content_chunk_ids UUID[],
+    bloom_level       TEXT,
+    generated_content JSONB NOT NULL DEFAULT '{}',
+    interaction_log   JSONB DEFAULT '[]',
+    status            TEXT DEFAULT 'pending',
+    completed_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
 ---

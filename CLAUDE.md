@@ -43,9 +43,13 @@ pnpm --filter web build   # catches type errors not caught by lint
 - `/library` — grid view, upload dialog (PDF + YouTube)
 - `/library/[id]` — content detail: summary, full text, concept panel
 - `/settings` — study preferences, learner profile, notifications, quiet hours
+- `/course/[goalId]` — modular course roadmap (V2)
+- `/course/[goalId]/learn` — block-by-block lesson player (V2)
 - `/api/ingest` — triggers ingestion pipeline
 - `/api/trpc/[trpc]` — tRPC (routers: health, library, review, goals, gaps, mentor, user, gamification, analytics, export)
-- `/api/learn/start`, `/api/learn/session`, `/api/learn/suggest-topics` — learning session APIs
+- `/api/learn/start`, `/api/learn/session`, `/api/learn/suggest-topics` — V1 learning session APIs
+- `/api/learn/start-v2` — modular course generation
+- `/api/learn/session-v2` — block-driven learning session (SSE)
 - `/api/mentor` — streaming AI mentor (persona-adapted)
 - `/api/export` — content export
 
@@ -81,8 +85,17 @@ Adaptive profile that changes how the entire app behaves per user. Stored in `le
 3. Parallel: `embedMany` (text-embedding-3-small) + 3-tier summarization (Claude) + concept extraction (Claude, dedup ≥ 0.92 cosine)
 4. Set `status = ready | failed`
 
+## Modular Course System (V2)
+Hierarchical Course → Module → Lesson → Block structure replacing flat curriculum_items.
+- **6 learning modes**: understand_first, remember_longer, apply_faster, deep_mastery, exam_prep, mentor_heavy
+- **7 block types**: concept, worked_example, checkpoint, practice, reflection, scenario, mentor
+- **Adaptive path engine**: mastery gates, module unlocking, skip eligibility, remedial insertion
+- **Schema**: `course_modules`, `course_lessons`, `lesson_blocks` tables + `learning_mode`/`schema_version` on `learning_goals`
+- Full docs: `docs/modular-courses.md`
+
 ## Reference Docs (read before starting a task)
 - `TECHNICAL_ARCHITECTURE.md` — full data models (§7), AI pipeline, system design
+- `docs/modular-courses.md` — V2 modular course system architecture
 - `DESIGN_SYSTEM.md` — colors, typography, component patterns, animations
 - `TODO.md` — implementation roadmap with dependency graph
 - `.cursor/rules/` — scoped coding standards (general, frontend, backend, ai-llm)

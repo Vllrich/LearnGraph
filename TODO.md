@@ -694,6 +694,31 @@ Phase 1E (Weeks 7-8)
 
 ---
 
+## Notifications & Email Reminders — Setup Checklist
+
+> **Status:** Cron route + UI complete. External service wiring is pending.  
+> **Docs:** [How notifications work](./docs/notifications.md)
+
+### Required before emails send in production
+
+- [ ] **P1** Create a [Brevo](https://app.brevo.com) account and generate an API key
+  - Add `BREVO_API_KEY=xkeysib-...` to `apps/web/.env.local` (local) and Vercel env vars (prod)
+- [ ] **P1** Verify a sender domain in Brevo → Settings → Senders & IPs
+  - Add `BREVO_SENDER_EMAIL=noreply@yourdomain.com` to env
+- [ ] **P1** Set `CRON_SECRET` in Vercel project env vars (auto-set on Vercel Pro, otherwise `openssl rand -base64 32`)
+- [ ] **P1** Set `NEXT_PUBLIC_APP_URL=https://yourdomain.com` in Vercel env vars so CTA links in emails are correct
+- [ ] **P1** Deploy to Vercel — cron in `vercel.json` runs `/api/cron/email-reminders` every hour automatically
+
+### Optional improvements (post-launch)
+
+- [ ] **P2** Add unsubscribe token in email footer (one-click unsubscribe per CAN-SPAM / GDPR)
+- [ ] **P2** Push notifications — register service worker, store Web Push subscriptions in DB, send via Web Push API
+- [ ] **P2** Smart nudges — dedicated cron that checks `fsrsRetrievability < 0.7` and fires nudge emails
+- [ ] **P3** Migrate cron to BullMQ (Upstash QStash) for per-user scheduling accuracy and retries
+- [ ] **P3** Email open / click tracking via Brevo webhooks → analytics table
+
+---
+
 ## Technical Debt Register
 
 Track shortcuts taken during POC that must be addressed before Phase 2:
