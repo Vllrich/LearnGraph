@@ -20,6 +20,7 @@ Path alias: `@/` → `apps/web/src/` | Packages: `@repo/db`, `@repo/ai`, `@repo/
 - **pgvector in Supabase**: vector search for RAG (migrate to Qdrant at scale)
 - **Fire-and-forget ingest**: `/api/ingest` with `maxDuration: 300`; migrate to BullMQ at scale
 - **FSRS defaults**: use until 50+ reviews/user
+- **Learner Profile**: dedicated `learner_profiles` table (not JSONB) — declared + inferred dimensions drive mentor persona, curriculum method-defaults, and question difficulty
 
 ## How — Commands
 ```bash
@@ -41,11 +42,37 @@ pnpm --filter web build   # catches type errors not caught by lint
 ## Implemented Routes (as of March 2026)
 - `/library` — grid view, upload dialog (PDF + YouTube)
 - `/library/[id]` — content detail: summary, full text, concept panel
+- `/settings` — study preferences, learner profile, notifications, quiet hours
 - `/api/ingest` — triggers ingestion pipeline
 - `/api/trpc/[trpc]` — tRPC (routers: health, library, review, goals, gaps, mentor, user, gamification, analytics, export)
 - `/api/learn/start`, `/api/learn/session`, `/api/learn/suggest-topics` — learning session APIs
-- `/api/mentor` — streaming AI mentor
+- `/api/mentor` — streaming AI mentor (persona-adapted)
 - `/api/export` — content export
+
+## Learner Profile System
+Adaptive profile that changes how the entire app behaves per user. Stored in `learner_profiles` (dedicated table, not JSONB).
+
+**Declared dimensions** (user sets in `/settings`):
+- `educationStage` — vocabulary level, analogy sources, session defaults
+- `nativeLanguage` / `contentLanguage` — bilingual term intros; teach in non-English
+- `communicationStyle` — casual | balanced | formal
+- `explanationDepth` — concise | standard | thorough
+- `mentorTone` — encouraging | neutral | challenging
+- `expertiseDomains` — cross-domain analogies, prerequisite skipping
+- `learningMotivations` — career | curiosity | exam | hobby | academic
+- `accessibilityNeeds` — dyslexia, ADHD, visual impairment, reduced motion
+
+**Inferred dimensions** (calibrated from review sessions, used when `calibrationConfidence > 0.3`):
+- `inferredPace` — slow | medium | fast
+- `inferredReadingLevel` — Flesch-Kincaid grade
+- `inferredBloomCeiling` — caps question complexity
+- `inferredOptimalSessionMin` — observed focus sweet-spot
+
+**Where the profile is applied:**
+- `packages/ai/src/mentor/persona.ts` → `buildPersonaBlock(profile)` injected into mentor system prompt
+- `packages/ai/src/curriculum/method-defaults.ts` → `getProfilePrompt(profile)` in curriculum generation
+- `apps/web/src/server/trpc/routers/user.ts` → `getLearnerProfile`, `updateLearnerProfile` procedures
+- Migration: `packages/db/drizzle/0004_brown_johnny_blaze.sql`
 
 ## Ingestion Pipeline
 `upload` → `Supabase Storage` → `create learning_objects row` → `POST /api/ingest`:

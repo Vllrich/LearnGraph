@@ -21,6 +21,7 @@ LearnGraph is an AI-powered learning platform that transforms any content into a
 | No retention science | FSRS-based spaced repetition with forgetting curve modeling |
 | No personalization | Learning Graph that tracks what each user knows, forgot, and needs next |
 | No curriculum generation | Goal-driven path builder: "I want to learn X" → full sequenced curriculum |
+| One-size-fits-all AI | Adaptive Learner Profile: mentor tone, vocabulary, language, and depth adapt per user |
 | No collaboration | Shared knowledge graphs, study groups, peer challenges |
 | Limited formats (no PPT, Word, images) | Universal ingestion: PDF, video, audio, slides, PPT, Word, images, code, web pages |
 | Restrictive free tier | Generous free tier to drive adoption; monetize on power features |
@@ -352,7 +353,8 @@ The mentor is **not** a generic chatbot. It follows a structured pedagogical loo
 
 **Technical implementation:**
 - System prompt encodes the pedagogical loop as a state machine.
-- Conversation context includes: user's knowledge state (from graph), relevant content chunks (from RAG), conversation history (last 10 turns), and the current teaching objective.
+- Conversation context includes: **learner persona block** (built from `learner_profiles`), user's knowledge state (from graph), relevant content chunks (from RAG), conversation history (last 20 turns), and the current teaching objective.
+- **Persona block** (`buildPersonaBlock(profile)` in `packages/ai/src/mentor/persona.ts`) modulates: vocabulary level (from inferred reading level or education stage), communication style, explanation depth, tone, cross-domain analogies from expertise domains, motivation-based framing, Bloom's ceiling cap, pacing hints, and accessibility adaptations. All profile data is fetched in the same `Promise.all` as RAG retrieval — zero added latency.
 - Tool calling: the mentor LLM has access to tools — `check_knowledge_state(concept)`, `retrieve_content(query)`, `generate_quiz(concept, difficulty)`, `update_mastery(concept, score)`.
 - Streaming responses via Vercel AI SDK for real-time feel.
 
@@ -645,7 +647,64 @@ CREATE TABLE user_answers (
 );
 ```
 
-### 7.6 Mentor Conversations
+### 7.6 Learner Profile
+
+The `learner_profiles` table stores the multi-dimensional pedagogical model for each user. It drives all AI adaptation: mentor tone and vocabulary, curriculum method weighting, question difficulty scaling, and language of instruction.
+
+```sql
+CREATE TABLE learner_profiles (
+    user_id                     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Declared: user sets these in Settings
+    education_stage             TEXT NOT NULL DEFAULT 'self_learner'
+                                    CHECK (education_stage IN ('elementary','high_school','university','professional','self_learner')),
+    native_language             TEXT NOT NULL DEFAULT 'en',       -- ISO 639-1 code
+    content_language            TEXT NOT NULL DEFAULT 'en',       -- language the mentor teaches in
+    communication_style         TEXT NOT NULL DEFAULT 'balanced'
+                                    CHECK (communication_style IN ('casual','balanced','formal')),
+    explanation_depth           TEXT NOT NULL DEFAULT 'standard'
+                                    CHECK (explanation_depth IN ('concise','standard','thorough')),
+    mentor_tone                 TEXT NOT NULL DEFAULT 'encouraging'
+                                    CHECK (mentor_tone IN ('encouraging','neutral','challenging')),
+    expertise_domains           TEXT[] DEFAULT '{}',              -- subjects the user already knows well
+    learning_motivations        TEXT[] DEFAULT '{}',              -- career | curiosity | exam | hobby | academic
+    accessibility_needs         JSONB DEFAULT '{}',               -- { dyslexia, adhd, visualImpairment, reducedMotion }
+
+    -- Inferred: calibrated by the system from review session behaviour
+    inferred_reading_level      REAL,                             -- Flesch-Kincaid grade, null until calibrated
+    inferred_optimal_session_min INT,                             -- observed focus sweet-spot in minutes
+    inferred_bloom_ceiling      TEXT,                             -- highest Bloom's level consistently achieved
+    inferred_pace               TEXT CHECK (inferred_pace IS NULL OR inferred_pace IN ('slow','medium','fast')),
+    calibration_confidence      REAL DEFAULT 0,                   -- 0..1; use declared values below 0.3
+
+    last_calibrated_at          TIMESTAMPTZ,
+    created_at                  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Resolution order** (highest wins): goal-level override → inferred fields (when `calibration_confidence > 0.3`) → declared fields → system defaults.
+
+**How each dimension is used:**
+
+| Dimension | Used by |
+|-----------|---------|
+| `education_stage` | Curriculum method-defaults, mentor vocabulary level |
+| `native_language` / `content_language` | Mentor bilingual term intros; curriculum language |
+| `communication_style` | Mentor phrasing formality |
+| `explanation_depth` | Mentor response length; curriculum description verbosity |
+| `mentor_tone` | Mentor encouragement/challenge level |
+| `expertise_domains` | Cross-domain analogies; prerequisite skipping in curriculum |
+| `learning_motivations` | Example framing (career, curiosity, exam, hobby, academic) |
+| `accessibility_needs` | Dyslexia: short paragraphs + bold terms; ADHD: micro-checkpoints; visual: text descriptions |
+| `inferred_pace` | Mentor pacing hints; curriculum chunk granularity |
+| `inferred_bloom_ceiling` | Caps question Bloom's level until learner is ready |
+
+**API surface:**
+- `trpc.user.getLearnerProfile` — fetches profile; auto-seeds from legacy `preferences.learnerProfile` on first call
+- `trpc.user.updateLearnerProfile` — upserts declared fields; keeps `preferences.learnerProfile.educationStage` in sync for backward compat
+
+### 7.7 Mentor Conversations
 
 ```sql
 CREATE TABLE mentor_conversations (
@@ -661,7 +720,7 @@ CREATE TABLE mentor_conversations (
 CREATE INDEX idx_mentor_conv_user ON mentor_conversations(user_id, updated_at DESC);
 ```
 
-### 7.7 Curriculum & Goals
+### 7.8 Curriculum & Goals
 
 ```sql
 CREATE TABLE learning_goals (
@@ -842,7 +901,7 @@ CREATE INDEX idx_curriculum_goal ON curriculum_items(goal_id, sequence_order);
 | **11-12** | PWA mobile support. Offline review queue. Push notification reminders. |
 | **13-14** | Additional content formats: PPT, Word, audio, web URLs. Improved ingestion pipeline reliability. |
 | **15-16** | Learning analytics dashboard. Retention curves. Study streak mechanics. |
-| **17-18** | Cross-subject concept connections. Improved graph visualization. |
+| **17-18** | Cross-subject concept connections. Improved graph visualization. Learner Profile calibration loop (infer pace, reading level, Bloom ceiling from review sessions). |
 | **19-20** | Payment integration (Stripe). Pro tier launch. Landing page + waitlist conversion. |
 
 **Team:** 3 full-stack + 1 AI/ML + 1 designer. (5 people.)
