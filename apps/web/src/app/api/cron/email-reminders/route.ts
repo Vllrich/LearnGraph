@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { TransactionalEmailsApi, TransactionalEmailsApiApiKeys } from "@getbrevo/brevo";
 import { db } from "@repo/db";
-import { users, userConceptState } from "@repo/db/schema";
+import { users, userConceptState } from "@repo/db";
 import { and, lt, isNotNull, sql } from "drizzle-orm";
 import type { NotificationPreferences } from "@repo/shared";
 
