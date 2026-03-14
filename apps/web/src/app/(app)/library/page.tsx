@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   FileText,
@@ -30,6 +30,20 @@ export default function LibraryPage() {
     { limit: 100, offset: 0 },
     { refetchInterval: 10_000 }
   );
+
+  const prevStatusRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    if (!data?.items) return;
+    for (const item of data.items) {
+      const prev = prevStatusRef.current[item.id];
+      if (prev === "processing" && item.status === "failed") {
+        toast.error(`Processing failed: "${item.title}". The document may be empty or unreadable.`);
+      } else if (prev === "processing" && item.status === "ready") {
+        toast.success(`"${item.title}" is ready!`);
+      }
+      prevStatusRef.current[item.id] = item.status;
+    }
+  }, [data?.items]);
 
   const utils = trpc.useUtils();
   const deleteMutation = trpc.library.delete.useMutation({

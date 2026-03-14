@@ -76,7 +76,7 @@ Requirements:
 - The "reason" field should feel personal — reference the learner's profile, motivations, or expertise
 - Prioritize topics that are timely, high-impact, or uniquely interesting for this learner
 - Vary difficulty: include both accessible and stretch topics`,
-    maxTokens: 800,
+    maxTokens: 2500,
   });
 
   return object.topics.slice(0, count);
