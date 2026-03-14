@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Tooltip } from "@/components/ui/tooltip-card";
 import { CodeBlock } from "@/components/course/code-block";
+import { MusicScore } from "@/components/course/music-score";
 import { cn } from "@/lib/utils";
 
 // ── Inline AST ─────────────────────────────────────────────────────────────
@@ -228,7 +229,11 @@ export function MarkdownContent({ text, className }: MarkdownContentProps) {
           case "code_block":
             return (
               <div key={key} className={anim}>
-                <CodeBlock code={block.code} lang={block.lang} />
+                {block.lang === "abc" ? (
+                  <MusicScore abc={block.code} />
+                ) : (
+                  <CodeBlock code={block.code} lang={block.lang} />
+                )}
               </div>
             );
           default:

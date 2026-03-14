@@ -69,6 +69,9 @@ importers:
       '@vercel/speed-insights':
         specifier: ^2.0.0
         version: 2.0.0(next@16.1.6(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
+      abcjs:
+        specifier: ^6.6.2
+        version: 6.6.2
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.3)(zod@3.25.76)
@@ -2560,6 +2563,9 @@ packages:
   '@xmldom/xmldom@0.8.11':
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
+
+  abcjs@6.6.2:
+    resolution: {integrity: sha512-YLbp5lYUq0uOywWZx9EuTdm0TcflKZi7hOzz366A/LFl3qoAXSYIjznJQmr/VeHg8NcLxZYoN8dLi7PqCpxKEA==}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -7132,6 +7138,8 @@ snapshots:
       tinyrainbow: 2.0.0
 
   '@xmldom/xmldom@0.8.11': {}
+
+  abcjs@6.6.2: {}
 
   abort-controller@3.0.0:
     dependencies:
