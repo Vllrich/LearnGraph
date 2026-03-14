@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { TransactionalEmailsApi, TransactionalEmailsApiApiKeys } from "@getbrevo/brevo";
+import { Brevo, BrevoEnvironment } from "@getbrevo/brevo";
 import { db } from "@repo/db";
 import { users, userConceptState } from "@repo/db";
 import { and, lt, isNotNull, sql } from "drizzle-orm";
@@ -111,8 +111,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const brevo = new TransactionalEmailsApi();
-  brevo.setApiKey(TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY ?? "");
+  const brevo = new Brevo();
+  brevo.setApiKey(BrevoEnvironment.apiKey, process.env.BREVO_API_KEY ?? "");
 
   // Fetch all users who have due concepts right now
   const dueUsers = await db
