@@ -87,7 +87,7 @@ export function GraphCardList({
   const toggleDomain = (domain: string) => {
     setCollapsedDomains((prev) => {
       const next = new Set(prev);
-      next.has(domain) ? next.delete(domain) : next.add(domain);
+      if (next.has(domain)) { next.delete(domain); } else { next.add(domain); }
       return next;
     });
   };

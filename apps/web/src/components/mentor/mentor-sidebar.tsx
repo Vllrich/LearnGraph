@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Sparkles,
-  X,
   ArrowUp,
   Square,
   Maximize2,

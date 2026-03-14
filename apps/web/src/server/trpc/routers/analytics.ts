@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, userConceptState, reviewLog, concepts, users } from "@repo/db";
+import { db, userConceptState, reviewLog, concepts } from "@repo/db";
 import { eq, and, sql, gte, count } from "drizzle-orm";
 
 export const analyticsRouter = createTRPCRouter({

@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
         );
 
         let chunkCount = 0;
-        let toolCalls: string[] = [];
+        const toolCalls: string[] = [];
         for await (const part of result.fullStream) {
           if (part.type === "text-delta") {
             chunkCount++;

@@ -84,7 +84,7 @@ export default function JournalPage() {
                   <span className="text-[13px] font-medium">Weekly Summary</span>
                 </div>
                 <p className="text-[13px] leading-relaxed text-muted-foreground font-(family-name:--font-source-serif)">
-                  {data.reviewsCompleted > 0 ? (
+                  {(data.reviewsCompleted ?? 0) > 0 ? (
                     <>
                       This week you completed{" "}
                       <strong className="text-foreground">{data.reviewsCompleted} reviews</strong>
