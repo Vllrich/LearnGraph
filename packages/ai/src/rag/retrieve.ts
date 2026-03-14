@@ -82,10 +82,10 @@ export async function retrieveChunks(
     text_search AS (
       SELECT
         c.id,
-        ts_rank_cd(to_tsvector('english', c.content), to_tsquery('english', ${tsQuery || "''"})) AS text_score
+        ts_rank_cd(to_tsvector('english', regexp_replace(c.content, '[^\s]{2048,}', '', 'g')), to_tsquery('english', ${tsQuery || "''"})) AS text_score
       FROM content_chunks c
       WHERE
-        ${tsQuery ? sql`to_tsvector('english', c.content) @@ to_tsquery('english', ${tsQuery})` : sql`FALSE`}
+        ${tsQuery ? sql`to_tsvector('english', regexp_replace(c.content, '[^\s]{2048,}', '', 'g')) @@ to_tsquery('english', ${tsQuery})` : sql`FALSE`}
         ${scopeFilter}
       LIMIT ${topK * 3}
     )

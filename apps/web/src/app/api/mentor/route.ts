@@ -8,6 +8,9 @@ import {
 } from "@repo/ai";
 import { db, learningObjects } from "@repo/db";
 import { eq, and } from "drizzle-orm";
+import { createLogger } from "@repo/shared";
+
+const log = createLogger("api/mentor");
 
 export const maxDuration = 60;
 
@@ -158,6 +161,7 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Streaming failed";
+        log.error("Mentor stream failed", { userId: user.id, error: message });
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: "error", error: message })}\n\n`),
         );
