@@ -207,10 +207,10 @@ function buildCitationHref(cite: { learningObjectId?: string; pageNumber: number
 }
 
 function parseSuggestions(content: string): { text: string; suggestions: string[] } {
-  const match = content.match(/<suggest>([\s\S]*?)<\/suggest>/);
+  const match = content.match(/%%SUGGEST%%([\s\S]*?)%%END%%/);
   if (!match) return { text: content, suggestions: [] };
-  const suggestions = match[1].split("|").map((s) => s.trim()).filter(Boolean);
-  return { text: content.replace(/<suggest>[\s\S]*?<\/suggest>/, "").trimEnd(), suggestions };
+  const suggestions = match[1].split("||").map((s) => s.trim()).filter(Boolean);
+  return { text: content.replace(/%%SUGGEST%%[\s\S]*?%%END%%/, "").trimEnd(), suggestions };
 }
 
 function SidebarBubble({ message, onSuggest }: { message: ChatMessage; onSuggest: (msg: string) => void }) {
