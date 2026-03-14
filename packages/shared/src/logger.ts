@@ -4,9 +4,9 @@ type LogMeta = Record<string, unknown>;
 
 const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
+const envLevel = process.env.LOG_LEVEL as string | undefined;
 const MIN_LEVEL: LogLevel =
-  (process.env.LOG_LEVEL as LogLevel | undefined) ??
-  (process.env.NODE_ENV === "production" ? "info" : "debug");
+  envLevel && envLevel in LEVELS ? (envLevel as LogLevel) : (process.env.NODE_ENV === "production" ? "info" : "debug");
 
 function shouldLog(level: LogLevel): boolean {
   return LEVELS[level] >= LEVELS[MIN_LEVEL];
