@@ -145,7 +145,7 @@ export function MentorSidebar({ open, onToggle }: MentorSidebarProps) {
             </div>
           ) : (
             messages.map((msg, i) => (
-              <SidebarBubble key={i} message={msg} />
+              <SidebarBubble key={i} message={msg} onSuggest={sendMessage} />
             ))
           )}
         </div>
@@ -206,8 +206,16 @@ function buildCitationHref(cite: { learningObjectId?: string; pageNumber: number
   return `/library/${cite.learningObjectId}?${params}`;
 }
 
-function SidebarBubble({ message }: { message: ChatMessage }) {
+function parseSuggestions(content: string): { text: string; suggestions: string[] } {
+  const match = content.match(/<suggest>([\s\S]*?)<\/suggest>/);
+  if (!match) return { text: content, suggestions: [] };
+  const suggestions = match[1].split("|").map((s) => s.trim()).filter(Boolean);
+  return { text: content.replace(/<suggest>[\s\S]*?<\/suggest>/, "").trimEnd(), suggestions };
+}
+
+function SidebarBubble({ message, onSuggest }: { message: ChatMessage; onSuggest: (msg: string) => void }) {
   const isUser = message.role === "user";
+  const { text, suggestions } = isUser ? { text: message.content, suggestions: [] } : parseSuggestions(message.content);
 
   return (
     <div className={cn("flex gap-2", isUser && "flex-row-reverse")}>
@@ -224,16 +232,30 @@ function SidebarBubble({ message }: { message: ChatMessage }) {
           )}
         >
           {isUser ? (
-            <p className="text-sm leading-relaxed">{message.content}</p>
+            <p className="text-sm leading-relaxed">{text}</p>
           ) : (
             <div className="prose-sm prose dark:prose-invert max-w-none text-sm leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+              <ReactMarkdown>{text}</ReactMarkdown>
               {message.isStreaming && (
                 <span className="inline-block h-3.5 w-0.5 animate-cursor-blink bg-foreground/50 ml-0.5" />
               )}
             </div>
           )}
         </div>
+        {!isUser && !message.isStreaming && suggestions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5 pl-1">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                onClick={() => onSuggest(s)}
+                className="rounded-full border border-border/40 px-3 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-primary/5 transition-colors"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         {!isUser && !message.isStreaming && message.citations && message.citations.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1 pl-1">
             {dedupeCitations(message.citations).map((cite, i) => {
