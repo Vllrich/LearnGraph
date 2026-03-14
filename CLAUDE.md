@@ -94,10 +94,11 @@ Hierarchical Course → Module → Lesson → Block structure replacing flat cur
 - Full docs: `docs/modular-courses.md`
 
 ## Reference Docs (read before starting a task)
-- `TECHNICAL_ARCHITECTURE.md` — full data models (§7), AI pipeline, system design
+- `docs/TECHNICAL_ARCHITECTURE.md` — full data models (§7), AI pipeline, system design
 - `docs/modular-courses.md` — V2 modular course system architecture
-- `DESIGN_SYSTEM.md` — colors, typography, component patterns, animations
-- `TODO.md` — implementation roadmap with dependency graph
+- `docs/feature-status.md` — what is implemented vs missing
+- `docs/DESIGN_SYSTEM.md` — colors, typography, component patterns, animations
+- `docs/TODO.md` — implementation roadmap with dependency graph
 - `.cursor/rules/` — scoped coding standards (general, frontend, backend, ai-llm)
 
 ## IMPORTANT Rules

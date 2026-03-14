@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 import {
@@ -88,7 +88,18 @@ const COMMON_LANGUAGES = [
   { code: "id", label: "Indonesian" },
 ];
 
+type SettingsTab = "profile" | "mentor" | "study" | "notifications";
+
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: "profile", label: "Profile", icon: <GraduationCap className="size-4" /> },
+  { id: "mentor", label: "Mentor", icon: <MessageSquare className="size-4" /> },
+  { id: "study", label: "Study", icon: <Clock className="size-4" /> },
+  { id: "notifications", label: "Notifications", icon: <Bell className="size-4" /> },
+];
+
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+
   const { data: userProfile, isLoading: isLoadingUser } = trpc.user.getProfile.useQuery();
   const { data: learnerProfile, isLoading: isLoadingProfile } =
     trpc.user.getLearnerProfile.useQuery();

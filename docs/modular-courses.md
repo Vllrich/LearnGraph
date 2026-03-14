@@ -328,4 +328,4 @@ Block-by-block progression through a lesson:
 | `concept_ids` arrays have no FK enforcement | Validated in application logic |
 | Block content generation is slow (many LLM calls) | Parallelized per lesson; add background queue for large courses |
 
-See [TODO.md](../TODO.md) for prioritized follow-up tasks.
+See [TODO.md](./TODO.md) for prioritized follow-up tasks.

@@ -99,4 +99,4 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://yourdomain.com/api/cron/ema
 | **Email tracking** | Open/click events not captured; add Brevo webhook → analytics table |
 | **Per-user scheduling accuracy** | Hourly cron is a best-effort approximation; exact-time delivery needs QStash |
 
-See [TODO.md](../TODO.md) for prioritized follow-up tasks.
+See [TODO.md](./TODO.md) for prioritized follow-up tasks.

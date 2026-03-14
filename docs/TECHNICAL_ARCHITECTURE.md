@@ -5,6 +5,7 @@
 > **Status:** POC Architecture Plan
 > **Context:** Based on YouLearn.ai teardown and validated product opportunities from [AI Startup Research](./AI_STARTUP_RESEARCH.md)
 
+
 ---
 
 ## 1. Product Overview
@@ -755,7 +756,7 @@ CREATE INDEX idx_curriculum_goal ON curriculum_items(goal_id, sequence_order);
 
 ### 7.9 Modular Course Structure (V2)
 
-For courses with `schema_version = 2`. See `docs/modular-courses.md` for full details.
+For courses with `schema_version = 2`. See [modular-courses.md](./modular-courses.md) for full details.
 
 ```sql
 CREATE TABLE course_modules (

@@ -1,7 +1,7 @@
 # Feature Status — Modular Course System
 
 > Last updated: March 14, 2026  
-> Reference: [COURSE_IMPROVEMENT_PLAN.md](../COURSE_IMPROVEMENT_PLAN.md) · [docs/modular-courses.md](./modular-courses.md)
+> Reference: [COURSE_IMPROVEMENT_PLAN.md](./COURSE_IMPROVEMENT_PLAN.md) · [modular-courses.md](./modular-courses.md)
 
 ---
 

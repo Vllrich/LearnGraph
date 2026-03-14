@@ -2,7 +2,7 @@
 
 > **Status:** Phase 1E — Feature Complete (all core features in place, tests & observability remain)  
 > **Last Updated:** March 8, 2026  
-> **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md)
+> **Reference Docs:** [Technical Architecture](./TECHNICAL_ARCHITECTURE.md) · [Design System](./DESIGN_SYSTEM.md) · [Market Research](./AI_STARTUP_RESEARCH.md) · [Feature Status](./feature-status.md)
 
 ---
 
