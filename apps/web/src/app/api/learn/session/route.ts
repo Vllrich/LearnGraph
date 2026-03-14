@@ -11,12 +11,9 @@ import {
 } from "@repo/ai";
 import { db, learningGoals } from "@repo/db";
 import { eq, and } from "drizzle-orm";
+import { checkRateLimit } from "@repo/shared";
 
 export const maxDuration = 60;
-
-const sessionRateMap = new Map<string, { count: number; resetAt: number }>();
-const SESSION_RATE_WINDOW_MS = 60_000;
-const SESSION_RATE_MAX = 30;
 
 const sessionSchema = z.object({
   action: z.enum(["teach", "check", "answer", "explain_back_prompt", "explain_back_answer"]),
@@ -50,14 +47,12 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const now = Date.now();
-  const rlEntry = sessionRateMap.get(user.id);
-  if (!rlEntry || now > rlEntry.resetAt) {
-    sessionRateMap.set(user.id, { count: 1, resetAt: now + SESSION_RATE_WINDOW_MS });
-  } else if (rlEntry.count >= SESSION_RATE_MAX) {
-    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "60" } });
-  } else {
-    rlEntry.count++;
+  const { allowed, retryAfterMs } = await checkRateLimit("session", user.id, { maxRequests: 30, window: "60 s" });
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+    });
   }
 
   let body: unknown;

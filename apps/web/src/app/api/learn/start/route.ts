@@ -4,13 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { generateCurriculum } from "@repo/ai";
 import { db, learningGoals } from "@repo/db";
 import { eq } from "drizzle-orm";
+import { checkRateLimit } from "@repo/shared";
 import type { GoalType } from "@repo/shared";
 
 export const maxDuration = 60;
-
-const startRateMap = new Map<string, { count: number; resetAt: number }>();
-const START_RATE_WINDOW_MS = 60_000;
-const START_RATE_MAX = 5;
 
 const methodPreferencesSchema = z.object({
   guidedLessons: z.number().min(0).max(100),
@@ -111,14 +108,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = Date.now();
-  const rlEntry = startRateMap.get(user.id);
-  if (!rlEntry || now > rlEntry.resetAt) {
-    startRateMap.set(user.id, { count: 1, resetAt: now + START_RATE_WINDOW_MS });
-  } else if (rlEntry.count >= START_RATE_MAX) {
-    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
-  } else {
-    rlEntry.count++;
+  const { allowed, retryAfterMs } = await checkRateLimit("start", user.id, { maxRequests: 5, window: "60 s" });
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+    });
   }
 
   let body: unknown;

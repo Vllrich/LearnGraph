@@ -67,6 +67,7 @@ Requirements:
 - Explanations should reference the source material
 - Questions should test understanding, not just recall`,
         temperature: 0.5,
+        maxTokens: 1200,
       });
 
       const chunkIds = chunks.map((c) => c.id);

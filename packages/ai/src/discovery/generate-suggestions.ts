@@ -76,6 +76,7 @@ Requirements:
 - The "reason" field should feel personal — reference the learner's profile, motivations, or expertise
 - Prioritize topics that are timely, high-impact, or uniquely interesting for this learner
 - Vary difficulty: include both accessible and stretch topics`,
+    maxTokens: 800,
   });
 
   return object.topics.slice(0, count);
@@ -93,6 +94,7 @@ export async function generateTopicHook(
     schema: topicHookSchema,
     prompt: `Generate a curiosity-sparking hook for the topic "${conceptName}"${domain ? ` (domain: ${domain})` : ""}.
 The hook should make someone immediately want to learn more. Use a surprising fact, counterintuitive insight, or compelling question. Max 20 words.`,
+    maxTokens: 150,
   });
 
   return object;

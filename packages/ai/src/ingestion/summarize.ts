@@ -33,6 +33,7 @@ async function directSummarize(text: string, title: string): Promise<SummaryResu
     schema: summarySchema,
     prompt: buildPrompt(text, title),
     temperature: 0.3,
+    maxTokens: 2000,
   });
 
   return object;

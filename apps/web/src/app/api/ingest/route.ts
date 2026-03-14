@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runIngestionPipeline } from "@repo/ai";
 import { db, learningObjects } from "@repo/db";
 import { eq, and } from "drizzle-orm";
+import { checkRateLimit } from "@repo/shared";
 
 export const maxDuration = 300;
 
@@ -19,10 +20,6 @@ const ingestSchema = z.object({
   fileName: z.string().max(500).optional(),
 });
 
-const ingestRateMap = new Map<string, { count: number; resetAt: number }>();
-const INGEST_RATE_WINDOW_MS = 60_000;
-const INGEST_RATE_MAX = 5;
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -33,18 +30,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = Date.now();
-  const rateEntry = ingestRateMap.get(user.id);
-  if (rateEntry && now <= rateEntry.resetAt && rateEntry.count >= INGEST_RATE_MAX) {
-    return NextResponse.json(
-      { error: "Too many uploads. Please wait before uploading more." },
-      { status: 429, headers: { "Retry-After": "60" } }
-    );
-  }
-  if (!rateEntry || now > rateEntry.resetAt) {
-    ingestRateMap.set(user.id, { count: 1, resetAt: now + INGEST_RATE_WINDOW_MS });
-  } else {
-    rateEntry.count++;
+  const { allowed, retryAfterMs } = await checkRateLimit("ingest", user.id, { maxRequests: 5, window: "60 s" });
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+    });
   }
 
   const parsed = ingestSchema.safeParse(await req.json());

@@ -188,21 +188,35 @@ export const analyticsRouter = createTRPCRouter({
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-    const [thisWeekStats] = await db
-      .select({ total: count() })
-      .from(reviewLog)
-      .where(and(eq(reviewLog.userId, ctx.userId), gte(reviewLog.createdAt, lastWeek)));
-
-    const [lastWeekStats] = await db
-      .select({ total: count() })
-      .from(reviewLog)
-      .where(
-        and(
-          eq(reviewLog.userId, ctx.userId),
-          gte(reviewLog.createdAt, twoWeeksAgo),
-          sql`${reviewLog.createdAt} < ${lastWeek.toISOString()}`
+    const [thisWeekStats, lastWeekStats, masteredThisWeek] = await Promise.all([
+      db
+        .select({ total: count() })
+        .from(reviewLog)
+        .where(and(eq(reviewLog.userId, ctx.userId), gte(reviewLog.createdAt, lastWeek)))
+        .then((rows) => rows[0]),
+      db
+        .select({ total: count() })
+        .from(reviewLog)
+        .where(
+          and(
+            eq(reviewLog.userId, ctx.userId),
+            gte(reviewLog.createdAt, twoWeeksAgo),
+            sql`${reviewLog.createdAt} < ${lastWeek.toISOString()}`
+          )
         )
-      );
+        .then((rows) => rows[0]),
+      db
+        .select({ cnt: count() })
+        .from(userConceptState)
+        .where(
+          and(
+            eq(userConceptState.userId, ctx.userId),
+            eq(userConceptState.masteryLevel, 5),
+            gte(userConceptState.updatedAt, lastWeek)
+          )
+        )
+        .then((rows) => rows[0]),
+    ]);
 
     const thisWeekReviews = Number(thisWeekStats?.total ?? 0);
     const lastWeekReviews = Number(lastWeekStats?.total ?? 0);
@@ -212,17 +226,6 @@ export const analyticsRouter = createTRPCRouter({
         : thisWeekReviews > 0
           ? 100
           : 0;
-
-    const [masteredThisWeek] = await db
-      .select({ cnt: count() })
-      .from(userConceptState)
-      .where(
-        and(
-          eq(userConceptState.userId, ctx.userId),
-          eq(userConceptState.masteryLevel, 5),
-          gte(userConceptState.updatedAt, lastWeek)
-        )
-      );
 
     return {
       thisWeekReviews,

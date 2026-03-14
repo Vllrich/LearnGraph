@@ -15,15 +15,15 @@ import {
   userAchievements,
   users,
 } from "@repo/db";
-import { eq, and, desc, asc, sql, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import {
-  getNextLesson as getNextLessonEngine,
-  getCourseRoadmap as getCourseRoadmapEngine,
-  isModuleSkipEligible,
-  generateCatchUpSuggestion,
-  getWelcomeBackSuggestion,
-} from "@repo/ai";
+const getAiPathEngine = () => import("@repo/ai").then((m) => ({
+  getNextLesson: m.getNextLesson,
+  getCourseRoadmap: m.getCourseRoadmap,
+  isModuleSkipEligible: m.isModuleSkipEligible,
+  generateCatchUpSuggestion: m.generateCatchUpSuggestion,
+  getWelcomeBackSuggestion: m.getWelcomeBackSuggestion,
+}));
 import { schedule, newCard } from "@repo/fsrs";
 import type { AchievementKey } from "@repo/shared";
 import { ACHIEVEMENT_DEFINITIONS, XP_VALUES } from "@repo/shared";
@@ -81,15 +81,27 @@ async function updateConceptStateFromBlock(
   blockType: string,
   interactionLog: unknown,
 ) {
+  if (conceptIds.length === 0) return;
   const rating = blockRatingFromType(blockType, interactionLog);
   const now = new Date();
 
+  // Batch read: single query for all concept states
+  const existingStates = await db
+    .select()
+    .from(userConceptState)
+    .where(
+      and(
+        eq(userConceptState.userId, userId),
+        inArray(userConceptState.conceptId, conceptIds),
+      ),
+    );
+  const existingMap = new Map(existingStates.map((s) => [s.conceptId, s]));
+
+  const toInsert: (typeof userConceptState.$inferInsert)[] = [];
+  const reviewRows: (typeof reviewLog.$inferInsert)[] = [];
+
   for (const conceptId of conceptIds) {
-    const [existing] = await db
-      .select()
-      .from(userConceptState)
-      .where(and(eq(userConceptState.userId, userId), eq(userConceptState.conceptId, conceptId)))
-      .limit(1);
+    const existing = existingMap.get(conceptId);
 
     const card = existing
       ? {
@@ -107,49 +119,43 @@ async function updateConceptStateFromBlock(
     const result = schedule(card, rating as 1 | 2 | 3 | 4, now);
     const masteryLevel = Math.min(5, Math.floor(result.retrievability * 5 + 0.5));
 
+    const fields = {
+      fsrsStability: result.card.stability,
+      fsrsDifficulty: result.card.difficulty,
+      fsrsElapsedDays: result.card.elapsedDays,
+      fsrsScheduledDays: result.card.scheduledDays,
+      fsrsRetrievability: result.retrievability,
+      fsrsState: result.card.state,
+      fsrsReps: result.card.reps,
+      fsrsLapses: result.card.lapses,
+      lastReviewAt: now,
+      nextReviewAt: result.nextReview,
+      masteryLevel,
+      updatedAt: now,
+    };
+
     if (existing) {
+      // Update existing — must be individual since we key by id
       await db
         .update(userConceptState)
-        .set({
-          fsrsStability: result.card.stability,
-          fsrsDifficulty: result.card.difficulty,
-          fsrsElapsedDays: result.card.elapsedDays,
-          fsrsScheduledDays: result.card.scheduledDays,
-          fsrsRetrievability: result.retrievability,
-          fsrsState: result.card.state,
-          fsrsReps: result.card.reps,
-          fsrsLapses: result.card.lapses,
-          lastReviewAt: now,
-          nextReviewAt: result.nextReview,
-          masteryLevel,
-          updatedAt: now,
-        })
+        .set(fields)
         .where(eq(userConceptState.id, existing.id));
     } else {
-      await db.insert(userConceptState).values({
-        userId,
-        conceptId,
-        fsrsStability: result.card.stability,
-        fsrsDifficulty: result.card.difficulty,
-        fsrsElapsedDays: result.card.elapsedDays,
-        fsrsScheduledDays: result.card.scheduledDays,
-        fsrsRetrievability: result.retrievability,
-        fsrsState: result.card.state,
-        fsrsReps: result.card.reps,
-        fsrsLapses: result.card.lapses,
-        lastReviewAt: now,
-        nextReviewAt: result.nextReview,
-        masteryLevel,
-      });
+      toInsert.push({ userId, conceptId, ...fields });
     }
 
-    await db.insert(reviewLog).values({
-      userId,
-      conceptId,
-      rating,
-      reviewType: `block_${blockType}`,
-    });
+    reviewRows.push({ userId, conceptId, rating, reviewType: `block_${blockType}` });
   }
+
+  // Batch insert new concept states + review logs
+  const ops: Promise<unknown>[] = [];
+  if (toInsert.length > 0) {
+    ops.push(db.insert(userConceptState).values(toInsert));
+  }
+  if (reviewRows.length > 0) {
+    ops.push(db.insert(reviewLog).values(reviewRows));
+  }
+  await Promise.all(ops);
 }
 
 async function recordBlockActivity(userId: string) {
@@ -189,32 +195,36 @@ async function recordBlockActivity(userId: string) {
 }
 
 async function checkCourseAchievements(userId: string, goalId: string) {
-  const completedModules = await db
-    .select({ cnt: count() })
-    .from(courseModules)
-    .where(and(eq(courseModules.goalId, goalId), eq(courseModules.status, "completed")));
-  const moduleCount = Number(completedModules[0]?.cnt ?? 0);
+  const [completedModules, allModules, totalBlocks] = await Promise.all([
+    db
+      .select({ cnt: count() })
+      .from(courseModules)
+      .where(and(eq(courseModules.goalId, goalId), eq(courseModules.status, "completed")))
+      .then((rows) => rows[0]),
+    db
+      .select({ status: courseModules.status })
+      .from(courseModules)
+      .where(eq(courseModules.goalId, goalId)),
+    db
+      .select({ cnt: count() })
+      .from(lessonBlocks)
+      .innerJoin(courseLessons, eq(lessonBlocks.lessonId, courseLessons.id))
+      .innerJoin(courseModules, eq(courseLessons.moduleId, courseModules.id))
+      .where(and(eq(courseModules.goalId, goalId), eq(lessonBlocks.status, "completed")))
+      .then((rows) => rows[0]),
+  ]);
 
+  const moduleCount = Number(completedModules?.cnt ?? 0);
   if (moduleCount >= 1) await grantAchievementIfNew(userId, "first_module_complete");
   if (moduleCount >= 5) await grantAchievementIfNew(userId, "modules_5");
   if (moduleCount >= 10) await grantAchievementIfNew(userId, "modules_10");
 
-  const allModules = await db
-    .select({ status: courseModules.status })
-    .from(courseModules)
-    .where(eq(courseModules.goalId, goalId));
   const courseComplete = allModules.length > 0 && allModules.every(
     (m) => m.status === "completed" || m.status === "skipped",
   );
   if (courseComplete) await grantAchievementIfNew(userId, "first_course_complete");
 
-  const totalBlocks = await db
-    .select({ cnt: count() })
-    .from(lessonBlocks)
-    .innerJoin(courseLessons, eq(lessonBlocks.lessonId, courseLessons.id))
-    .innerJoin(courseModules, eq(courseLessons.moduleId, courseModules.id))
-    .where(and(eq(courseModules.goalId, goalId), eq(lessonBlocks.status, "completed")));
-  const blockCount = Number(totalBlocks[0]?.cnt ?? 0);
+  const blockCount = Number(totalBlocks?.cnt ?? 0);
   if (blockCount >= 50) await grantAchievementIfNew(userId, "blocks_50");
   if (blockCount >= 100) await grantAchievementIfNew(userId, "blocks_100");
 }
@@ -235,22 +245,28 @@ export const goalsRouter = createTRPCRouter({
       .where(and(eq(learningGoals.userId, ctx.userId), eq(learningGoals.status, "active")))
       .orderBy(desc(learningGoals.createdAt));
 
-    const result = await Promise.all(
-      goals.map(async (goal) => {
-        const items = await db
-          .select()
-          .from(curriculumItems)
-          .where(eq(curriculumItems.goalId, goal.id))
-          .orderBy(asc(curriculumItems.sequenceOrder));
+    if (goals.length === 0) return [];
 
-        const completed = items.filter((i) => i.status === "completed").length;
-        const nextItem = items.find((i) => i.status !== "completed");
+    const goalIds = goals.map((g) => g.id);
+    const allItems = await db
+      .select()
+      .from(curriculumItems)
+      .where(inArray(curriculumItems.goalId, goalIds))
+      .orderBy(asc(curriculumItems.sequenceOrder));
 
-        return { ...goal, totalItems: items.length, completedItems: completed, nextItem };
-      })
-    );
+    const itemsByGoal = new Map<string, (typeof allItems)>();
+    for (const item of allItems) {
+      const list = itemsByGoal.get(item.goalId) ?? [];
+      list.push(item);
+      itemsByGoal.set(item.goalId, list);
+    }
 
-    return result;
+    return goals.map((goal) => {
+      const items = itemsByGoal.get(goal.id) ?? [];
+      const completed = items.filter((i) => i.status === "completed").length;
+      const nextItem = items.find((i) => i.status !== "completed");
+      return { ...goal, totalItems: items.length, completedItems: completed, nextItem };
+    });
   }),
 
   getById: protectedProcedure
@@ -464,6 +480,7 @@ export const goalsRouter = createTRPCRouter({
 
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
 
+      const { getNextLesson: getNextLessonEngine } = await getAiPathEngine();
       return getNextLessonEngine(input.goalId, ctx.userId);
     }),
 
@@ -478,6 +495,7 @@ export const goalsRouter = createTRPCRouter({
 
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
 
+      const { getCourseRoadmap: getCourseRoadmapEngine } = await getAiPathEngine();
       const roadmap = await getCourseRoadmapEngine(input.goalId, ctx.userId);
       return { goal, modules: roadmap };
     }),
@@ -485,28 +503,29 @@ export const goalsRouter = createTRPCRouter({
   getLessonBlocks: protectedProcedure
     .input(z.object({ lessonId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const [lesson] = await db
-        .select()
+      // Single-query ownership check: lesson → module → goal → user
+      const [lessonRow] = await db
+        .select({
+          id: courseLessons.id,
+          moduleId: courseLessons.moduleId,
+          title: courseLessons.title,
+          status: courseLessons.status,
+          sequenceOrder: courseLessons.sequenceOrder,
+          createdAt: courseLessons.createdAt,
+          completedAt: courseLessons.completedAt,
+        })
         .from(courseLessons)
-        .where(eq(courseLessons.id, input.lessonId))
+        .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+        .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
+        .where(
+          and(
+            eq(courseLessons.id, input.lessonId),
+            eq(learningGoals.userId, ctx.userId),
+          ),
+        )
         .limit(1);
 
-      if (!lesson) throw new TRPCError({ code: "NOT_FOUND" });
-
-      // Verify ownership through module → goal chain
-      const [mod] = await db
-        .select()
-        .from(courseModules)
-        .where(eq(courseModules.id, lesson.moduleId))
-        .limit(1);
-      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const [goal] = await db
-        .select({ id: learningGoals.id })
-        .from(learningGoals)
-        .where(and(eq(learningGoals.id, mod.goalId), eq(learningGoals.userId, ctx.userId)))
-        .limit(1);
-      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!lessonRow) throw new TRPCError({ code: "NOT_FOUND" });
 
       const blocks = await db
         .select()
@@ -514,7 +533,7 @@ export const goalsRouter = createTRPCRouter({
         .where(eq(lessonBlocks.lessonId, input.lessonId))
         .orderBy(asc(lessonBlocks.sequenceOrder));
 
-      return { lesson, blocks };
+      return { lesson: lessonRow, blocks };
     }),
 
   completeBlock: protectedProcedure
@@ -523,35 +542,35 @@ export const goalsRouter = createTRPCRouter({
       interactionLog: z.unknown().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const [block] = await db
-        .select()
+      // Single-query ownership: block → lesson → module → goal → user
+      const [blockRow] = await db
+        .select({
+          id: lessonBlocks.id,
+          lessonId: lessonBlocks.lessonId,
+          blockType: lessonBlocks.blockType,
+          conceptIds: lessonBlocks.conceptIds,
+          interactionLog: lessonBlocks.interactionLog,
+          sequenceOrder: lessonBlocks.sequenceOrder,
+          status: lessonBlocks.status,
+          generatedContent: lessonBlocks.generatedContent,
+          moduleId: courseLessons.moduleId,
+          goalId: courseModules.goalId,
+        })
         .from(lessonBlocks)
-        .where(eq(lessonBlocks.id, input.blockId))
+        .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+        .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+        .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
+        .where(
+          and(
+            eq(lessonBlocks.id, input.blockId),
+            eq(learningGoals.userId, ctx.userId),
+          ),
+        )
         .limit(1);
 
-      if (!block) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!blockRow) throw new TRPCError({ code: "NOT_FOUND" });
 
-      // Verify ownership
-      const [lesson] = await db
-        .select()
-        .from(courseLessons)
-        .where(eq(courseLessons.id, block.lessonId))
-        .limit(1);
-      if (!lesson) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const [mod] = await db
-        .select()
-        .from(courseModules)
-        .where(eq(courseModules.id, lesson.moduleId))
-        .limit(1);
-      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const [goal] = await db
-        .select({ id: learningGoals.id })
-        .from(learningGoals)
-        .where(and(eq(learningGoals.id, mod.goalId), eq(learningGoals.userId, ctx.userId)))
-        .limit(1);
-      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+      const block = blockRow;
 
       const [updated] = await db
         .update(lessonBlocks)
@@ -591,7 +610,7 @@ export const goalsRouter = createTRPCRouter({
         const allLessons = await db
           .select({ status: courseLessons.status })
           .from(courseLessons)
-          .where(eq(courseLessons.moduleId, lesson.moduleId));
+          .where(eq(courseLessons.moduleId, block.moduleId));
 
         const moduleComplete = allLessons.every(
           (l) => l.status === "completed" || l.status === "skipped",
@@ -601,9 +620,9 @@ export const goalsRouter = createTRPCRouter({
           await db
             .update(courseModules)
             .set({ status: "completed", completedAt: new Date() })
-            .where(eq(courseModules.id, lesson.moduleId));
+            .where(eq(courseModules.id, block.moduleId));
 
-          await checkCourseAchievements(ctx.userId, mod.goalId);
+          await checkCourseAchievements(ctx.userId, block.goalId);
         }
       }
 
@@ -628,6 +647,7 @@ export const goalsRouter = createTRPCRouter({
         .limit(1);
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
 
+      const { isModuleSkipEligible } = await getAiPathEngine();
       const eligible = await isModuleSkipEligible(input.moduleId, ctx.userId);
       if (!eligible) {
         throw new TRPCError({
@@ -636,28 +656,32 @@ export const goalsRouter = createTRPCRouter({
         });
       }
 
-      await db
-        .update(courseModules)
-        .set({ status: "skipped", completedAt: new Date() })
-        .where(eq(courseModules.id, input.moduleId));
-
-      // Mark all lessons and blocks as skipped
+      const skipTime = new Date();
       const lessons = await db
         .select({ id: courseLessons.id })
         .from(courseLessons)
         .where(eq(courseLessons.moduleId, input.moduleId));
+      const lessonIds = lessons.map((l) => l.id);
 
-      for (const lesson of lessons) {
-        await db
-          .update(courseLessons)
-          .set({ status: "skipped", completedAt: new Date() })
-          .where(eq(courseLessons.id, lesson.id));
-
-        await db
-          .update(lessonBlocks)
-          .set({ status: "skipped", completedAt: new Date() })
-          .where(eq(lessonBlocks.lessonId, lesson.id));
-      }
+      // Batch: update module, all lessons, all blocks in parallel
+      await Promise.all([
+        db
+          .update(courseModules)
+          .set({ status: "skipped", completedAt: skipTime })
+          .where(eq(courseModules.id, input.moduleId)),
+        lessonIds.length > 0
+          ? db
+              .update(courseLessons)
+              .set({ status: "skipped", completedAt: skipTime })
+              .where(inArray(courseLessons.id, lessonIds))
+          : Promise.resolve(),
+        lessonIds.length > 0
+          ? db
+              .update(lessonBlocks)
+              .set({ status: "skipped", completedAt: skipTime })
+              .where(inArray(lessonBlocks.lessonId, lessonIds))
+          : Promise.resolve(),
+      ]);
 
       return { success: true };
     }),
@@ -666,44 +690,36 @@ export const goalsRouter = createTRPCRouter({
     .input(z.object({ goalId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const [goal] = await db
-        .select()
+        .select({ id: learningGoals.id })
         .from(learningGoals)
         .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
         .limit(1);
 
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
 
-      const modules = await db
-        .select()
-        .from(courseModules)
-        .where(eq(courseModules.goalId, input.goalId));
+      // Single joined query: modules → lessons → blocks, aggregate in JS
+      const [modules, blockRows] = await Promise.all([
+        db
+          .select({ id: courseModules.id, status: courseModules.status })
+          .from(courseModules)
+          .where(eq(courseModules.goalId, input.goalId)),
+        db
+          .select({ blockStatus: lessonBlocks.status })
+          .from(lessonBlocks)
+          .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+          .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+          .where(eq(courseModules.goalId, input.goalId)),
+      ]);
 
       const totalModules = modules.length;
       const completedModules = modules.filter(
         (m) => m.status === "completed" || m.status === "skipped",
       ).length;
 
-      let totalBlocks = 0;
-      let completedBlocks = 0;
-
-      for (const mod of modules) {
-        const lessons = await db
-          .select({ id: courseLessons.id })
-          .from(courseLessons)
-          .where(eq(courseLessons.moduleId, mod.id));
-
-        for (const lesson of lessons) {
-          const blocks = await db
-            .select({ status: lessonBlocks.status })
-            .from(lessonBlocks)
-            .where(eq(lessonBlocks.lessonId, lesson.id));
-
-          totalBlocks += blocks.length;
-          completedBlocks += blocks.filter(
-            (b) => b.status === "completed" || b.status === "skipped",
-          ).length;
-        }
-      }
+      const totalBlocks = blockRows.length;
+      const completedBlocks = blockRows.filter(
+        (b) => b.blockStatus === "completed" || b.blockStatus === "skipped",
+      ).length;
 
       return {
         totalModules,
@@ -725,11 +741,13 @@ export const goalsRouter = createTRPCRouter({
         .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
         .limit(1);
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
+      const { generateCatchUpSuggestion } = await getAiPathEngine();
       return generateCatchUpSuggestion(input.goalId, ctx.userId);
     }),
 
   getWelcomeBack: protectedProcedure
     .query(async ({ ctx }) => {
+      const { getWelcomeBackSuggestion } = await getAiPathEngine();
       return getWelcomeBackSuggestion(ctx.userId);
     }),
 });

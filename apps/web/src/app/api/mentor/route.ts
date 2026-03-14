@@ -8,29 +8,11 @@ import {
 } from "@repo/ai";
 import { db, learningObjects } from "@repo/db";
 import { eq, and } from "drizzle-orm";
-import { createLogger } from "@repo/shared";
+import { createLogger, checkRateLimit } from "@repo/shared";
 
 const log = createLogger("api/mentor");
 
 export const maxDuration = 60;
-
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 20;
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) return false;
-  entry.count++;
-  return true;
-}
 
 const chatSchema = z.object({
   conversationId: z.string().uuid().nullable(),
@@ -66,10 +48,11 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  if (!checkRateLimit(user.id)) {
+  const { allowed, retryAfterMs } = await checkRateLimit("mentor", user.id, { maxRequests: 20, window: "60 s" });
+  if (!allowed) {
     return new Response(
       JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }),
-      { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "60" } },
+      { status: 429, headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } },
     );
   }
 

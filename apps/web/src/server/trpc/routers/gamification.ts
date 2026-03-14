@@ -219,43 +219,45 @@ export const gamificationRouter = createTRPCRouter({
       const weekEndDate = new Date(weekStart);
       weekEndDate.setDate(weekEndDate.getDate() + 7);
 
-      const [reviewStats] = await db
-        .select({
-          total: count(),
-          goodOrBetter: count(sql`CASE WHEN ${reviewLog.rating} >= 3 THEN 1 END`),
-        })
-        .from(reviewLog)
-        .where(
-          and(
-            eq(reviewLog.userId, ctx.userId),
-            gte(reviewLog.createdAt, weekStartDate),
-            sql`${reviewLog.createdAt} < ${weekEndDate}`
-          )
-        );
+      const [reviewStatsArr, masteredThisWeek, struggled] = await Promise.all([
+        db
+          .select({
+            total: count(),
+            goodOrBetter: count(sql`CASE WHEN ${reviewLog.rating} >= 3 THEN 1 END`),
+          })
+          .from(reviewLog)
+          .where(
+            and(
+              eq(reviewLog.userId, ctx.userId),
+              gte(reviewLog.createdAt, weekStartDate),
+              sql`${reviewLog.createdAt} < ${weekEndDate}`
+            )
+          ),
+        db
+          .select({ cnt: count() })
+          .from(userConceptState)
+          .where(
+            and(
+              eq(userConceptState.userId, ctx.userId),
+              eq(userConceptState.masteryLevel, 5),
+              gte(userConceptState.updatedAt, weekStartDate),
+              sql`${userConceptState.updatedAt} < ${weekEndDate}`
+            )
+          ),
+        db
+          .select({ cnt: count() })
+          .from(reviewLog)
+          .where(
+            and(
+              eq(reviewLog.userId, ctx.userId),
+              eq(reviewLog.rating, 1),
+              gte(reviewLog.createdAt, weekStartDate),
+              sql`${reviewLog.createdAt} < ${weekEndDate}`
+            )
+          ),
+      ]);
 
-      const masteredThisWeek = await db
-        .select({ cnt: count() })
-        .from(userConceptState)
-        .where(
-          and(
-            eq(userConceptState.userId, ctx.userId),
-            eq(userConceptState.masteryLevel, 5),
-            gte(userConceptState.updatedAt, weekStartDate),
-            sql`${userConceptState.updatedAt} < ${weekEndDate}`
-          )
-        );
-
-      const struggled = await db
-        .select({ cnt: count() })
-        .from(reviewLog)
-        .where(
-          and(
-            eq(reviewLog.userId, ctx.userId),
-            eq(reviewLog.rating, 1),
-            gte(reviewLog.createdAt, weekStartDate),
-            sql`${reviewLog.createdAt} < ${weekEndDate}`
-          )
-        );
+      const reviewStats = reviewStatsArr[0];
 
       const totalReviews = Number(reviewStats?.total ?? 0);
       const goodReviews = Number(reviewStats?.goodOrBetter ?? 0);

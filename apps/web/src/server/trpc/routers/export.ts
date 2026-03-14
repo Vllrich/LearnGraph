@@ -4,26 +4,29 @@ import { eq, sql } from "drizzle-orm";
 
 export const exportRouter = createTRPCRouter({
   getExportStats: protectedProcedure.query(async ({ ctx }) => {
-    const [loCount] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(learningObjects)
-      .where(eq(learningObjects.userId, ctx.userId));
-
-    const [questionCount] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(questions)
-      .innerJoin(learningObjects, eq(questions.learningObjectId, learningObjects.id))
-      .where(eq(learningObjects.userId, ctx.userId));
-
-    const [conceptCount] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(userConceptState)
-      .where(eq(userConceptState.userId, ctx.userId));
-
-    const [convCount] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(mentorConversations)
-      .where(eq(mentorConversations.userId, ctx.userId));
+    const [loCount, questionCount, conceptCount, convCount] = await Promise.all([
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(learningObjects)
+        .where(eq(learningObjects.userId, ctx.userId))
+        .then((rows) => rows[0]),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(questions)
+        .innerJoin(learningObjects, eq(questions.learningObjectId, learningObjects.id))
+        .where(eq(learningObjects.userId, ctx.userId))
+        .then((rows) => rows[0]),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(userConceptState)
+        .where(eq(userConceptState.userId, ctx.userId))
+        .then((rows) => rows[0]),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(mentorConversations)
+        .where(eq(mentorConversations.userId, ctx.userId))
+        .then((rows) => rows[0]),
+    ]);
 
     return {
       learningObjects: Number(loCount.count),

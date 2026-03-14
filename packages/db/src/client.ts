@@ -9,11 +9,13 @@ if (!connectionString) {
 
 const globalForDb = globalThis as unknown as { _pgClient?: ReturnType<typeof postgres> };
 
+const isProd = process.env.NODE_ENV === "production";
+
 const client =
   globalForDb._pgClient ??
   postgres(connectionString, {
     prepare: false,
-    max: 5,
+    max: isProd ? 1 : 5,
     idle_timeout: 20,
     max_lifetime: 60 * 30,
     onnotice: () => {},

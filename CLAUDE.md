@@ -107,12 +107,25 @@ Hierarchical Course → Module → Lesson → Block structure replacing flat cur
 - **RLS policies**: all 3 course tables have row-level security via `0006_rls_and_constraints.sql`
 - Full docs: `docs/modular-courses.md` · `docs/feature-status.md`
 
+## Performance Optimizations (March 2026)
+- **DB**: 14 CONCURRENTLY indexes added (migration `0008`), HNSW vector index on `concepts.embedding`
+- **N+1 fixes**: `goals.getActive`, `getCourseProgress`, `updateConceptStateFromBlock`, `skipModule` — batched queries
+- **Parallelized**: 12+ sequential DB calls → `Promise.all` (review.getStats, user.getSessionContext, export.getExportStats, etc.)
+- **Ownership checks**: session-v2, getLessonBlocks, completeBlock consolidated from 3-4 queries → 1 joined query
+- **Caching**: `@upstash/redis` — `cached()` utility in `@repo/shared`, embedding cache (SHA256-keyed)
+- **Rate limiting**: `@upstash/ratelimit` on all 7 API routes, in-memory fallback
+- **LLM tokens**: `maxTokens` on all `generateObject`/`streamText` calls, compressed mentor system prompt (~40%), RAG topK reduced
+- **Client**: TanStack Query `gcTime: 5min`, `refetchOnWindowFocus: false`
+- **Connection pooling**: `max: 1` in production (serverless-optimized)
+- Full details: `docs/PERFORMANCE_PLAN.md`
+
 ## Reference Docs (read before starting a task)
 - `docs/TECHNICAL_ARCHITECTURE.md` — full data models (§7), AI pipeline, system design
 - `docs/modular-courses.md` — V2 modular course system architecture
 - `docs/feature-status.md` — what is implemented vs missing
 - `docs/DESIGN_SYSTEM.md` — colors, typography, component patterns, animations
 - `docs/TODO.md` — implementation roadmap with dependency graph
+- `docs/PERFORMANCE_PLAN.md` — performance optimization plan and implementation status
 - `.cursor/rules/` — scoped coding standards (general, frontend, backend, ai-llm)
 
 ## IMPORTANT Rules

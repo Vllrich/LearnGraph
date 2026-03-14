@@ -42,48 +42,62 @@ export const libraryRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const [item] = await ctx.db
-        .select()
-        .from(learningObjects)
-        .where(and(eq(learningObjects.id, input.id), eq(learningObjects.userId, ctx.userId)))
-        .limit(1);
+      const [item, chunks, conceptRows] = await Promise.all([
+        ctx.db
+          .select({
+            id: learningObjects.id,
+            title: learningObjects.title,
+            sourceType: learningObjects.sourceType,
+            sourceUrl: learningObjects.sourceUrl,
+            status: learningObjects.status,
+            summaryTldr: learningObjects.summaryTldr,
+            summaryKeyPoints: learningObjects.summaryKeyPoints,
+            summaryDeep: learningObjects.summaryDeep,
+            metadata: learningObjects.metadata,
+            filePath: learningObjects.filePath,
+            createdAt: learningObjects.createdAt,
+            updatedAt: learningObjects.updatedAt,
+          })
+          .from(learningObjects)
+          .where(and(eq(learningObjects.id, input.id), eq(learningObjects.userId, ctx.userId)))
+          .limit(1)
+          .then((rows) => rows[0]),
+        ctx.db
+          .select({
+            id: contentChunks.id,
+            chunkIndex: contentChunks.chunkIndex,
+            content: contentChunks.content,
+            sectionTitle: contentChunks.sectionTitle,
+            pageNumber: contentChunks.pageNumber,
+            tokenCount: contentChunks.tokenCount,
+          })
+          .from(contentChunks)
+          .where(eq(contentChunks.learningObjectId, input.id))
+          .orderBy(contentChunks.chunkIndex),
+        ctx.db
+          .select({
+            id: concepts.id,
+            displayName: concepts.displayName,
+            definition: concepts.definition,
+            difficultyLevel: concepts.difficultyLevel,
+            bloomLevel: concepts.bloomLevel,
+          })
+          .from(concepts)
+          .innerJoin(conceptChunkLinks, eq(concepts.id, conceptChunkLinks.conceptId))
+          .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
+          .where(eq(contentChunks.learningObjectId, input.id))
+          .groupBy(
+            concepts.id,
+            concepts.displayName,
+            concepts.definition,
+            concepts.difficultyLevel,
+            concepts.bloomLevel
+          ),
+      ]);
 
       if (!item) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Content not found" });
       }
-
-      const chunks = await ctx.db
-        .select({
-          id: contentChunks.id,
-          chunkIndex: contentChunks.chunkIndex,
-          content: contentChunks.content,
-          sectionTitle: contentChunks.sectionTitle,
-          pageNumber: contentChunks.pageNumber,
-          tokenCount: contentChunks.tokenCount,
-        })
-        .from(contentChunks)
-        .where(eq(contentChunks.learningObjectId, input.id))
-        .orderBy(contentChunks.chunkIndex);
-
-      const conceptRows = await ctx.db
-        .select({
-          id: concepts.id,
-          displayName: concepts.displayName,
-          definition: concepts.definition,
-          difficultyLevel: concepts.difficultyLevel,
-          bloomLevel: concepts.bloomLevel,
-        })
-        .from(concepts)
-        .innerJoin(conceptChunkLinks, eq(concepts.id, conceptChunkLinks.conceptId))
-        .innerJoin(contentChunks, eq(conceptChunkLinks.chunkId, contentChunks.id))
-        .where(eq(contentChunks.learningObjectId, input.id))
-        .groupBy(
-          concepts.id,
-          concepts.displayName,
-          concepts.definition,
-          concepts.difficultyLevel,
-          concepts.bloomLevel
-        );
 
       return { ...item, chunks, concepts: conceptRows };
     }),

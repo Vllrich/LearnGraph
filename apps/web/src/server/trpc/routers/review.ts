@@ -124,47 +124,48 @@ export const reviewRouter = createTRPCRouter({
       const newSlots = budget - reviewSlots;
       const now = new Date();
 
-      const dueItems = await db
-        .select({
-          id: userConceptState.id,
-          conceptId: userConceptState.conceptId,
-          masteryLevel: userConceptState.masteryLevel,
-          fsrsRetrievability: userConceptState.fsrsRetrievability,
-          nextReviewAt: userConceptState.nextReviewAt,
-          conceptName: concepts.displayName,
-          conceptDefinition: concepts.definition,
-          conceptDifficulty: concepts.difficultyLevel,
-          domain: concepts.domain,
-        })
-        .from(userConceptState)
-        .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-        .where(
-          and(
-            eq(userConceptState.userId, ctx.userId),
-            lte(userConceptState.nextReviewAt, now),
-            sql`${userConceptState.fsrsReps} > 0`
+      const [dueItems, newItems] = await Promise.all([
+        db
+          .select({
+            id: userConceptState.id,
+            conceptId: userConceptState.conceptId,
+            masteryLevel: userConceptState.masteryLevel,
+            fsrsRetrievability: userConceptState.fsrsRetrievability,
+            nextReviewAt: userConceptState.nextReviewAt,
+            conceptName: concepts.displayName,
+            conceptDefinition: concepts.definition,
+            conceptDifficulty: concepts.difficultyLevel,
+            domain: concepts.domain,
+          })
+          .from(userConceptState)
+          .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+          .where(
+            and(
+              eq(userConceptState.userId, ctx.userId),
+              lte(userConceptState.nextReviewAt, now),
+              sql`${userConceptState.fsrsReps} > 0`
+            )
           )
-        )
-        .orderBy(asc(userConceptState.fsrsRetrievability))
-        .limit(reviewSlots);
-
-      const newItems = await db
-        .select({
-          id: userConceptState.id,
-          conceptId: userConceptState.conceptId,
-          masteryLevel: userConceptState.masteryLevel,
-          fsrsRetrievability: userConceptState.fsrsRetrievability,
-          nextReviewAt: userConceptState.nextReviewAt,
-          conceptName: concepts.displayName,
-          conceptDefinition: concepts.definition,
-          conceptDifficulty: concepts.difficultyLevel,
-          domain: concepts.domain,
-        })
-        .from(userConceptState)
-        .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-        .where(and(eq(userConceptState.userId, ctx.userId), sql`${userConceptState.fsrsReps} = 0`))
-        .orderBy(asc(userConceptState.createdAt))
-        .limit(newSlots);
+          .orderBy(asc(userConceptState.fsrsRetrievability))
+          .limit(reviewSlots),
+        db
+          .select({
+            id: userConceptState.id,
+            conceptId: userConceptState.conceptId,
+            masteryLevel: userConceptState.masteryLevel,
+            fsrsRetrievability: userConceptState.fsrsRetrievability,
+            nextReviewAt: userConceptState.nextReviewAt,
+            conceptName: concepts.displayName,
+            conceptDefinition: concepts.definition,
+            conceptDifficulty: concepts.difficultyLevel,
+            domain: concepts.domain,
+          })
+          .from(userConceptState)
+          .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+          .where(and(eq(userConceptState.userId, ctx.userId), sql`${userConceptState.fsrsReps} = 0`))
+          .orderBy(asc(userConceptState.createdAt))
+          .limit(newSlots),
+      ]);
 
       let allItems = [...dueItems, ...newItems];
 
@@ -384,38 +385,41 @@ export const reviewRouter = createTRPCRouter({
     }),
 
   getStats: protectedProcedure.query(async ({ ctx }) => {
-    const [masteryDist] = await db
-      .select({
-        total: count(),
-        m0: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 0 THEN 1 END`),
-        m1: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 1 THEN 1 END`),
-        m2: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 2 THEN 1 END`),
-        m3: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 3 THEN 1 END`),
-        m4: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 4 THEN 1 END`),
-        m5: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 5 THEN 1 END`),
-      })
-      .from(userConceptState)
-      .where(eq(userConceptState.userId, ctx.userId));
+    const [masteryDistArr, recentReviews, userRow] = await Promise.all([
+      db
+        .select({
+          total: count(),
+          m0: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 0 THEN 1 END`),
+          m1: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 1 THEN 1 END`),
+          m2: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 2 THEN 1 END`),
+          m3: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 3 THEN 1 END`),
+          m4: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 4 THEN 1 END`),
+          m5: count(sql`CASE WHEN ${userConceptState.masteryLevel} = 5 THEN 1 END`),
+        })
+        .from(userConceptState)
+        .where(eq(userConceptState.userId, ctx.userId)),
+      db
+        .select({
+          id: reviewLog.id,
+          rating: reviewLog.rating,
+          reviewType: reviewLog.reviewType,
+          createdAt: reviewLog.createdAt,
+          conceptName: concepts.displayName,
+        })
+        .from(reviewLog)
+        .innerJoin(concepts, eq(reviewLog.conceptId, concepts.id))
+        .where(eq(reviewLog.userId, ctx.userId))
+        .orderBy(desc(reviewLog.createdAt))
+        .limit(50),
+      db
+        .select({ timezone: users.timezone })
+        .from(users)
+        .where(eq(users.id, ctx.userId))
+        .limit(1)
+        .then((rows) => rows[0]),
+    ]);
 
-    const recentReviews = await db
-      .select({
-        id: reviewLog.id,
-        rating: reviewLog.rating,
-        reviewType: reviewLog.reviewType,
-        createdAt: reviewLog.createdAt,
-        conceptName: concepts.displayName,
-      })
-      .from(reviewLog)
-      .innerJoin(concepts, eq(reviewLog.conceptId, concepts.id))
-      .where(eq(reviewLog.userId, ctx.userId))
-      .orderBy(desc(reviewLog.createdAt))
-      .limit(50);
-
-    const [userRow] = await db
-      .select({ timezone: users.timezone })
-      .from(users)
-      .where(eq(users.id, ctx.userId))
-      .limit(1);
+    const masteryDist = masteryDistArr[0];
     const tz = userRow?.timezone ?? "UTC";
 
     const streakResult = await db.execute<{ streak_days: number }>(sql`
@@ -593,24 +597,29 @@ export const reviewRouter = createTRPCRouter({
 
       if (!goal) return null;
 
-      const items = await db
-        .select()
-        .from(curriculumItems)
-        .where(eq(curriculumItems.goalId, input.goalId))
-        .orderBy(asc(curriculumItems.sequenceOrder));
+      const [items, allStates] = await Promise.all([
+        db
+          .select({
+            id: curriculumItems.id,
+            status: curriculumItems.status,
+            sequenceOrder: curriculumItems.sequenceOrder,
+          })
+          .from(curriculumItems)
+          .where(eq(curriculumItems.goalId, input.goalId))
+          .orderBy(asc(curriculumItems.sequenceOrder)),
+        db
+          .select({
+            conceptId: userConceptState.conceptId,
+            masteryLevel: userConceptState.masteryLevel,
+            fsrsRetrievability: userConceptState.fsrsRetrievability,
+            conceptName: concepts.displayName,
+          })
+          .from(userConceptState)
+          .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+          .where(and(eq(userConceptState.userId, ctx.userId), gte(userConceptState.fsrsReps, 1))),
+      ]);
 
       const completedCount = items.filter((i) => i.status === "completed").length;
-
-      const allStates = await db
-        .select({
-          conceptId: userConceptState.conceptId,
-          masteryLevel: userConceptState.masteryLevel,
-          fsrsRetrievability: userConceptState.fsrsRetrievability,
-          conceptName: concepts.displayName,
-        })
-        .from(userConceptState)
-        .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-        .where(and(eq(userConceptState.userId, ctx.userId), gte(userConceptState.fsrsReps, 1)));
 
       const totalStudied = allStates.length;
       const mastered = allStates.filter((s) => (s.masteryLevel ?? 0) >= 3).length;

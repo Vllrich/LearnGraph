@@ -100,6 +100,7 @@ ${groundingContext}`;
         schema: schema as any,
         prompt,
         temperature: attempt === 0 ? 0.5 : 0.3,
+        maxTokens: 2000,
       });
       return object as BlockContent;
     } catch (err) {

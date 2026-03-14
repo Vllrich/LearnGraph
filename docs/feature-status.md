@@ -138,12 +138,35 @@
 
 ---
 
+## Performance Optimizations (March 2026)
+
+| Optimization | Status |
+|---|---|
+| 14 DB indexes + HNSW vector index (migration `0008`) | ✅ Done |
+| N+1 query fixes (goals: getActive, getCourseProgress, updateConceptStateFromBlock, skipModule) | ✅ Done |
+| 12+ sequential DB calls → Promise.all (review, user, export, analytics, gamification) | ✅ Done |
+| Ownership check consolidation (session-v2, getLessonBlocks, completeBlock: 3-4 queries → 1 join) | ✅ Done |
+| Upstash Redis caching layer (`cached()`, `invalidateCache()`, `invalidatePattern()`) | ✅ Done |
+| Upstash rate limiting on all 7 API routes (with in-memory fallback) | ✅ Done |
+| Embedding cache (Redis-backed, SHA256-keyed) | ✅ Done |
+| `maxTokens` on all LLM calls (mentor, quiz, curriculum, discovery, explain-back) | ✅ Done |
+| Mentor system prompt compressed (~40% fewer tokens) | ✅ Done |
+| RAG topK reduced (6→4 scoped, 10→8 cross), chunk truncation, relevance filtering | ✅ Done |
+| Concept extraction batch size 5→8, compressed prompt | ✅ Done |
+| TanStack Query defaults: gcTime 5min, refetchOnWindowFocus off | ✅ Done |
+| SSE artificial delay removed (session-v2) | ✅ Done |
+| Connection pooling: max=1 in prod (serverless-optimized) | ✅ Done |
+| Lazy AI imports in goals router (reduced cold start) | ✅ Done |
+| SELECT * replaced with explicit columns (library.getById, review.getExamReadiness) | ✅ Done |
+
+---
+
 ## Known Limitations
 
 | Limitation | Mitigation |
 |---|---|
-| In-memory rate limiting resets on deploy | Migrate to Redis at scale |
-| N+1 queries in `getCourseRoadmap` | Acceptable at current scale |
+| ~~In-memory rate limiting resets on deploy~~ | ✅ Migrated to Upstash Redis |
+| ~~N+1 queries in `getCourseRoadmap`~~ | ✅ Fixed with batched queries |
 | No transactional rollback in generation pipeline | Partial structures may persist on failure |
 | Catch-up route is a suggestion (no auto-generated remedial lesson) | User can review concepts in FSRS review queue |
 | Mode suggestion is heuristic (block type ratio), not ML-based | Sufficient for current scale; upgrade when analytics data exists |

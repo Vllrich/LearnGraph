@@ -13,9 +13,7 @@ import type { BlockType, BloomLevel } from "@repo/shared";
 
 export const maxDuration = 60;
 
-const rateMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 30;
+import { checkRateLimit } from "@repo/shared";
 
 const blockSessionSchema = z.object({
   action: z.enum([
@@ -77,17 +75,12 @@ export async function POST(req: NextRequest) {
 
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const now = Date.now();
-  const rl = rateMap.get(user.id);
-  if (!rl || now > rl.resetAt) {
-    rateMap.set(user.id, { count: 1, resetAt: now + RATE_WINDOW_MS });
-  } else if (rl.count >= RATE_MAX) {
+  const { allowed, retryAfterMs } = await checkRateLimit("session-v2", user.id, { maxRequests: 30, window: "60 s" });
+  if (!allowed) {
     return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
       status: 429,
-      headers: { "Content-Type": "application/json", "Retry-After": "60" },
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
     });
-  } else {
-    rl.count++;
   }
 
   let body: unknown;
@@ -107,37 +100,38 @@ export async function POST(req: NextRequest) {
 
   const { action, blockId, goalId, userAnswer, choiceIndex } = parsed.data;
 
-  // Verify ownership: block → lesson → module → goal → user
-  const [goal] = await db
-    .select({ id: learningGoals.id, title: learningGoals.title })
-    .from(learningGoals)
-    .where(and(eq(learningGoals.id, goalId), eq(learningGoals.userId, user.id)))
-    .limit(1);
-  if (!goal) return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
-
-  const [block] = await db
-    .select()
+  // Verify ownership: single joined query block → lesson → module → goal → user
+  const [ownershipRow] = await db
+    .select({
+      goalTitle: learningGoals.title,
+      blockId: lessonBlocks.id,
+      blockType: lessonBlocks.blockType,
+      lessonId: lessonBlocks.lessonId,
+      sequenceOrder: lessonBlocks.sequenceOrder,
+      generatedContent: lessonBlocks.generatedContent,
+      conceptIds: lessonBlocks.conceptIds,
+      status: lessonBlocks.status,
+      interactionLog: lessonBlocks.interactionLog,
+    })
     .from(lessonBlocks)
-    .where(eq(lessonBlocks.id, blockId))
+    .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+    .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+    .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
+    .where(
+      and(
+        eq(lessonBlocks.id, blockId),
+        eq(learningGoals.id, goalId),
+        eq(learningGoals.userId, user.id),
+      ),
+    )
     .limit(1);
-  if (!block) return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
 
-  // Verify block belongs to the claimed goal (block → lesson → module → goal)
-  const [lesson] = await db
-    .select({ moduleId: courseLessons.moduleId })
-    .from(courseLessons)
-    .where(eq(courseLessons.id, block.lessonId))
-    .limit(1);
-  if (!lesson) return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
-
-  const [mod] = await db
-    .select({ goalId: courseModules.goalId })
-    .from(courseModules)
-    .where(eq(courseModules.id, lesson.moduleId))
-    .limit(1);
-  if (!mod || mod.goalId !== goalId) {
-    return new Response(JSON.stringify({ error: "Block not found" }), { status: 404 });
+  if (!ownershipRow) {
+    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
   }
+
+  const goal = { id: goalId, title: ownershipRow.goalTitle };
+  const block = ownershipRow;
 
   let content = block.generatedContent as Record<string, unknown>;
 
@@ -347,6 +341,5 @@ async function* streamText(text: string): AsyncIterable<string> {
   const words = text.split(/(\s+)/);
   for (let i = 0; i < words.length; i += 3) {
     yield words.slice(i, i + 3).join("");
-    await new Promise((r) => setTimeout(r, 20));
   }
 }

@@ -3,12 +3,9 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { generateObject } from "ai";
 import { primaryModel, getEducationStagePrompt } from "@repo/ai";
+import { checkRateLimit } from "@repo/shared";
 
 export const maxDuration = 30;
-
-const suggestRateMap = new Map<string, { count: number; resetAt: number }>();
-const SUGGEST_RATE_WINDOW_MS = 60_000;
-const SUGGEST_RATE_MAX = 10;
 
 const suggestSchema = z.object({
   topic: z.string().min(1).max(500),
@@ -38,14 +35,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = Date.now();
-  const rlEntry = suggestRateMap.get(user.id);
-  if (!rlEntry || now > rlEntry.resetAt) {
-    suggestRateMap.set(user.id, { count: 1, resetAt: now + SUGGEST_RATE_WINDOW_MS });
-  } else if (rlEntry.count >= SUGGEST_RATE_MAX) {
-    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
-  } else {
-    rlEntry.count++;
+  const { allowed, retryAfterMs } = await checkRateLimit("suggest-topics", user.id, { maxRequests: 10, window: "60 s" });
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+    });
   }
 
   let body: unknown;

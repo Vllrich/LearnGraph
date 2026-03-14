@@ -161,66 +161,65 @@ export const userRouter = createTRPCRouter({
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentReviews = await ctx.db
-      .select({
-        conceptName: concepts.displayName,
-        rating: reviewLog.rating,
-        createdAt: reviewLog.createdAt,
-      })
-      .from(reviewLog)
-      .innerJoin(concepts, eq(reviewLog.conceptId, concepts.id))
-      .where(and(eq(reviewLog.userId, ctx.userId), gte(reviewLog.createdAt, sevenDaysAgo)))
-      .orderBy(desc(reviewLog.createdAt))
-      .limit(20);
-
-    const masterySnapshot = await ctx.db
-      .select({
-        total: countFn(),
-        mastered: countFn(sql`CASE WHEN ${userConceptState.masteryLevel} >= 4 THEN 1 END`),
-        weak: countFn(sql`CASE WHEN ${userConceptState.masteryLevel} <= 1 THEN 1 END`),
-      })
-      .from(userConceptState)
-      .where(eq(userConceptState.userId, ctx.userId));
-
-    const weakConcepts = await ctx.db
-      .select({ name: concepts.displayName })
-      .from(userConceptState)
-      .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-      .where(
-        and(
-          eq(userConceptState.userId, ctx.userId),
-          sql`COALESCE(${userConceptState.masteryLevel}, 0) <= 1`,
-          sql`${userConceptState.fsrsReps} > 0`
-        )
-      )
-      .limit(5);
-
-    const strongConcepts = await ctx.db
-      .select({ name: concepts.displayName })
-      .from(userConceptState)
-      .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-      .where(
-        and(eq(userConceptState.userId, ctx.userId), sql`${userConceptState.masteryLevel} >= 4`)
-      )
-      .limit(5);
-
-    const activeGoals = await ctx.db
-      .select({ title: learningGoals.title, status: learningGoals.status })
-      .from(learningGoals)
-      .where(and(eq(learningGoals.userId, ctx.userId), eq(learningGoals.status, "active")))
-      .limit(5);
-
-    const [user] = await ctx.db
-      .select({ preferences: users.preferences })
-      .from(users)
-      .where(eq(users.id, ctx.userId))
-      .limit(1);
+    const [recentReviews, masterySnapshotArr, weakConcepts, strongConcepts, activeGoals, user] =
+      await Promise.all([
+        ctx.db
+          .select({
+            conceptName: concepts.displayName,
+            rating: reviewLog.rating,
+            createdAt: reviewLog.createdAt,
+          })
+          .from(reviewLog)
+          .innerJoin(concepts, eq(reviewLog.conceptId, concepts.id))
+          .where(and(eq(reviewLog.userId, ctx.userId), gte(reviewLog.createdAt, sevenDaysAgo)))
+          .orderBy(desc(reviewLog.createdAt))
+          .limit(20),
+        ctx.db
+          .select({
+            total: countFn(),
+            mastered: countFn(sql`CASE WHEN ${userConceptState.masteryLevel} >= 4 THEN 1 END`),
+            weak: countFn(sql`CASE WHEN ${userConceptState.masteryLevel} <= 1 THEN 1 END`),
+          })
+          .from(userConceptState)
+          .where(eq(userConceptState.userId, ctx.userId)),
+        ctx.db
+          .select({ name: concepts.displayName })
+          .from(userConceptState)
+          .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+          .where(
+            and(
+              eq(userConceptState.userId, ctx.userId),
+              sql`COALESCE(${userConceptState.masteryLevel}, 0) <= 1`,
+              sql`${userConceptState.fsrsReps} > 0`
+            )
+          )
+          .limit(5),
+        ctx.db
+          .select({ name: concepts.displayName })
+          .from(userConceptState)
+          .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+          .where(
+            and(eq(userConceptState.userId, ctx.userId), sql`${userConceptState.masteryLevel} >= 4`)
+          )
+          .limit(5),
+        ctx.db
+          .select({ title: learningGoals.title, status: learningGoals.status })
+          .from(learningGoals)
+          .where(and(eq(learningGoals.userId, ctx.userId), eq(learningGoals.status, "active")))
+          .limit(5),
+        ctx.db
+          .select({ preferences: users.preferences })
+          .from(users)
+          .where(eq(users.id, ctx.userId))
+          .limit(1)
+          .then((rows) => rows[0]),
+      ]);
 
     const prefs = (user?.preferences ?? {}) as Record<string, unknown>;
     const mentorMemory = (prefs.mentorMemory ?? {}) as Record<string, unknown>;
 
     return {
-      masterySnapshot: masterySnapshot[0] ?? { total: 0, mastered: 0, weak: 0 },
+      masterySnapshot: masterySnapshotArr[0] ?? { total: 0, mastered: 0, weak: 0 },
       weakConcepts: weakConcepts.map((c) => c.name),
       strongConcepts: strongConcepts.map((c) => c.name),
       recentReviews: recentReviews.map((r) => ({

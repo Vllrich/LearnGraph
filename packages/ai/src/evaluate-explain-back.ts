@@ -23,6 +23,7 @@ export async function evaluateExplainBackResponse(
   const result = await generateObject({
     model: primaryModel,
     schema: explainBackSchema,
+    maxTokens: 600,
     prompt: `Evaluate this student's explanation of the concept "${conceptName}".
 
 Reference definition: ${definition ?? "No definition available."}

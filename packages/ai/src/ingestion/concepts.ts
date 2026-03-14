@@ -32,7 +32,7 @@ export async function extractAndStoreConcepts(
   learningObjectId: string,
   storedChunkIds: string[]
 ): Promise<string[]> {
-  const batchSize = 5;
+  const batchSize = 8;
   const allExtracted: { concept: ExtractedConcept; chunkIndices: number[] }[] = [];
 
   for (let i = 0; i < chunks.length; i += batchSize) {
@@ -42,13 +42,12 @@ export async function extractAndStoreConcepts(
     const { object } = await generateObject({
       model: primaryModel,
       schema: extractionSchema,
-      prompt: `Extract key concepts from these content chunks. For each concept, provide its canonical name (lowercase, singular form), definition grounded in the text, prerequisites, related concepts, difficulty level, and Bloom's taxonomy level.
+      prompt: `Extract key concepts from these chunks. Provide canonical name (lowercase singular), definition from text, prerequisites, related concepts, difficulty (1-5), Bloom level.
+Only extract concepts explicitly in text.
 
-Only extract concepts that are explicitly discussed in the text — do not infer or add concepts not present.
-
-Content chunks:
 ${batchText}`,
       temperature: 0.2,
+      maxTokens: 1500,
     });
 
     for (const concept of object.concepts) {

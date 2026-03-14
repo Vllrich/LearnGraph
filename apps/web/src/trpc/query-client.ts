@@ -8,6 +8,8 @@ export function makeQueryClient() {
     defaultOptions: {
       queries: {
         staleTime: 30 * 1000,
+        gcTime: 5 * 60 * 1000,
+        refetchOnWindowFocus: false,
         retry: (failureCount, error) => {
           const code = (error as { data?: { code?: string } })?.data?.code;
           if (code === "UNAUTHORIZED" || code === "FORBIDDEN") return false;

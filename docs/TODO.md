@@ -559,7 +559,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Loading skeletons: shimmer animation for all data-loading states (§8)
 - [ ] **P0** Mobile responsiveness audit: test all pages at 375px, 768px, 1024px, 1440px
 - [x] **P0** Accessibility audit: keyboard navigation, focus rings, ARIA labels, screen reader testing
-- [~] **P1** Rate limiting on all tRPC procedures (Upstash Ratelimit) — in-memory rate limiting added to `/api/mentor` and `/api/ingest`; migrate to Upstash for distributed rate limiting
+- [x] **P1** Rate limiting on all API routes (Upstash Ratelimit) — `@upstash/ratelimit` with Redis-backed sliding window on all 7 API routes, in-memory fallback when Redis unavailable
 - [ ] **P1** Error tracking: Sentry integration
 - [ ] **P1** Product analytics: PostHog integration (page views, feature usage events)
 - [ ] **P1** LLM observability: Langfuse dashboard configured, all AI calls traced
@@ -728,7 +728,7 @@ Track shortcuts taken during POC that must be addressed before Phase 2:
 | 1   | No automated E2E tests (Playwright)                                        | Phase 1     | Phase 2 Week 11 |
 | 2   | FSRS uses default parameters (not personalized per-user)                   | Phase 1     | Phase 2 Week 9  |
 | 3   | No cross-encoder re-ranking in RAG pipeline                                | Phase 1     | Phase 2 Week 13 |
-| 4   | No semantic cache for LLM responses                                        | Phase 1     | Phase 2 Week 15 |
+| 4   | ~~No semantic cache for LLM responses~~ — embedding cache added via Upstash Redis | Phase 1     | ✅ Done         |
 | 5   | No image/OCR support for scanned PDFs                                      | Phase 1     | Phase 2 Week 13 |
 | 6   | Knowledge graph deduplication is basic (fuzzy match + embedding threshold) | Phase 1     | Phase 2 Week 17 |
 | 7   | No backup/restore strategy beyond Supabase defaults                        | Phase 1     | Phase 2 Week 19 |
