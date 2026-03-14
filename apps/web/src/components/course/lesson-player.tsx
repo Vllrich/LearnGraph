@@ -14,11 +14,15 @@ import {
   PenLine,
   HelpCircle,
   Sparkles,
+  BookMarked,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { MarkdownContent } from "@/components/course/markdown-content";
+import { useReadingMode } from "@/contexts/reading-mode";
 import type { BlockType } from "@repo/shared";
 
 type LessonPlayerProps = {
@@ -53,6 +57,13 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data, isLoading } = trpc.goals.getLessonBlocks.useQuery({ lessonId });
   const completeMutation = trpc.goals.completeBlock.useMutation();
+  const { readingMode, setReadingMode } = useReadingMode();
+
+  // Enter reading mode by default when lesson player mounts
+  useEffect(() => {
+    setReadingMode(true);
+    return () => setReadingMode(false);
+  }, [setReadingMode]);
 
   const [blockIndex, setBlockIndex] = useState(0);
   const [streamedContent, setStreamedContent] = useState("");
@@ -462,33 +473,47 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-border/30 bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center gap-4 px-4 py-3">
+      <header className="sticky top-0 z-30 border-b border-border/20 bg-background/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-6 py-2.5">
           <button
-            onClick={() => router.push(`/course/${goalId}`)}
-            className="text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setReadingMode(false);
+              router.push(`/course/${goalId}`);
+            }}
+            className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+            title="Back to course"
           >
             <ArrowLeft className="size-4" />
           </button>
-          <div className="flex-1">
-            <p className="text-sm font-medium">{data.lesson.title}</p>
-            <p className="text-xs text-muted-foreground">
-              Block {blockIndex + 1} of {totalBlocks}
-            </p>
+
+          <div className="flex-1 min-w-0 text-center">
+            <p className="truncate text-[13px] font-medium text-foreground/80">{data.lesson.title}</p>
+            <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground/50">
+              <span>{blockIndex + 1} of {totalBlocks}</span>
+              <span>·</span>
+              <span className="flex items-center gap-1">
+                <BlockIcon className="size-3" />
+                {BLOCK_LABELS[blockType]}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg border border-border/30 px-2.5 py-1.5 text-xs text-muted-foreground">
-            <BlockIcon className="size-3.5" />
-            {BLOCK_LABELS[blockType]}
-          </div>
+
+          <button
+            onClick={() => setReadingMode(!readingMode)}
+            title={readingMode ? "Exit reading mode" : "Reading mode"}
+            className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {readingMode ? <PanelLeftClose className="size-4" /> : <BookMarked className="size-4" />}
+          </button>
         </div>
-        <Progress value={progressPercent} className="h-1 rounded-none" />
+        <Progress value={progressPercent} className="h-0.5 rounded-none" />
       </header>
 
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className={cn(
-          "mx-auto max-w-3xl px-4 py-8 sm:px-6 transition-all duration-200",
-          blockTransition ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100",
+          "mx-auto max-w-2xl px-6 py-12 sm:px-8 transition-all duration-300",
+          blockTransition ? "translate-y-3 opacity-0" : "translate-y-0 opacity-100",
         )}>
           {/* Error state */}
           {blockError && (
@@ -499,10 +524,10 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
           {/* Streamed text content */}
           {streamedContent && (blockType === "concept" || blockType === "worked_example" || blockType === "mentor") && (
-            <div className="prose prose-sm dark:prose-invert max-w-none font-(family-name:--font-source-serif)">
-              <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamedContent) }} />
+            <div>
+              <MarkdownContent text={streamedContent} />
               {streamState === "streaming" && (
-                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground" />
+                <span className="ml-0.5 inline-block h-[1.1em] w-0.5 translate-y-0.5 animate-pulse bg-foreground/70" />
               )}
             </div>
           )}
@@ -513,9 +538,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
           {/* Practice exercise */}
           {blockType === "practice" && (
             <div className="space-y-4">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamedContent) }} />
-              </div>
+              {streamedContent && <MarkdownContent text={streamedContent} />}
               {renderPracticeHints()}
               <textarea
                 value={userInput}
@@ -534,10 +557,8 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
           {blockType === "reflection" && (
             <div className="space-y-4">
               {streamedContent && (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-                  <div className="prose prose-sm dark:prose-invert max-w-none font-(family-name:--font-source-serif)">
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamedContent) }} />
-                  </div>
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
+                  <MarkdownContent text={streamedContent} />
                 </div>
               )}
               {streamState === "done" && !feedback && (
@@ -566,11 +587,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
           {/* Scenario */}
           {blockType === "scenario" && (
             <div className="space-y-4">
-              {streamedContent && (
-                <div className="prose prose-sm dark:prose-invert max-w-none font-(family-name:--font-source-serif)">
-                  <div dangerouslySetInnerHTML={{ __html: renderMarkdown(streamedContent) }} />
-                </div>
-              )}
+              {streamedContent && <MarkdownContent text={streamedContent} />}
               {feedback && !scenarioResult && (() => {
                 let decisions: Array<{ prompt: string; options: Array<{ label: string }> }>;
                 try { decisions = JSON.parse(feedback); } catch { return null; }
@@ -584,7 +601,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
                         <button
                           key={i}
                           onClick={() => handleScenarioChoice(i)}
-                          className="w-full rounded-lg border border-border/30 px-4 py-2.5 text-left text-sm hover:border-border/60"
+                          className="w-full rounded-lg border border-border/30 px-4 py-2.5 text-left text-sm transition-colors hover:border-border/60 hover:bg-muted/30"
                         >
                           {opt.label}
                         </button>
@@ -601,9 +618,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
                   )}>
                     {scenarioResult.outcome}
                   </div>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(scenarioResult.debrief) }} />
-                  </div>
+                  <MarkdownContent text={scenarioResult.debrief} className="text-muted-foreground" />
                 </div>
               )}
             </div>
@@ -633,7 +648,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
           {/* Continue button */}
           {canContinue && (
-            <div className="mt-8">
+            <div className="mt-10">
               <Button onClick={advanceToNext} className="gap-1.5">
                 {blockIndex + 1 >= totalBlocks ? (
                   <>
@@ -641,7 +656,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
                     Complete Lesson
                   </>
                 ) : (
-                  "Next Block"
+                  "Continue"
                 )}
               </Button>
             </div>
@@ -652,15 +667,3 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   );
 }
 
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/`(.*?)`/g, "<code>$1</code>")
-    .replace(/^### (.*$)/gm, '<h3 class="text-base font-semibold mt-4 mb-1">$1</h3>')
-    .replace(/^## (.*$)/gm, '<h2 class="text-lg font-semibold mt-4 mb-1">$1</h2>')
-    .replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal">$2</li>')
-    .replace(/\n\n/g, "<br/><br/>")
-    .replace(/\n/g, "<br/>");
-}

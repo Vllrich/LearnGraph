@@ -2,13 +2,26 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL!;
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
 
-const client = postgres(connectionString, {
-  prepare: false,
-  // Suppress NOTICE-level messages (e.g. "word is too long to be indexed")
-  onnotice: () => {},
-});
+const globalForDb = globalThis as unknown as { _pgClient?: ReturnType<typeof postgres> };
+
+const client =
+  globalForDb._pgClient ??
+  postgres(connectionString, {
+    prepare: false,
+    max: 5,
+    idle_timeout: 20,
+    max_lifetime: 60 * 30,
+    onnotice: () => {},
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb._pgClient = client;
+}
 
 export const db = drizzle(client, { schema });
 export type Database = typeof db;
