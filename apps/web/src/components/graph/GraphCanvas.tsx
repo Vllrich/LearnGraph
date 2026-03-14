@@ -31,7 +31,8 @@ import { GraphNodeDetail } from "./GraphNodeDetail";
 import { GraphLegend } from "./GraphLegend";
 import { GraphCardList } from "./GraphCardList";
 
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false }) as any;
 
 type SourceInfo = { id: string; title: string; sourceType: string };
 

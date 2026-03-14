@@ -46,7 +46,7 @@ pnpm --filter web build   # catches type errors not caught by lint
 - `/course/[goalId]` — modular course roadmap (V2)
 - `/course/[goalId]/learn` — block-by-block lesson player (V2)
 - `/api/ingest` — triggers ingestion pipeline
-- `/api/trpc/[trpc]` — tRPC (routers: health, library, review, goals, gaps, mentor, user, gamification, analytics, export)
+- `/api/trpc/[trpc]` — tRPC (routers: health, library, review, goals, gaps, mentor, user, gamification, analytics, export, discovery)
 - `/api/learn/start`, `/api/learn/session`, `/api/learn/suggest-topics` — V1 learning session APIs
 - `/api/learn/start-v2` — modular course generation
 - `/api/learn/session-v2` — block-driven learning session (SSE)
@@ -84,6 +84,17 @@ Adaptive profile that changes how the entire app behaves per user. Stored in `le
 2. Chunk: headers → paragraphs → sentences, 512 max tokens, 100 overlap (`js-tiktoken`)
 3. Parallel: `embedMany` (text-embedding-3-small) + 3-tier summarization (Claude) + concept extraction (Claude, dedup ≥ 0.92 cosine)
 4. Set `status = ready | failed`
+
+## Smart Discovery Feed
+Personalized home page replacing static topic suggestions. Learns from user behavior via `suggestion_dismissals` table.
+- **For You**: AI-generated topics using learner profile (`packages/ai/src/discovery/generate-suggestions.ts`)
+- **Trending**: aggregated from `learning_goals` created in the last 30 days
+- **Fill the Gap**: weak prerequisite concepts from `user_concept_state` + `concept_edges`
+- **Surprise Me**: random concept from the knowledge graph with AI-generated curiosity hook
+- **Dismiss flow**: dismissed topics stored in DB, excluded from future suggestions
+- tRPC router: `discovery` (getSuggestions, dismiss, getRandomTopic)
+- Components: `apps/web/src/components/home/discovery-feed.tsx`, `suggestion-card.tsx`
+- Migration: `packages/db/drizzle/0007_discovery_dismissals.sql`
 
 ## Modular Course System (V2)
 Hierarchical Course → Module → Lesson → Block structure replacing flat curriculum_items.

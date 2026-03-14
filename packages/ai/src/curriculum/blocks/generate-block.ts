@@ -93,9 +93,11 @@ ${groundingContext}`;
   const MAX_RETRIES = 2;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { object } = await generateObject({
         model: primaryModel,
-        schema,
+        output: "object",
+        schema: schema as any,
         prompt,
         temperature: attempt === 0 ? 0.5 : 0.3,
       });

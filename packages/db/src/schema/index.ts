@@ -8,3 +8,4 @@ export * from "./goals";
 export * from "./gamification";
 export * from "./learner-profiles";
 export * from "./courses";
+export * from "./discovery";

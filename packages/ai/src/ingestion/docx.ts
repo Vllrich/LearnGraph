@@ -6,11 +6,9 @@ export type DocxResult = {
 };
 
 export async function extractDocxText(buffer: Buffer): Promise<DocxResult> {
-  const text = await OfficeParser.parseOfficeAsync(buffer, {
-    outputErrorToConsole: false,
-  });
+  const ast = await OfficeParser.parseOffice(buffer as unknown as string);
 
-  const normalized = normalizeText(text);
+  const normalized = normalizeText(ast.toText());
   const title = extractFirstHeading(normalized);
 
   return { text: normalized, title };

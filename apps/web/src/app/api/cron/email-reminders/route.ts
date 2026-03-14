@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Brevo, BrevoEnvironment } from "@getbrevo/brevo";
+import { BrevoClient } from "@getbrevo/brevo";
 import { db } from "@repo/db";
 import { users, userConceptState } from "@repo/db";
 import { and, lt, isNotNull, sql } from "drizzle-orm";
@@ -111,8 +111,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const brevo = new Brevo();
-  brevo.setApiKey(BrevoEnvironment.apiKey, process.env.BREVO_API_KEY ?? "");
+  const brevo = new BrevoClient({ apiKey: process.env.BREVO_API_KEY ?? "" });
 
   // Fetch all users who have due concepts right now
   const dueUsers = await db
@@ -159,7 +158,7 @@ export async function GET(request: Request) {
         : null;
       if (!shouldSendToday(frequency, lastSent)) { skipped++; continue; }
 
-      await brevo.sendTransacEmail({
+      await brevo.transactionalEmails.sendTransacEmail({
         sender: { email: SENDER_EMAIL, name: SENDER_NAME },
         to: [{ email: user.email, name: user.displayName ?? undefined }],
         subject: `${user.dueCount} concept${user.dueCount !== 1 ? "s" : ""} due for review`,

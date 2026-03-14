@@ -121,7 +121,7 @@ export const userRouter = createTRPCRouter({
           : {};
 
       const { notifications, mentorMemory, learnerProfile, ...rest } = input;
-      const newPrefs = { ...currentPrefs, ...rest };
+      const newPrefs: Record<string, unknown> = { ...currentPrefs, ...rest };
 
       if (learnerProfile) {
         newPrefs.learnerProfile = learnerProfile;

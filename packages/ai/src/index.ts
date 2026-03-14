@@ -6,3 +6,4 @@ export * from "./quiz";
 export * from "./curriculum";
 export * from "./session";
 export * from "./evaluate-explain-back";
+export * from "./discovery";

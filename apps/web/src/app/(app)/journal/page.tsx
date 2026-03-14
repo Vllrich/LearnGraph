@@ -88,7 +88,7 @@ export default function JournalPage() {
                     <>
                       This week you completed{" "}
                       <strong className="text-foreground">{data.reviewsCompleted} reviews</strong>
-                      {data.conceptsMastered > 0 && (
+                      {(data.conceptsMastered ?? 0) > 0 && (
                         <>
                           {" "}
                           and mastered{" "}
@@ -97,7 +97,7 @@ export default function JournalPage() {
                           </strong>
                         </>
                       )}
-                      {data.conceptsStruggled > 0 && (
+                      {(data.conceptsStruggled ?? 0) > 0 && (
                         <>
                           {", while struggling with "}
                           <strong className="text-amber-600 dark:text-amber-400">

@@ -7,13 +7,9 @@ export type PptxResult = {
 };
 
 export async function extractPptxText(buffer: Buffer): Promise<PptxResult> {
-  const text = await OfficeParser.parseOfficeAsync(buffer, {
-    outputErrorToConsole: false,
-    putBulletsInRows: true,
-    newlineDelimiter: "\n",
-  });
+  const ast = await OfficeParser.parseOffice(buffer as unknown as string);
 
-  const normalized = normalizeText(text);
+  const normalized = normalizeText(ast.toText());
   const slides = normalized.split(/\n{2,}/).filter((s) => s.trim().length > 0);
   const title = extractFirstHeading(normalized);
 

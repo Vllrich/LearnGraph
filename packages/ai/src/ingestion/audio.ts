@@ -20,7 +20,7 @@ export async function transcribeAudio(buffer: Buffer, fileName: string): Promise
     );
   }
 
-  const file = new File([buffer], fileName, {
+  const file = new File([buffer as unknown as BlobPart], fileName, {
     type: getMimeType(fileName),
   });
 

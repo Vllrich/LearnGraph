@@ -18,7 +18,7 @@ export function getNodeColor(
     return retrievabilityColor(node.retrievability ?? 0);
   }
   if (viewMode === "domain") {
-    return domainColor(node.domain, allDomains);
+    return domainColor(node.domain ?? null, allDomains);
   }
   return MASTERY_COLORS[node.mastery] ?? MASTERY_COLORS[0];
 }

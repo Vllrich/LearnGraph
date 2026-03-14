@@ -20,50 +20,8 @@ import { CourseSetupWizard } from "@/components/course/course-setup-wizard";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DiscoveryFeed } from "@/components/home/discovery-feed";
 import type { GoalType } from "@repo/shared";
-
-const POPULAR_TOPICS: Record<string, { title: string; subtitle: string }[]> = {
-  Programming: [
-    { title: "Python", subtitle: "Beginner friendly" },
-    { title: "JavaScript", subtitle: "Web development" },
-    { title: "TypeScript", subtitle: "Type-safe JS" },
-    { title: "Rust", subtitle: "Systems programming" },
-    { title: "SQL", subtitle: "Databases" },
-    { title: "Go", subtitle: "Cloud native" },
-  ],
-  "AI & Data": [
-    { title: "Machine Learning", subtitle: "Core concepts" },
-    { title: "Deep Learning", subtitle: "Neural networks" },
-    { title: "Statistics", subtitle: "Data science" },
-    { title: "Data Analysis", subtitle: "Pandas & NumPy" },
-    { title: "LLMs & Prompting", subtitle: "Generative AI" },
-    { title: "Computer Vision", subtitle: "Image models" },
-  ],
-  Technology: [
-    { title: "AWS Cloud", subtitle: "Certification" },
-    { title: "Docker & K8s", subtitle: "DevOps" },
-    { title: "System Design", subtitle: "Architecture" },
-    { title: "Networking", subtitle: "TCP/IP & DNS" },
-    { title: "Linux", subtitle: "Command line" },
-    { title: "Git", subtitle: "Version control" },
-  ],
-  Science: [
-    { title: "Calculus", subtitle: "Exam prep" },
-    { title: "Linear Algebra", subtitle: "Foundations" },
-    { title: "Physics", subtitle: "Mechanics & more" },
-    { title: "Chemistry", subtitle: "Core concepts" },
-    { title: "Biology", subtitle: "Life sciences" },
-    { title: "Probability", subtitle: "Theory & practice" },
-  ],
-  Business: [
-    { title: "Product Management", subtitle: "PM fundamentals" },
-    { title: "Marketing", subtitle: "Growth & strategy" },
-    { title: "Finance", subtitle: "Basics & valuation" },
-    { title: "Entrepreneurship", subtitle: "Build a startup" },
-    { title: "Economics", subtitle: "Micro & macro" },
-    { title: "Leadership", subtitle: "People & teams" },
-  ],
-};
 
 const GOAL_BADGE: Record<
   GoalType,
@@ -93,7 +51,6 @@ export default function HomePage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTab, setUploadTab] = useState<"file" | "url">("file");
   const [chatInput, setChatInput] = useState("");
-  const [activeTopicTab, setActiveTopicTab] = useState<string>(Object.keys(POPULAR_TOPICS)[0]!);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardTopic, setWizardTopic] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -131,7 +88,7 @@ export default function HomePage() {
       <div className="flex flex-col items-center px-4 pb-6 pt-16 text-center lg:pt-20">
         <div className="flex w-full max-w-2xl items-center justify-center gap-3">
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl font-(family-name:--font-source-serif)">
-            What do you want to learn?
+            What do you want to learn today?
           </h1>
           {streak > 0 && (
             <span className="flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600">
@@ -185,40 +142,8 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Popular topics */}
-        <div className="mt-8 w-full max-w-2xl pt-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Popular starting points
-          </p>
-          <div className="mb-3 flex flex-wrap justify-center gap-1.5">
-            {Object.keys(POPULAR_TOPICS).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTopicTab(tab)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-all",
-                  activeTopicTab === tab
-                    ? "border border-primary/40 bg-primary/10 text-primary"
-                    : "border border-border/40 text-muted-foreground hover:border-border/70 hover:text-foreground"
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {(POPULAR_TOPICS[activeTopicTab] ?? []).map((topic) => (
-              <button
-                key={topic.title}
-                onClick={() => openWizard(topic.title)}
-                className="flex flex-col items-start rounded-xl border border-border/30 bg-card px-5 py-4 text-left transition-all hover:border-primary/30 hover:shadow-sm"
-              >
-                <span className="text-sm font-medium">{topic.title}</span>
-                <span className="text-[11px] text-muted-foreground/60">{topic.subtitle}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Discovery feed — personalized, trending, gaps, surprise me */}
+        <DiscoveryFeed onSelectTopic={openWizard} />
 
         {/* Active courses */}
         {hasGoals && (

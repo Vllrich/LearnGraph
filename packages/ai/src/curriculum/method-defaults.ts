@@ -48,7 +48,8 @@ const BASE_DEFAULTS: Record<EducationStage, MethodDefaults> = {
   },
 };
 
-const GOAL_OVERRIDES: Record<GoalType, Partial<MethodDefaults> & { methods?: Partial<MethodPreferences> }> = {
+type GoalOverride = Omit<Partial<MethodDefaults>, "methods"> & { methods?: Partial<MethodPreferences> };
+const GOAL_OVERRIDES: Record<GoalType, GoalOverride> = {
   exam_prep: {
     methods: { practiceTesting: 35, spacedReview: 30 },
     focusMode: "exam_readiness",

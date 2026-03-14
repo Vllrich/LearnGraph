@@ -131,9 +131,9 @@ export default function MentorPage() {
                 <div
                   className={cn(
                     "flex size-8 shrink-0 items-center justify-center rounded-md",
-                    item.masteryLevel <= 1
+                    (item.masteryLevel ?? 0) <= 1
                       ? "bg-red-500/10 text-red-500"
-                      : item.masteryLevel <= 3
+                      : (item.masteryLevel ?? 0) <= 3
                         ? "bg-amber-500/10 text-amber-500"
                         : "bg-emerald-500/10 text-emerald-500"
                   )}

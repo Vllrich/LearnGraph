@@ -12,7 +12,7 @@ export function computeClusterPositions(
     if (!clusters.has(domain)) {
       clusters.set(domain, {
         nodes: [],
-        color: domainColor(node.domain, allDomains),
+        color: domainColor(node.domain ?? null, allDomains),
         label: domain,
       });
     }
@@ -42,9 +42,11 @@ export function getClusterForceTargets(
   return domainTargets;
 }
 
+type DagMode = "td" | "bu" | "lr" | "rl" | "radialout" | "radialin";
+
 export function getDagModeForLayout(
   mode: GraphLayoutMode
-): string | undefined {
+): DagMode | undefined {
   switch (mode) {
     case "hierarchical":
       return "td";

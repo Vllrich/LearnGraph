@@ -15,6 +15,7 @@
 | D | Learning Session Upgrade | ✅ Complete |
 | E | UI: Wizard, Roadmap & Lesson Player | ✅ Complete |
 | F | Engagement & Analytics | ✅ Complete |
+| G | Smart Discovery Feed | ✅ Complete |
 
 ---
 
@@ -103,6 +104,24 @@
 | Block completion → streak update + XP award | ✅ Done |
 | `getCourseProgress` tRPC procedure | ✅ Done |
 | Block-level timing data in `interaction_log` | ✅ Done |
+
+---
+
+## Smart Discovery Feed ✅
+
+| Item | Status |
+|---|---|
+| `suggestion_dismissals` table + RLS policy | ✅ Done |
+| AI personalized topic generation (`generatePersonalizedTopics`) | ✅ Done |
+| Trending topics from goal aggregation | ✅ Done |
+| Concept gap suggestions (prerequisite analysis) | ✅ Done |
+| "Surprise me" random topic with AI hook | ✅ Done |
+| Dismiss-and-replace flow with DB persistence | ✅ Done |
+| `discovery` tRPC router (getSuggestions, dismiss, getRandomTopic) | ✅ Done |
+| `DiscoveryFeed` + `SuggestionCard` components | ✅ Done |
+| Static "Browse all categories" fallback (collapsible) | ✅ Done |
+| Loading skeletons + error fallback | ✅ Done |
+| Migration `0007_discovery_dismissals.sql` | ✅ Done |
 
 ---
 
