@@ -8,7 +8,7 @@ import {
   type SessionContext,
 } from "@repo/ai";
 import { db, learningGoals, lessonBlocks, courseLessons, courseModules } from "@repo/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, asc } from "drizzle-orm";
 import type { BlockType, BloomLevel } from "@repo/shared";
 
 export const maxDuration = 60;
@@ -150,13 +150,17 @@ export async function POST(req: NextRequest) {
         .update(lessonBlocks)
         .set({ generatedContent: content })
         .where(eq(lessonBlocks.id, blockId));
-    } catch {
+    } catch (err) {
+      console.error("[session-v2] generateBlockContent failed:", err);
       return new Response(
         JSON.stringify({ error: "Failed to generate block content" }),
         { status: 500 },
       );
     }
   }
+
+  // Look-ahead: pre-generate the next pending block in this lesson
+  preGenerateNextBlock(block.lessonId, block.sequenceOrder, goal.title).catch(() => {});
 
   // Build a session context from block data for streaming functions
   const ctx: SessionContext = {
@@ -341,5 +345,46 @@ async function* streamText(text: string): AsyncIterable<string> {
   const words = text.split(/(\s+)/);
   for (let i = 0; i < words.length; i += 3) {
     yield words.slice(i, i + 3).join("");
+    await new Promise((r) => setTimeout(r, 12));
+  }
+}
+
+async function preGenerateNextBlock(lessonId: string, currentSeq: number, courseTopic: string) {
+  const pending = await db
+    .select({
+      id: lessonBlocks.id,
+      blockType: lessonBlocks.blockType,
+      generatedContent: lessonBlocks.generatedContent,
+    })
+    .from(lessonBlocks)
+    .where(
+      and(
+        eq(lessonBlocks.lessonId, lessonId),
+        gt(lessonBlocks.sequenceOrder, currentSeq),
+      ),
+    )
+    .orderBy(asc(lessonBlocks.sequenceOrder))
+    .limit(2);
+
+  for (const row of pending) {
+    const c = row.generatedContent as Record<string, unknown>;
+    if (!c?._pending) continue;
+    try {
+      const generated = await generateBlockContent({
+        blockType: row.blockType as BlockType,
+        conceptName: (c.conceptName as string) ?? row.blockType,
+        bloomLevel: (c.bloomLevel as BloomLevel) ?? "understand",
+        lessonTitle: (c.lessonTitle as string) ?? "",
+        moduleTitle: (c.moduleTitle as string) ?? "",
+        courseTopic: (c.courseTopic as string) ?? courseTopic,
+      });
+      await db
+        .update(lessonBlocks)
+        .set({ generatedContent: generated })
+        .where(eq(lessonBlocks.id, row.id));
+    } catch (err) {
+      console.error("[pre-generate] block failed:", err);
+      break;
+    }
   }
 }

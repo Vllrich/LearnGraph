@@ -533,6 +533,42 @@ export const goalsRouter = createTRPCRouter({
         .where(eq(lessonBlocks.lessonId, input.lessonId))
         .orderBy(asc(lessonBlocks.sequenceOrder));
 
+      // Fire-and-forget: pre-generate ALL pending blocks so they're ready when requested
+      const pendingBlocks = blocks.filter(
+        (b) => (b.generatedContent as Record<string, unknown>)?._pending,
+      );
+      if (pendingBlocks.length > 0) {
+        const [goalRow] = await db
+          .select({ title: learningGoals.title })
+          .from(courseModules)
+          .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
+          .where(eq(courseModules.id, lessonRow.moduleId))
+          .limit(1);
+
+        if (goalRow) {
+          import("@repo/ai").then(async ({ generateBlockContent }) => {
+            for (const pending of pendingBlocks) {
+              const c = pending.generatedContent as Record<string, unknown>;
+              try {
+                const generated = await generateBlockContent({
+                  blockType: pending.blockType as import("@repo/shared").BlockType,
+                  conceptName: (c.conceptName as string) ?? pending.blockType,
+                  bloomLevel: (c.bloomLevel as import("@repo/shared").BloomLevel) ?? "understand",
+                  lessonTitle: (c.lessonTitle as string) ?? "",
+                  moduleTitle: (c.moduleTitle as string) ?? "",
+                  courseTopic: (c.courseTopic as string) ?? goalRow.title,
+                });
+                await db.update(lessonBlocks)
+                  .set({ generatedContent: generated })
+                  .where(eq(lessonBlocks.id, pending.id));
+              } catch (err) {
+                console.error("[pre-generate] block failed:", err);
+              }
+            }
+          }).catch(() => {});
+        }
+      }
+
       return { lesson: lessonRow, blocks };
     }),
 

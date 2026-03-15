@@ -6,16 +6,16 @@ export const conceptBlockSchema = z.object({
     term: z.string(),
     definition: z.string(),
   })).describe("Key terms introduced in this block"),
-  mermaidDiagram: z.string().optional().describe("Optional Mermaid diagram source"),
+  mermaidDiagram: z.string().nullable().describe("Mermaid diagram source, or null if not needed"),
 });
 
 export const checkpointBlockSchema = z.object({
   questions: z.array(z.object({
     type: z.enum(["mcq", "short_answer"]),
     question: z.string(),
-    options: z.array(z.string()).optional().describe("MCQ options (3-5)"),
-    correctIndex: z.number().optional().describe("0-based index of correct MCQ option"),
-    correctAnswer: z.string().optional().describe("Expected short answer"),
+    options: z.array(z.string()).nullable().describe("MCQ options (3-5), or null for short_answer"),
+    correctIndex: z.number().nullable().describe("0-based index of correct MCQ option, or null for short_answer"),
+    correctAnswer: z.string().nullable().describe("Expected short answer, or null for MCQ"),
     explanation: z.string().describe("Why this answer is correct"),
     bloomLevel: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]),
   })).min(1).max(3),
@@ -55,7 +55,7 @@ export const workedExampleBlockSchema = z.object({
   steps: z.array(z.object({
     title: z.string(),
     explanation: z.string(),
-    keyInsight: z.string().optional(),
+    keyInsight: z.string().nullable(),
   })).min(2).max(8),
   finalAnswer: z.string(),
   commonMistakes: z.array(z.string()).describe("Common mistakes to avoid"),
