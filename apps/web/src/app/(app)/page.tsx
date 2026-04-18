@@ -169,7 +169,7 @@ export default function HomePage() {
                 return (
                   <div key={goal.id} className="group relative">
                     <Link
-                      href={`/learn/${goal.id}`}
+                      href={`/course/${goal.id}`}
                       className="block rounded-xl border border-border/30 bg-card overflow-hidden transition-all hover:border-primary/30 hover:shadow-md"
                     >
                       <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>

@@ -1,13 +1,10 @@
-export { generateCurriculum, type CurriculumInput } from "./generate";
 export { generateModularCourse, type ModularCourseInput } from "./generate-modular";
 export {
-  getMethodDefaults,
   getEducationStagePrompt,
   getProfilePrompt,
   getMethodWeights,
   getDefaultLearningMode,
   getSessionDefaults,
-  type MethodDefaults,
 } from "./method-defaults";
 export {
   getNextLesson,

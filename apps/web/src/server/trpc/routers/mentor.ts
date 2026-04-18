@@ -4,11 +4,9 @@ import { listConversations, getConversation } from "@repo/ai";
 import { TRPCError } from "@trpc/server";
 
 export const mentorRouter = createTRPCRouter({
-  listConversations: protectedProcedure
-    .input(z.void())
-    .query(async ({ ctx }) => {
-      return listConversations(ctx.userId);
-    }),
+  listConversations: protectedProcedure.query(async ({ ctx }) => {
+    return listConversations(ctx.userId);
+  }),
 
   getConversation: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))

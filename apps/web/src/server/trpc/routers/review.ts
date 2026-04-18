@@ -12,7 +12,9 @@ import {
   users,
   learningObjects,
   learningGoals,
-  curriculumItems,
+  courseModules,
+  courseLessons,
+  lessonBlocks,
 } from "@repo/db";
 import { eq, and, lte, sql, asc, desc, count, inArray, gte } from "drizzle-orm";
 import { schedule, newCard, type Card } from "@repo/fsrs";
@@ -475,23 +477,25 @@ export const reviewRouter = createTRPCRouter({
         conditions.push(inArray(learningObjects.id, input.learningObjectIds));
       }
 
-      // Resolve goalIds → conceptIds and filter questions by concept overlap
+      // Resolve goalIds → conceptIds (via V2 course blocks) and filter questions by concept overlap
       let goalConceptFilter: ReturnType<typeof sql> | null = null;
       if (input.goalIds && input.goalIds.length > 0) {
-        const items = await db
-          .select({ conceptIds: curriculumItems.conceptIds })
-          .from(curriculumItems)
-          .innerJoin(learningGoals, eq(curriculumItems.goalId, learningGoals.id))
+        const blocks = await db
+          .select({ conceptIds: lessonBlocks.conceptIds })
+          .from(lessonBlocks)
+          .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+          .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+          .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
           .where(
             and(
-              inArray(curriculumItems.goalId, input.goalIds),
+              inArray(courseModules.goalId, input.goalIds),
               eq(learningGoals.userId, ctx.userId)
             )
           );
 
         const conceptIdSet = new Set<string>();
-        for (const item of items) {
-          for (const cid of item.conceptIds ?? []) conceptIdSet.add(cid);
+        for (const b of blocks) {
+          for (const cid of b.conceptIds ?? []) conceptIdSet.add(cid);
         }
 
         const conceptArr = Array.from(conceptIdSet);
@@ -597,16 +601,13 @@ export const reviewRouter = createTRPCRouter({
 
       if (!goal) return null;
 
-      const [items, allStates] = await Promise.all([
+      const [blockRows, allStates] = await Promise.all([
         db
-          .select({
-            id: curriculumItems.id,
-            status: curriculumItems.status,
-            sequenceOrder: curriculumItems.sequenceOrder,
-          })
-          .from(curriculumItems)
-          .where(eq(curriculumItems.goalId, input.goalId))
-          .orderBy(asc(curriculumItems.sequenceOrder)),
+          .select({ blockStatus: lessonBlocks.status })
+          .from(lessonBlocks)
+          .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+          .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+          .where(eq(courseModules.goalId, input.goalId)),
         db
           .select({
             conceptId: userConceptState.conceptId,
@@ -619,7 +620,10 @@ export const reviewRouter = createTRPCRouter({
           .where(and(eq(userConceptState.userId, ctx.userId), gte(userConceptState.fsrsReps, 1))),
       ]);
 
-      const completedCount = items.filter((i) => i.status === "completed").length;
+      const totalBlocks = blockRows.length;
+      const completedBlocks = blockRows.filter(
+        (b) => b.blockStatus === "completed" || b.blockStatus === "skipped"
+      ).length;
 
       const totalStudied = allStates.length;
       const mastered = allStates.filter((s) => (s.masteryLevel ?? 0) >= 3).length;
@@ -640,9 +644,9 @@ export const reviewRouter = createTRPCRouter({
         masteredConcepts: mastered,
         weakConcepts: weak.slice(0, 10),
         curriculumProgress: {
-          completed: completedCount,
-          total: items.length,
-          percent: items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0,
+          completed: completedBlocks,
+          total: totalBlocks,
+          percent: totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0,
         },
         daysUntilExam,
         examDate: examDate?.toISOString() ?? null,

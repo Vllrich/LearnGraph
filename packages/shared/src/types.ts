@@ -21,18 +21,6 @@ export type SourceType =
   | "text"
   | "ai_generated";
 
-export const UPLOADABLE_SOURCE_TYPES = [
-  "pdf",
-  "youtube",
-  "pptx",
-  "docx",
-  "audio",
-  "url",
-  "image",
-] as const;
-
-export type UploadableSourceType = (typeof UPLOADABLE_SOURCE_TYPES)[number];
-
 export type GoalType = "exam_prep" | "skill_building" | "course_supplement" | "exploration";
 
 export type LearnerLevel = "beginner" | "some_knowledge" | "experienced";
@@ -43,13 +31,6 @@ export type EducationStage =
   | "university"
   | "professional"
   | "self_learner";
-
-export type MethodPreferences = {
-  guidedLessons: number;
-  practiceTesting: number;
-  explainBack: number;
-  spacedReview: number;
-};
 
 export type CommunicationStyle = "casual" | "balanced" | "formal";
 
@@ -102,25 +83,6 @@ export type LearnerProfileUpdate = Partial<
     | "accessibilityNeeds"
   >
 >;
-
-/** @deprecated Use LearnerProfile instead — kept for migration compatibility */
-export type LegacyLearnerProfile = {
-  educationStage: EducationStage;
-  preferredSessionMinutes?: number;
-  preferredMethods?: LearningMethod[];
-};
-
-/** @deprecated Use LearningMode instead — kept for v1 backward compat */
-export type FocusMode = "concept_mastery" | "breadth" | "exam_readiness";
-
-/** @deprecated Use LearningMode + MethodWeights instead */
-export type LearningMethod =
-  | "guided_lesson"
-  | "practice_testing"
-  | "explain_back"
-  | "spaced_review"
-  | "interleaved_practice"
-  | "reflection";
 
 // ---------------------------------------------------------------------------
 // V2 Course System — Learning Modes & Method Weights

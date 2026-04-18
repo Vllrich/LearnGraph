@@ -6,7 +6,9 @@ import {
   concepts,
   conceptEdges,
   learningGoals,
-  curriculumItems,
+  courseModules,
+  courseLessons,
+  lessonBlocks,
 } from "@repo/db";
 import { eq, and, sql, inArray } from "drizzle-orm";
 
@@ -91,16 +93,18 @@ export const gapsRouter = createTRPCRouter({
       if (input.targetConceptIds?.length) {
         targetConceptIds = input.targetConceptIds;
       } else if (input.goalId) {
-        const items = await db
-          .select({ conceptIds: curriculumItems.conceptIds })
-          .from(curriculumItems)
-          .innerJoin(learningGoals, eq(curriculumItems.goalId, learningGoals.id))
+        const blocks = await db
+          .select({ conceptIds: lessonBlocks.conceptIds })
+          .from(lessonBlocks)
+          .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+          .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+          .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
           .where(
-            and(eq(curriculumItems.goalId, input.goalId), eq(learningGoals.userId, ctx.userId))
+            and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId))
           );
         const idSet = new Set<string>();
-        for (const item of items) {
-          for (const cid of item.conceptIds ?? []) idSet.add(cid);
+        for (const b of blocks) {
+          for (const cid of b.conceptIds ?? []) idSet.add(cid);
         }
         targetConceptIds = Array.from(idSet);
       }

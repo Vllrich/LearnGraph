@@ -1,11 +1,8 @@
 import { z } from "zod";
-import crypto from "crypto";
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 import {
   db,
   learningGoals,
-  curriculumItems,
-  sharedCurriculums,
   courseModules,
   courseLessons,
   lessonBlocks,
@@ -248,24 +245,56 @@ export const goalsRouter = createTRPCRouter({
     if (goals.length === 0) return [];
 
     const goalIds = goals.map((g) => g.id);
-    const allItems = await db
-      .select()
-      .from(curriculumItems)
-      .where(inArray(curriculumItems.goalId, goalIds))
-      .orderBy(asc(curriculumItems.sequenceOrder));
 
-    const itemsByGoal = new Map<string, (typeof allItems)>();
-    for (const item of allItems) {
-      const list = itemsByGoal.get(item.goalId) ?? [];
-      list.push(item);
-      itemsByGoal.set(item.goalId, list);
+    const [blockRows, nextLessonRows] = await Promise.all([
+      db
+        .select({
+          goalId: courseModules.goalId,
+          blockStatus: lessonBlocks.status,
+        })
+        .from(lessonBlocks)
+        .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+        .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+        .where(inArray(courseModules.goalId, goalIds)),
+      db
+        .select({
+          goalId: courseModules.goalId,
+          lessonId: courseLessons.id,
+          title: courseLessons.title,
+          moduleOrder: courseModules.sequenceOrder,
+          lessonOrder: courseLessons.sequenceOrder,
+          lessonStatus: courseLessons.status,
+        })
+        .from(courseLessons)
+        .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+        .where(inArray(courseModules.goalId, goalIds))
+        .orderBy(asc(courseModules.sequenceOrder), asc(courseLessons.sequenceOrder)),
+    ]);
+
+    const blockStatsByGoal = new Map<string, { total: number; completed: number }>();
+    for (const row of blockRows) {
+      const stats = blockStatsByGoal.get(row.goalId) ?? { total: 0, completed: 0 };
+      stats.total++;
+      if (row.blockStatus === "completed" || row.blockStatus === "skipped") stats.completed++;
+      blockStatsByGoal.set(row.goalId, stats);
+    }
+
+    const nextLessonByGoal = new Map<string, { id: string; title: string }>();
+    for (const row of nextLessonRows) {
+      if (nextLessonByGoal.has(row.goalId)) continue;
+      if (row.lessonStatus === "completed" || row.lessonStatus === "skipped") continue;
+      nextLessonByGoal.set(row.goalId, { id: row.lessonId, title: row.title });
     }
 
     return goals.map((goal) => {
-      const items = itemsByGoal.get(goal.id) ?? [];
-      const completed = items.filter((i) => i.status === "completed").length;
-      const nextItem = items.find((i) => i.status !== "completed");
-      return { ...goal, totalItems: items.length, completedItems: completed, nextItem };
+      const stats = blockStatsByGoal.get(goal.id) ?? { total: 0, completed: 0 };
+      const nextItem = nextLessonByGoal.get(goal.id) ?? null;
+      return {
+        ...goal,
+        totalItems: stats.total,
+        completedItems: stats.completed,
+        nextItem,
+      };
     });
   }),
 
@@ -280,13 +309,7 @@ export const goalsRouter = createTRPCRouter({
 
       if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
 
-      const items = await db
-        .select()
-        .from(curriculumItems)
-        .where(eq(curriculumItems.goalId, goal.id))
-        .orderBy(asc(curriculumItems.sequenceOrder));
-
-      return { ...goal, items };
+      return goal;
     }),
 
   create: protectedProcedure
@@ -318,27 +341,6 @@ export const goalsRouter = createTRPCRouter({
         .returning();
 
       return goal;
-    }),
-
-  completeCurriculumItem: protectedProcedure
-    .input(z.object({ itemId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const [item] = await db
-        .select({ id: curriculumItems.id, goalId: curriculumItems.goalId })
-        .from(curriculumItems)
-        .innerJoin(learningGoals, eq(curriculumItems.goalId, learningGoals.id))
-        .where(and(eq(curriculumItems.id, input.itemId), eq(learningGoals.userId, ctx.userId)))
-        .limit(1);
-
-      if (!item) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const [updated] = await db
-        .update(curriculumItems)
-        .set({ status: "completed", completedAt: new Date() })
-        .where(eq(curriculumItems.id, input.itemId))
-        .returning();
-
-      return updated;
     }),
 
   update: protectedProcedure
@@ -387,82 +389,6 @@ export const goalsRouter = createTRPCRouter({
 
       await db.delete(learningGoals).where(eq(learningGoals.id, input.id));
       return { success: true };
-    }),
-
-  shareCurriculum: protectedProcedure
-    .input(z.object({ goalId: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const [goal] = await db
-        .select()
-        .from(learningGoals)
-        .where(and(eq(learningGoals.id, input.goalId), eq(learningGoals.userId, ctx.userId)))
-        .limit(1);
-
-      if (!goal) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const [existing] = await db
-        .select()
-        .from(sharedCurriculums)
-        .where(eq(sharedCurriculums.goalId, input.goalId))
-        .limit(1);
-
-      if (existing) return { shareToken: existing.shareToken };
-
-      const items = await db
-        .select({
-          title: curriculumItems.title,
-          description: curriculumItems.description,
-          sequenceOrder: curriculumItems.sequenceOrder,
-          estimatedMinutes: curriculumItems.estimatedMinutes,
-          learningMethod: curriculumItems.learningMethod,
-        })
-        .from(curriculumItems)
-        .where(eq(curriculumItems.goalId, input.goalId))
-        .orderBy(asc(curriculumItems.sequenceOrder));
-
-      const token = crypto.randomBytes(16).toString("hex");
-
-      await db.insert(sharedCurriculums).values({
-        goalId: input.goalId,
-        shareToken: token,
-        title: goal.title,
-        description: goal.description,
-        items: items,
-        createdByUserId: ctx.userId,
-      });
-
-      return { shareToken: token };
-    }),
-
-  getSharedCurriculum: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
-    .query(async ({ input }) => {
-      const [shared] = await db
-        .select()
-        .from(sharedCurriculums)
-        .where(eq(sharedCurriculums.shareToken, input.token))
-        .limit(1);
-
-      if (!shared) throw new TRPCError({ code: "NOT_FOUND" });
-
-      await db
-        .update(sharedCurriculums)
-        .set({ viewCount: sql`COALESCE(${sharedCurriculums.viewCount}, 0) + 1` })
-        .where(eq(sharedCurriculums.id, shared.id));
-
-      return {
-        title: shared.title,
-        description: shared.description,
-        items: shared.items as Array<{
-          title: string;
-          description: string | null;
-          sequenceOrder: number;
-          estimatedMinutes: number | null;
-          learningMethod: string | null;
-        }>,
-        viewCount: (shared.viewCount ?? 0) + 1,
-        createdAt: shared.createdAt,
-      };
     }),
 
   // ---------------------------------------------------------------------------

@@ -43,16 +43,6 @@ export const FILE_SOURCE_TYPE_MAP: Record<string, string> = {
   "image/webp": "image",
 };
 
-export const SOURCE_TYPE_LABELS: Record<string, string> = {
-  pdf: "PDF Document",
-  youtube: "YouTube Video",
-  pptx: "PowerPoint",
-  docx: "Word Document",
-  audio: "Audio",
-  url: "Web Article",
-  image: "Image",
-};
-
 export const QUICK_5_LIMIT = 5;
 
 export const XP_VALUES = {

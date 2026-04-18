@@ -14,6 +14,9 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Middleware enforces auth before this layout runs. This guard only
+  // handles the race where the session expires between middleware and
+  // render, or a misconfigured matcher. Keep it defensive, not primary.
   if (!user) {
     redirect("/login");
   }

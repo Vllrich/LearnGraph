@@ -18,9 +18,6 @@
         "ANTHROPIC_MODEL",
         "UPSTASH_REDIS_REST_URL",
         "UPSTASH_REDIS_REST_TOKEN",
-        "LANGFUSE_PUBLIC_KEY",
-        "LANGFUSE_SECRET_KEY",
-        "LANGFUSE_HOST",
         "BREVO_API_KEY",
         "BREVO_SENDER_EMAIL",
         "CRON_SECRET"

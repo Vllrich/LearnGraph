@@ -11,7 +11,6 @@ import {
   date,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
-import { concepts } from "./concepts";
 
 export const userAchievements = pgTable(
   "user_achievements",
@@ -74,40 +73,6 @@ export const userWeeklySnapshots = pgTable(
   ]
 );
 
-export const conceptSnapshots = pgTable(
-  "concept_snapshots",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .references(() => users.id, { onDelete: "cascade" })
-      .notNull(),
-    conceptId: uuid("concept_id")
-      .references(() => concepts.id, { onDelete: "cascade" })
-      .notNull(),
-    snapshotDate: date("snapshot_date").notNull(),
-    masteryLevel: integer("mastery_level").default(0),
-    retrievability: real("retrievability"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  },
-  (table) => [index("idx_concept_snapshot_user_date").on(table.userId, table.snapshotDate)]
-);
-
-export const sharedCurriculums = pgTable("shared_curriculums", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  goalId: uuid("goal_id").notNull(),
-  shareToken: text("share_token").notNull().unique(),
-  title: text("title").notNull(),
-  description: text("description"),
-  items: jsonb("items").notNull(),
-  createdByUserId: uuid("created_by_user_id")
-    .references(() => users.id, { onDelete: "cascade" })
-    .notNull(),
-  viewCount: integer("view_count").default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
-
 export type UserAchievement = typeof userAchievements.$inferSelect;
 export type UserStreak = typeof userStreaks.$inferSelect;
 export type UserWeeklySnapshot = typeof userWeeklySnapshots.$inferSelect;
-export type ConceptSnapshot = typeof conceptSnapshots.$inferSelect;
-export type SharedCurriculum = typeof sharedCurriculums.$inferSelect;
