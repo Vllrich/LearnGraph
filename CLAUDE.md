@@ -47,7 +47,7 @@ pnpm --filter web build   # catches type errors not caught by lint
 - `/course/[goalId]/learn` — block-by-block lesson player (V2)
 - `/api/ingest` — triggers ingestion pipeline
 - `/api/trpc/[trpc]` — tRPC (routers: health, library, review, goals, gaps, mentor, user, gamification, analytics, export, discovery)
-- `/api/learn/start`, `/api/learn/session`, `/api/learn/suggest-topics` — V1 learning session APIs
+- `/api/learn/suggest-topics` — topic suggestions
 - `/api/learn/start-v2` — modular course generation
 - `/api/learn/session-v2` — block-driven learning session (SSE)
 - `/api/mentor` — streaming AI mentor (persona-adapted)
@@ -76,7 +76,7 @@ Adaptive profile that changes how the entire app behaves per user. Stored in `le
 - `packages/ai/src/mentor/persona.ts` → `buildPersonaBlock(profile)` injected into mentor system prompt
 - `packages/ai/src/curriculum/method-defaults.ts` → `getProfilePrompt(profile)` in curriculum generation
 - `apps/web/src/server/trpc/routers/user.ts` → `getLearnerProfile`, `updateLearnerProfile` procedures
-- Migration: `packages/db/drizzle/0004_brown_johnny_blaze.sql`
+- Migration: `packages/db/drizzle/0000_giant_microbe.sql`
 
 ## Ingestion Pipeline
 `upload` → `Supabase Storage` → `create learning_objects row` → `POST /api/ingest`:
@@ -94,21 +94,21 @@ Personalized home page replacing static topic suggestions. Learns from user beha
 - **Dismiss flow**: dismissed topics stored in DB, excluded from future suggestions
 - tRPC router: `discovery` (getSuggestions, dismiss, getRandomTopic)
 - Components: `apps/web/src/components/home/discovery-feed.tsx`, `suggestion-card.tsx`
-- Migration: `packages/db/drizzle/0007_discovery_dismissals.sql`
+- Migration: `packages/db/drizzle/0000_giant_microbe.sql`
 
 ## Modular Course System (V2)
-Hierarchical Course → Module → Lesson → Block structure replacing flat curriculum_items.
+Hierarchical Course → Module → Lesson → Block structure.
 - **6 learning modes**: understand_first, remember_longer, apply_faster, deep_mastery, exam_prep, mentor_heavy
 - **7 block types**: concept, worked_example, checkpoint, practice, reflection, scenario, mentor
 - **Adaptive path engine**: mastery gates, module unlocking, skip eligibility, catch-up suggestions, welcome-back detection
 - **FSRS integration**: `completeBlock` updates `user_concept_state` + `review_log`, schedules next review
 - **Gamification**: block completion awards XP/streak; module/course milestones trigger achievements
 - **Scaffold fading**: hint density decreases as session mastery grows
-- **RLS policies**: all 3 course tables have row-level security via `0006_rls_and_constraints.sql`
+- **RLS policies**: all 3 course tables have row-level security via `0001_rls_and_indexes.sql`
 - Full docs: `docs/modular-courses.md` · `docs/feature-status.md`
 
 ## Performance Optimizations (March 2026)
-- **DB**: 14 CONCURRENTLY indexes added (migration `0008`), HNSW vector index on `concepts.embedding`
+- **DB**: 14 CONCURRENTLY indexes added (migration `0001`), HNSW vector index on `concepts.embedding`
 - **N+1 fixes**: `goals.getActive`, `getCourseProgress`, `updateConceptStateFromBlock`, `skipModule` — batched queries
 - **Parallelized**: 12+ sequential DB calls → `Promise.all` (review.getStats, user.getSessionContext, export.getExportStats, etc.)
 - **Ownership checks**: session-v2, getLessonBlocks, completeBlock consolidated from 3-4 queries → 1 joined query

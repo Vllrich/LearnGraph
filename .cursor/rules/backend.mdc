@@ -81,19 +81,8 @@ const items = await db.select().from(t).where(...);
 const concepts = await db.select().from(concepts).where(...);
 ```
 
-## Caching — Use `cached()` from `@repo/shared`
-```ts
-import { cached, invalidateCache } from "@repo/shared/cache";
-
-// Cache a DB result
-const profile = await cached(`profile:${userId}`, 300, () =>
-  db.select().from(learnerProfiles).where(eq(learnerProfiles.userId, userId))
-);
-
-// Invalidate on write
-await invalidateCache(`profile:${userId}`);
-```
-Cache keys and TTLs: `profile:{userId}` 5min, `queue:{userId}:{date}` 1h, `stats:{userId}` 5min, `progress:{goalId}` 2min, `discovery:{userId}` 30min.
+## Caching
+`getRedisClient()` from `@repo/shared` returns the raw Upstash Redis client when configured; use it directly for rate-limiting or ad-hoc caching.
 
 ## Rate Limiting — Upstash Ratelimit (not in-memory)
 ```ts

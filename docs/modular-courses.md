@@ -1,10 +1,8 @@
-# Modular Course System (V2)
+# Modular Course System
 
 ## Overview
 
-The modular course system replaces the flat `curriculum_items` list (V1) with a hierarchical structure: **Course → Modules → Lessons → Blocks**. Courses are AI-generated based on a topic, learner profile, and chosen learning mode, then navigated adaptively through a path engine that gates progression on concept mastery.
-
-The system is backward-compatible. V1 courses (`schema_version = 1`) continue to work alongside V2 courses (`schema_version = 2`).
+The modular course system decomposes a learning goal into a hierarchy of modules → lessons → blocks. Courses are AI-generated based on a topic, learner profile, and chosen learning mode, then navigated adaptively through a path engine that gates progression on concept mastery.
 
 ---
 
@@ -14,7 +12,7 @@ The system is backward-compatible. V1 courses (`schema_version = 1`) continue to
 User picks topic + learning mode
          │
          ▼
-POST /api/learn/start-v2
+POST /api/learn/start-v2  (the `-v2` suffix is legacy — this is the only course creation endpoint)
          │
          ├─ getMethodWeights(mode, profile)
          ├─ AI: generate module outline
@@ -39,14 +37,14 @@ POST /api/learn/start-v2
 
 ## Data Model
 
-### `learning_goals` (extended)
+### `learning_goals` columns (course-related)
 
-Two new columns added to the existing table:
+Columns driving modular course behavior:
 
 | Column | Type | Default | Description |
 |---|---|---|---|
 | `learning_mode` | text | `"understand_first"` | One of 6 learning modes |
-| `schema_version` | integer | `1` | `1` = flat curriculum_items, `2` = modular |
+| `schema_version` | integer | `1` | Reserved for future schema versioning |
 
 ### `course_modules`
 
@@ -302,8 +300,8 @@ Block-by-block progression through a lesson:
 - `packages/shared/src/types.ts` — `LearningMode`, `MethodWeights`, `BlockType`, `ModuleType`, etc.
 - `packages/db/src/schema/courses.ts` — `courseModules`, `courseLessons`, `lessonBlocks`
 - `packages/db/src/schema/goals.ts` — `learning_mode`, `schema_version` columns
-- `packages/db/drizzle/0005_hot_warstar.sql` — initial V2 migration
-- `packages/db/drizzle/0006_rls_and_constraints.sql` — RLS policies + CHECK constraints
+- `packages/db/drizzle/0000_giant_microbe.sql` — initial migration (course tables included)
+- `packages/db/drizzle/0001_rls_and_indexes.sql` — RLS policies + indexes
 
 ### AI Pipeline
 - `packages/ai/src/curriculum/method-defaults.ts` — `getMethodWeights()`, `getDefaultLearningMode()`

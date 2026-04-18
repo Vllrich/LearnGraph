@@ -64,7 +64,7 @@
 
 ### 2.1 Missing Indexes — New Migration
 
-Create `packages/db/drizzle/0008_performance_indexes.sql`:
+Add performance indexes to `packages/db/drizzle/0001_rls_and_indexes.sql`:
 
 ```sql
 -- learning_objects: filtered by user_id + status on nearly every page
@@ -118,18 +118,30 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_concepts_embedding_hnsw
 #### `goals.getActive` — Replace N queries with 1 join
 
 ```typescript
-// BEFORE: 1 query for goals + N queries for curriculum items
+// BEFORE: 1 query for goals + N queries per goal for course progress
 const goals = await db.select().from(learningGoals).where(...);
 const enriched = await Promise.all(goals.map(g =>
-  db.select().from(curriculumItems).where(eq(curriculumItems.goalId, g.id))
+  db.select().from(lessonBlocks)
+    .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+    .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+    .where(eq(courseModules.goalId, g.id))
 ));
 
-// AFTER: Single query with lateral join or batch IN clause
+// AFTER: Two batched joined queries with inArray, then group in memory
 const goals = await db.select().from(learningGoals).where(...);
 const goalIds = goals.map(g => g.id);
-const allItems = await db.select().from(curriculumItems)
-  .where(inArray(curriculumItems.goalId, goalIds));
-const itemsByGoal = Map.groupBy(allItems, i => i.goalId);
+const [blockRows, nextLessonRows] = await Promise.all([
+  db.select({ goalId: courseModules.goalId, blockStatus: lessonBlocks.status })
+    .from(lessonBlocks)
+    .innerJoin(courseLessons, eq(courseLessons.id, lessonBlocks.lessonId))
+    .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+    .where(inArray(courseModules.goalId, goalIds)),
+  db.select({ goalId: courseModules.goalId, lessonId: courseLessons.id /* … */ })
+    .from(courseLessons)
+    .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))
+    .where(inArray(courseModules.goalId, goalIds)),
+]);
+const statsByGoal = Map.groupBy(blockRows, r => r.goalId);
 ```
 
 #### `getCourseProgress` — Single query with joins
@@ -182,7 +194,7 @@ Target files and the columns to exclude:
 | `library.getById` | `learningObjects` | `raw_text` (can be 100KB+) — fetch only on Full Text tab |
 | `session-v2/route.ts` | `lessonBlocks` | Select only `id`, `type`, `status`, `content`, `sequenceOrder`, `conceptIds` |
 | `export/route.ts` | `mentorConversations` | Select only needed columns per export type |
-| `goals.getById` | `learningGoals` + `curriculumItems` | Drop `raw_text`, embeddings |
+| `goals.getById` | `learningGoals` | Drop `raw_text`, embeddings |
 
 **Estimated impact:** 50–90% payload reduction on `library.getById` (raw_text is the largest column).
 
@@ -601,7 +613,7 @@ const ratelimit = new Ratelimit({
 
 | Task | Files | Impact | Risk |
 |------|-------|--------|------|
-| Add 12 missing indexes | New migration `0008_performance_indexes.sql` | 3–10× faster filtered queries | Low (CONCURRENTLY) |
+| Add 12 missing indexes | Added to `0001_rls_and_indexes.sql` | 3–10× faster filtered queries | Low (CONCURRENTLY) |
 | Add HNSW vector index on `concepts.embedding` | Same migration | O(n) → O(log n) concept dedup | Low |
 | Fix N+1 in `getActive`, `getCourseProgress`, `updateConceptStateFromBlock` | `routers/goals.ts` | 10–20 queries → 1–2 per call | Medium |
 | Connection pooling configuration | `packages/db/src/client.ts` | Fewer connection errors under load | Low |
@@ -679,7 +691,7 @@ All 5 phases have been implemented:
 | Phase | Status | Key Changes |
 |-------|--------|-------------|
 | 1: Quick Wins | ✅ Complete | 12+ sequential DB calls parallelized, SELECT * replaced, ownership checks consolidated (3-4 queries → 1 join in session-v2/getLessonBlocks/completeBlock), 20ms SSE delay removed, maxTokens on all LLM calls, TanStack Query gcTime/refetchOnWindowFocus |
-| 2: Database | ✅ Complete | 14 CONCURRENTLY indexes + HNSW vector index (migration 0008), N+1 fixes in getActive/getCourseProgress/updateConceptStateFromBlock/skipModule, connection pooling max=1 in prod |
+| 2: Database | ✅ Complete | 14 CONCURRENTLY indexes + HNSW vector index (migration 0001), N+1 fixes in getActive/getCourseProgress/updateConceptStateFromBlock/skipModule, connection pooling max=1 in prod |
 | 3: Caching | ✅ Complete | Upstash Redis `cached()`/`invalidateCache()`/`invalidatePattern()` in @repo/shared, all 7 API routes on `@upstash/ratelimit`, embedding cache (SHA256-keyed, Redis-backed) |
 | 4: LLM Optimization | ✅ Complete | Mentor system prompt compressed ~40%, materials block compacted, RAG topK reduced (6→4/10→8), relevance filtering, concept extraction batch 5→8, compressed prompts |
 | 5: Advanced | ✅ Complete | Lazy AI imports in goals router, barrel export audit, TanStack Query defaults optimized |

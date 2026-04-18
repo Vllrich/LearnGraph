@@ -40,7 +40,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Install and initialize shadcn/ui (New York style, HSL CSS variables)
 - [x] **P0** Install Vercel AI SDK + provider packages: `ai`, `@ai-sdk/anthropic`, `@ai-sdk/openai`
 - [x] **P0** Configure path aliases (`@/`, `@repo/db`, `@repo/ai`, `@repo/fsrs`, `@repo/shared`)
-- [x] **P0** Create `.env.example` with all required env vars (Supabase URL/key, OpenAI key, Anthropic key, Upstash Redis URL, Langfuse keys)
+- [x] **P0** Create `.env.example` with all required env vars (Supabase URL/key, OpenAI key, Anthropic key, Upstash Redis URL) — *Langfuse keys removed; tracing deferred/not instrumented*
 - [x] **P0** Configure ESLint (strict TypeScript rules) + Prettier
 - [x] **P1** Configure Husky + lint-staged (pre-commit: lint + format)
 - [x] **P1** Add `docker-compose.yml` for local Redis (BullMQ development)
@@ -70,7 +70,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Create migration: `user_concept_state` + `review_log` tables (§7.4)
 - [x] **P0** Create migration: `questions` + `user_answers` tables (§7.5)
 - [x] **P0** Create migration: `mentor_conversations` table (§7.6) — `user_id`, `learning_object_id`, `title`, `messages JSONB`, `teaching_objective`
-- [x] **P1** Create migration: `learning_goals` + `curriculum_items` tables (§7.7)
+- [x] **P1** Create migration: `learning_goals` tables (§7.7) — `curriculum_items` removed in April 2026 cleanup
 - [x] **P0** Add all indexes as specified in the architecture doc
 - [x] **P0** Enable Row-Level Security on ALL tables — use Supabase CLI raw SQL migrations for RLS policies (Drizzle doesn't natively support RLS; keep schema in Drizzle, policies in `.sql` migration files via `supabase migration new`)
 - [x] **P0** RLS policies: users can only CRUD their own data (`auth.uid() = user_id`). Concepts table is read-accessible to all authenticated users.
@@ -255,7 +255,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Store embeddings in `content_chunks.embedding` (pgvector column)
 - [x] **P0** Create HNSW index on `content_chunks.embedding` for fast similarity search (in Supabase migration)
 - [x] **P0** Rate limiting / error handling for OpenAI API calls
-- [ ] **P1** Track embedding costs via Langfuse
+- [ ] ~~**P1** Track embedding costs via Langfuse~~ *(deferred / not instrumented)*
 
 **Acceptance:** All chunks for a learning object have embeddings stored. Vector similarity search returns relevant chunks for a test query. Embedding generation for a 20-page PDF completes in < 60 seconds.
 
@@ -273,7 +273,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** For documents > context window: hierarchical summarization (per-section → meta-summary)
 - [x] **P0** Store summaries in `learning_objects` (summary_tldr, summary_key_points, summary_deep)
 - [x] **P0** Cache: never regenerate unless source content changes
-- [ ] **P1** Langfuse tracing on every LLM call (latency, tokens, cost)
+- [ ] ~~**P1** Langfuse tracing on every LLM call (latency, tokens, cost)~~ *(deferred / not instrumented)*
 
 **Acceptance:** Upload a PDF → three summary tiers generated and stored. Summaries are factually grounded in the source content. Long document (50+ pages) handled via hierarchical approach without hitting context limits.
 
@@ -349,7 +349,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P0** Streaming response via Vercel AI SDK (`streamText`)
 - [x] **P0** Grounding enforcement: if retrieval similarity < threshold, mentor responds with "I don't have enough information about this in your materials."
 - [x] **P0** Store conversation history in `mentor_conversations` table (§7.6)
-- [ ] **P1** Langfuse tracing for every mentor call
+- [ ] ~~**P1** Langfuse tracing for every mentor call~~ *(deferred / not instrumented)*
 
 **Acceptance:** Mentor can answer questions grounded in uploaded content. Responses cite source material. Streaming works (tokens appear progressively). Tool calls execute correctly (e.g., generating an inline quiz). Off-topic questions get appropriate "I don't have info" response.
 
@@ -562,7 +562,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 - [x] **P1** Rate limiting on all API routes (Upstash Ratelimit) — `@upstash/ratelimit` with Redis-backed sliding window on all 7 API routes, in-memory fallback when Redis unavailable
 - [ ] **P1** Error tracking: Sentry integration
 - [ ] **P1** Product analytics: PostHog integration (page views, feature usage events)
-- [ ] **P1** LLM observability: Langfuse dashboard configured, all AI calls traced
+- [ ] ~~**P1** LLM observability: Langfuse dashboard configured, all AI calls traced~~ *(deferred / not instrumented)*
 
 **Acceptance:** A new user can complete the full learning loop without errors. No unhandled promise rejections in console. All pages pass Lighthouse accessibility > 90. Error states are informative and recoverable.
 
@@ -571,7 +571,7 @@ Each task has a **status**, **priority**, **dependency**, and **acceptance crite
 ### 5.5 Observability & Monitoring
 
 - [ ] **P1** Sentry — error tracking + performance tracing
-- [ ] **P1** Langfuse — LLM call tracing (latency, tokens, cost per call, user feedback correlation)
+- [ ] ~~**P1** Langfuse — LLM call tracing (latency, tokens, cost per call, user feedback correlation)~~ *(deferred / not instrumented)*
 - [ ] **P1** PostHog — event tracking: `content_uploaded`, `summary_viewed`, `mentor_message_sent`, `quiz_answered`, `review_completed`, `streak_achieved`
 - [ ] **P1** Vercel Analytics — web vitals (LCP, FID, CLS)
 - [ ] **P2** Alert rules: error rate spike, LLM latency > 5s, job queue depth > 100

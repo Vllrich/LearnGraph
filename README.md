@@ -90,7 +90,7 @@ Mastery distribution, review history, streak tracking (timezone-aware), and rece
 
 **Auth:** Supabase (email, OAuth, magic link)
 **API:** tRPC v11 with Zod validation
-**State:** TanStack Query (server) + Zustand (client)
+**State:** TanStack Query (server) + React state/Context (client)
 **LLM:** Claude Sonnet 4.5 (primary), GPT-4.1-mini (fallback), text-embedding-3-small (1536 dims)
 
 ---

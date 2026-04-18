@@ -13,7 +13,7 @@ alwaysApply: true
 - **API**: tRPC v11 — ALL procedures require Zod input validation
 - **DB**: Drizzle ORM + Supabase Postgres + pgvector (1536 dims)
 - **Auth**: Supabase Auth
-- **State**: TanStack Query (server) + Zustand (client)
+- **State**: TanStack Query (server) + React state/Context (client)
 - **AI**: Vercel AI SDK — Claude Sonnet 4.5 (primary), GPT-4.1-mini (fallback), text-embedding-3-small
 - **Package manager**: pnpm + Turborepo monorepo
 

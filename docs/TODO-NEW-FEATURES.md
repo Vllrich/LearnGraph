@@ -178,11 +178,11 @@
 
 - [x] **Prerequisite checking** — `getPrerequisiteCheck` API verifies mastery of prereqs before curriculum items
 - [x] **Progress milestones** — visual progress bar per goal on home page with completion tracking
-- [x] **Curriculum sharing** — generate shareable link via `shareCurriculum`, public view at `/shared/[token]` (read-only, no user data, view count)
+- [x] ~~**Curriculum sharing**~~ **(removed in April 2026 V1 kill — re-evaluate if reintroducing)** — generate shareable link via `shareCurriculum`, public view at `/shared/[token]` (read-only, no user data, view count)
 - [ ] **Web resource sourcing** — when user sets a goal without uploading content, AI suggests YouTube videos + free resources to upload (deferred — needs search API)
 - [ ] **Adaptive pacing** — if user masters curriculum items faster/slower than expected, AI adjusts the schedule (deferred — needs usage analytics)
 
-**Deps:** Learning goals (done), curriculum items (done), gap detection (2.1)  
+**Deps:** Learning goals (done), gap detection (2.1)  
 **Shipped:** March 8, 2026
 
 ---

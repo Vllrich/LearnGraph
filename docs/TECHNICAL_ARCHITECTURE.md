@@ -183,7 +183,7 @@ The defensible moat is the **Learning Graph** — a structured knowledge graph o
 | **Containerization** | **Docker** | For BullMQ workers and any services that need custom runtimes. The Next.js app deploys natively on Vercel without containers. At POC stage, Docker may not be needed at all since everything runs as TypeScript on Vercel + Railway. |
 | **CI/CD** | **GitHub Actions** | Lint → test → build → deploy pipeline. Vercel auto-deploys from `main` branch. GitHub Actions for worker service deployment to Railway. |
 | **Observability** | **Vercel Analytics + Sentry + PostHog** | Vercel Analytics for web vitals and performance. Sentry for error tracking and tracing. PostHog for product analytics (feature usage, funnels, retention). All three have generous free tiers. |
-| **LLM Observability** | **Langfuse** | Track every LLM call: latency, token usage, cost, user feedback. Essential for optimizing AI costs and quality. Open-source, self-hostable, or cloud. |
+| **LLM Observability** | **Langfuse** (planned, not yet instrumented) | Track every LLM call: latency, token usage, cost, user feedback. Essential for optimizing AI costs and quality. Open-source, self-hostable, or cloud. |
 | **Migration to AWS/GCP** | **Phase 3** | When you hit Vercel/Railway limits or need SOC2, migrate to ECS/Cloud Run. The modular architecture makes this a deployment change, not a rewrite. |
 
 ---
@@ -732,31 +732,15 @@ CREATE TABLE learning_goals (
     target_date     DATE,
     status          TEXT DEFAULT 'active',
     target_concepts UUID[] DEFAULT '{}',
-    learning_mode   TEXT DEFAULT 'understand_first',  -- V2: one of 6 learning modes
-    schema_version  INTEGER DEFAULT 1,                -- 1 = flat curriculum_items, 2 = modular
+    learning_mode   TEXT DEFAULT 'understand_first',  -- one of 6 learning modes
+    schema_version  INTEGER DEFAULT 1,                -- Reserved for future schema versioning
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-
--- V1: Flat curriculum items (schema_version = 1)
-CREATE TABLE curriculum_items (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    goal_id         UUID REFERENCES learning_goals(id) ON DELETE CASCADE,
-    sequence_order  INT NOT NULL,
-    title           TEXT NOT NULL,
-    description     TEXT,
-    concept_ids     UUID[] DEFAULT '{}',
-    learning_object_id UUID REFERENCES learning_objects(id),
-    estimated_minutes INT,
-    status          TEXT DEFAULT 'pending',  -- pending, in_progress, completed, skipped
-    completed_at    TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX idx_curriculum_goal ON curriculum_items(goal_id, sequence_order);
 ```
 
-### 7.9 Modular Course Structure (V2)
+### 7.9 Modular Course Structure
 
-For courses with `schema_version = 2`. See [modular-courses.md](./modular-courses.md) for full details.
+See [modular-courses.md](./modular-courses.md) for full details.
 
 ```sql
 CREATE TABLE course_modules (
@@ -1035,7 +1019,7 @@ At 10,000 users: **~$5,600/month in LLM costs.** Manageable if Pro tier is $12-2
 | Upstash Redis | $0-10 |
 | Railway (BullMQ workers) | $5-15 |
 | LLM APIs (100 users) | $50-100 |
-| Langfuse (free tier) | $0 |
+| Langfuse (planned, free tier) | $0 |
 | Domain + misc | $15 |
 | **Total** | **$90-180/month** |
 

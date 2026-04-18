@@ -1,5 +1,7 @@
 # Course System Improvement Plan
 
+> **STATUS (April 2026): Implemented.** The V1 `curriculum_items` system has been fully removed. This document is preserved for historical context only; code references below (e.g., `generate.ts`, `method_preferences`, `schema_version=1`) no longer reflect reality. See `docs/modular-courses.md` for the current state.
+
 > **Status:** Draft — March 2026
 > **Context:** Evolving flat `learning_goals` + `curriculum_items` into an adaptive, modular course system inspired by [course-maker.md](./course-maker.md), leveraging our existing `learner_profiles`, concept graph, and FSRS infrastructure.
 

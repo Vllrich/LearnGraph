@@ -24,13 +24,12 @@
 | Item | Status |
 |---|---|
 | `course_modules`, `course_lessons`, `lesson_blocks` tables | ✅ Done |
-| `learning_goals.learning_mode` + `schema_version` columns | ✅ Done |
+| `learning_goals.learning_mode` + `schema_version` column (reserved) | ✅ Done |
 | `LearningMode` / `MethodWeights` shared types | ✅ Done |
 | `getMethodWeights(mode, profile)` resolver | ✅ Done |
-| Drizzle migration `0005_hot_warstar.sql` | ✅ Done |
-| CHECK constraints on `learning_mode` and `schema_version` | ✅ Done |
+| Drizzle baseline `0000_giant_microbe.sql` | ✅ Done |
 | RLS policies for all 3 new tables | ✅ Done |
-| Migration `0006_rls_and_constraints.sql` | ✅ Done |
+| Migration `0001_rls_and_indexes.sql` | ✅ Done |
 
 ---
 
@@ -121,7 +120,7 @@
 | `DiscoveryFeed` + `SuggestionCard` components | ✅ Done |
 | Static "Browse all categories" fallback (collapsible) | ✅ Done |
 | Loading skeletons + error fallback | ✅ Done |
-| Migration `0007_discovery_dismissals.sql` | ✅ Done |
+| Migration `0000_giant_microbe.sql` | ✅ Done |
 
 ---
 
@@ -142,7 +141,7 @@
 
 | Optimization | Status |
 |---|---|
-| 14 DB indexes + HNSW vector index (migration `0008`) | ✅ Done |
+| DB indexes + HNSW vector index (migration `0001_rls_and_indexes.sql`) | ✅ Done |
 | N+1 query fixes (goals: getActive, getCourseProgress, updateConceptStateFromBlock, skipModule) | ✅ Done |
 | 12+ sequential DB calls → Promise.all (review, user, export, analytics, gamification) | ✅ Done |
 | Ownership check consolidation (session-v2, getLessonBlocks, completeBlock: 3-4 queries → 1 join) | ✅ Done |
