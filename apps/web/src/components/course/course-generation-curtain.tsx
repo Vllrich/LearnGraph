@@ -94,7 +94,6 @@ export function CourseGenerationCurtain(props: Props) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const collected: TeaserCardData[] = [];
 
     (async () => {
       try {
@@ -132,8 +131,7 @@ export function CourseGenerationCurtain(props: Props) {
               typeof card?.keyword === "string" &&
               typeof card?.blurb === "string"
             ) {
-              collected.push(card);
-              setAiCards([...collected]);
+              setAiCards((prev) => [...prev, card]);
             }
           }
         }
@@ -175,16 +173,17 @@ export function CourseGenerationCurtain(props: Props) {
       </div>
 
       {card && (
-        <div
-          className={
-            reducedMotion
-              ? "w-full max-w-md"
-              : "w-full max-w-md transition-opacity duration-500"
-          }
-          aria-live="polite"
-          role="status"
-        >
-          <TeaserCard key={`${safeIndex}-${card.keyword}`} card={card} />
+        <div className="w-full max-w-md" role="status">
+          <TeaserCard
+            // Key on keyword+index forces a remount each rotation so
+            // `animate-in` replays. On reduced-motion we skip the
+            // animation classes and just swap content instantly.
+            key={`${safeIndex}-${card.keyword}`}
+            card={card}
+            className={
+              reducedMotion ? undefined : "animate-in fade-in-0 duration-500"
+            }
+          />
         </div>
       )}
 

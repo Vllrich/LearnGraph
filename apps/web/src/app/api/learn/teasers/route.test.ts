@@ -99,6 +99,58 @@ describe("POST /api/learn/teasers", () => {
     expect(res.headers.get("Content-Type")).toContain("text/event-stream");
   });
 
+  it("aborts the upstream stream if no card arrives before the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      mockAuthed("u1");
+      vi.mocked(checkRateLimit).mockResolvedValue({
+        allowed: true,
+        retryAfterMs: 0,
+      });
+
+      // Upstream generator that resolves only when its signal aborts,
+      // simulating a slow / hanging LLM call.
+      vi.mocked(generateTeaserCardsStream).mockImplementation(
+        (async function* (
+          _input: unknown,
+          opts: { signal?: AbortSignal } = {},
+        ) {
+          await new Promise<void>((resolve, reject) => {
+            opts.signal?.addEventListener(
+              "abort",
+              () => reject(new Error("aborted")),
+              { once: true },
+            );
+          });
+        }) as never,
+      );
+
+      const res = await POST(makeReq(validBody));
+      expect(res.body).not.toBeNull();
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      const pumpPromise = (async () => {
+        let buf = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value);
+        }
+        return buf;
+      })();
+
+      // Advance past the 8s first-card deadline — the timer inside
+      // the route should fire, aborting the upstream generator, which
+      // in turn rejects and the route emits an `event: error` frame.
+      await vi.advanceTimersByTimeAsync(8_500);
+
+      const buf = await pumpPromise;
+      expect(buf).toContain("event: error");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("emits an event: card frame for each yielded card", async () => {
     mockAuthed("u1");
     vi.mocked(checkRateLimit).mockResolvedValue({

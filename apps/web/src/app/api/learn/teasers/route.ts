@@ -87,9 +87,19 @@ export async function POST(req: Request): Promise<Response> {
       });
   }
 
-  const timeout = setTimeout(() => {
-    abortCtrl.abort(new Error("teaser timeout"));
-  }, TEASER_TIMEOUT_MS);
+  // Only enforce a timeout until we have the *first* card — once the
+  // stream is producing, we let it run to completion regardless of the
+  // upstream Phase-1 duration (which can exceed 8s by design).
+  let firstCardTimeout: ReturnType<typeof setTimeout> | null = setTimeout(
+    () => abortCtrl.abort(new Error("teaser first-card timeout")),
+    TEASER_TIMEOUT_MS,
+  );
+  const clearFirstCardTimeout = () => {
+    if (firstCardTimeout !== null) {
+      clearTimeout(firstCardTimeout);
+      firstCardTimeout = null;
+    }
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -105,6 +115,7 @@ export async function POST(req: Request): Promise<Response> {
         for await (const card of generateTeaserCardsStream(parsed, {
           signal: abortCtrl.signal,
         })) {
+          clearFirstCardTimeout();
           write("card", card);
         }
         write("done", { ok: true });
@@ -121,7 +132,7 @@ export async function POST(req: Request): Promise<Response> {
           /* controller may already be closed */
         }
       } finally {
-        clearTimeout(timeout);
+        clearFirstCardTimeout();
         try {
           controller.close();
         } catch {
@@ -130,7 +141,7 @@ export async function POST(req: Request): Promise<Response> {
       }
     },
     cancel() {
-      clearTimeout(timeout);
+      clearFirstCardTimeout();
       abortCtrl.abort();
     },
   });

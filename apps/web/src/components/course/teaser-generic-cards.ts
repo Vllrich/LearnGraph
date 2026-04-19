@@ -1,8 +1,6 @@
-export type TeaserCard = {
-  keyword: string;
-  blurb: string;
-  moduleHint?: string;
-};
+import type { TeaserCard } from "@repo/ai";
+
+export type { TeaserCard };
 
 /**
  * Hand-authored fallback cards. Shown immediately while the AI teaser
