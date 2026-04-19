@@ -77,30 +77,43 @@ function useIsHydrated(): boolean {
   );
 }
 
+/** Default width used for first-paint placement before the toolbar is measured. */
+const ESTIMATED_TOOLBAR_WIDTH = 180;
+
 export function SelectionToolbar({
   selection,
   actions,
   onAction,
 }: SelectionToolbarProps) {
   const hydrated = useIsHydrated();
-  const [placement, setPlacement] = useState<Placement | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
 
-  // Callback ref: measures the toolbar the moment React attaches it to the
-  // DOM and on every selection change (because the ref is recreated by the
-  // new closure). setState here runs in a ref callback, not an effect body,
-  // so React 19's set-state-in-effect rule is satisfied by construction.
-  const measureRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (!node || !selection) return;
-      const toolbarWidth = node.offsetWidth || 180;
-      setPlacement(
-        computePlacement(selection.rect, toolbarWidth, getVisibleViewport()),
-      );
-    },
-    [selection],
-  );
+  // Ref callback fires when React attaches the toolbar to the DOM. We record
+  // its measured width so the next render can refine the placement (which
+  // was initially computed using `ESTIMATED_TOOLBAR_WIDTH`). setState in a
+  // ref callback is a regular handler — not an effect body — so React 19's
+  // set-state-in-effect rule doesn't apply.
+  const measureRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const w = node.offsetWidth;
+    if (w > 0) setMeasuredWidth(w);
+  }, []);
 
   if (!hydrated) return null;
+
+  // Placement is derived synchronously from the selection rect on every
+  // render. This matters: gating the motion.div on a lazily-set `placement`
+  // state creates a chicken-and-egg — the ref only attaches when the div
+  // renders, and the div only renders when placement is set. Deriving the
+  // placement from props + a cheap state fallback breaks the cycle while
+  // still letting the measured width refine the next frame.
+  const placement = selection
+    ? computePlacement(
+        selection.rect,
+        measuredWidth ?? ESTIMATED_TOOLBAR_WIDTH,
+        getVisibleViewport(),
+      )
+    : null;
 
   return createPortal(
     <AnimatePresence>
