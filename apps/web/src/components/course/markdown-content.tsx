@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Tooltip } from "@/components/ui/tooltip-card";
 import { CodeBlock } from "@/components/course/code-block";
 import { MusicScore } from "@/components/course/music-score";
+import { MermaidDiagram } from "@/components/course/mermaid-diagram";
 import { cn } from "@/lib/utils";
 
 // ── Inline AST ─────────────────────────────────────────────────────────────
@@ -231,6 +232,8 @@ export function MarkdownContent({ text, className }: MarkdownContentProps) {
               <div key={key} className={anim}>
                 {block.lang === "abc" ? (
                   <MusicScore abc={block.code} />
+                ) : block.lang === "mermaid" ? (
+                  <MermaidDiagram chart={block.code} />
                 ) : (
                   <CodeBlock code={block.code} lang={block.lang} />
                 )}
