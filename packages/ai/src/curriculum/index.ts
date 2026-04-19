@@ -39,3 +39,10 @@ export type {
   WorkedExampleBlockContent,
   MentorBlockContent,
 } from "./blocks";
+export {
+  generateTeaserCardsStream,
+  buildTeaserPrompt,
+  TeaserCardSchema,
+  type TeaserCard,
+  type TeaserInput,
+} from "./generate-teasers";
