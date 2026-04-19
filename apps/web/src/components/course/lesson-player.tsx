@@ -90,10 +90,23 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
     }
   }, [streamedContent, feedback, checkResult]);
 
+  // Abort controller for the in-flight stream, so we can cancel when the block
+  // changes, a new action is invoked, or the component unmounts. Combined with
+  // the `signal.aborted` guard inside `streamBlock`, this prevents SSE chunks
+  // from two overlapping requests (e.g. React Strict Mode's dev-only double
+  // effect) from interleaving into the same `streamedContent` state.
+  const streamAbortRef = useRef<AbortController | null>(null);
+
   // Stream content from the V2 session API
   const streamBlock = useCallback(
     async (action: string, extra?: Record<string, unknown>) => {
       if (!currentBlock) return;
+
+      streamAbortRef.current?.abort();
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
+      const { signal } = controller;
+
       setStreamState("streaming");
       setStreamedContent("");
       setBlockError(null);
@@ -108,11 +121,14 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
             goalId,
             ...extra,
           }),
+          signal,
         });
 
         if (!res.ok || !res.body) {
-          setBlockError("Failed to load this block. You can skip to the next one.");
-          setStreamState("done");
+          if (!signal.aborted) {
+            setBlockError("Failed to load this block. You can skip to the next one.");
+            setStreamState("done");
+          }
           return;
         }
 
@@ -122,7 +138,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done || signal.aborted) break;
           buffer += decoder.decode(value, { stream: true });
 
           const lines = buffer.split("\n");
@@ -132,23 +148,30 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
             if (!line.startsWith("data: ")) continue;
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.type === "text") {
+              if (data.type === "text" && !signal.aborted) {
                 setStreamedContent((prev) => prev + data.text);
               }
             } catch { /* ignore */ }
           }
         }
-      } catch {
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError" || signal.aborted) return;
         setBlockError("Network error. You can skip to the next block.");
       }
-      setStreamState("done");
+      if (!signal.aborted) setStreamState("done");
     },
     [currentBlock, goalId],
   );
 
-  // Auto-start streaming for concept/worked_example blocks
+  // Auto-start streaming for concept/worked_example blocks.
+  //
+  // Strict Mode runs this effect twice on mount. That's OK: streamBlock aborts
+  // any in-flight previous stream before starting a new one, and the aborted
+  // stream's reader loop skips its remaining setState calls via `signal.aborted`.
+  // So the two passes end up with exactly one live stream (the second), with
+  // no interleaved chunks from the first.
   useEffect(() => {
-    if (!currentBlock || streamState !== "idle") return;
+    if (!currentBlock) return;
 
     const type = currentBlock.blockType as BlockType;
     if (type === "concept") {
@@ -165,13 +188,16 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
     } else if (type === "mentor") {
       void streamBlock("stream_mentor");
     } else if (type === "practice") {
-      // Show practice exercise from generated content
       const content = currentBlock.generatedContent as Record<string, unknown>;
       setStreamedContent(content.exercise as string ?? "Complete this exercise.");
       setStreamState("done");
     }
+
+    return () => {
+      streamAbortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBlock, blockIndex]);
+  }, [currentBlock?.id]);
 
   async function fetchCheckpoint() {
     if (!currentBlock) return;
