@@ -1,4 +1,11 @@
-export { generateModularCourse, type ModularCourseInput } from "./generate-modular";
+export {
+  generateCourseSkeleton,
+  completeCourseGeneration,
+  rehydrateSkeletonFromDb,
+  MAX_GENERATION_ERROR_LENGTH,
+  type CourseSkeleton,
+  type ModularCourseInput,
+} from "./generate-modular";
 export {
   getEducationStagePrompt,
   getProfilePrompt,

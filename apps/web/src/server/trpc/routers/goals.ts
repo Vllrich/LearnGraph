@@ -430,7 +430,10 @@ export const goalsRouter = createTRPCRouter({
   getLessonBlocks: protectedProcedure
     .input(z.object({ lessonId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      // Single-query ownership check: lesson → module → goal → user
+      // Single-query ownership check: lesson → module → goal → user.
+      // Also pull `generation_status` so the player can distinguish "blocks
+      // not yet persisted (Phase 2 still running)" from "Phase 2 failed"
+      // and stop polling in the failed case.
       const [lessonRow] = await db
         .select({
           id: courseLessons.id,
@@ -440,6 +443,7 @@ export const goalsRouter = createTRPCRouter({
           sequenceOrder: courseLessons.sequenceOrder,
           createdAt: courseLessons.createdAt,
           completedAt: courseLessons.completedAt,
+          goalGenerationStatus: learningGoals.generationStatus,
         })
         .from(courseLessons)
         .innerJoin(courseModules, eq(courseModules.id, courseLessons.moduleId))

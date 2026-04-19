@@ -1,10 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import { createClient } from "@/lib/supabase/server";
-import { generateModularCourse } from "@repo/ai";
+import {
+  generateCourseSkeleton,
+  completeCourseGeneration,
+  MAX_GENERATION_ERROR_LENGTH,
+  type CourseSkeleton,
+} from "@repo/ai";
 import { db, learningGoals } from "@repo/db";
 import { eq } from "drizzle-orm";
-import { checkRateLimit, LEARNING_MODES } from "@repo/shared";
+import {
+  checkRateLimit,
+  LEARNING_MODES,
+  categorizeGenerationError,
+  formatStoredGenerationError,
+} from "@repo/shared";
 import type { GoalType } from "@repo/shared";
 
 export const maxDuration = 300;
@@ -82,6 +93,31 @@ async function uploadCoverImage(
   return data?.publicUrl ?? null;
 }
 
+/**
+ * Fire-and-forget cover image generation. Runs alongside Phase 2 so it is
+ * never on the user's critical path, and errors never propagate out — a
+ * failed cover image should not flip the goal to `generation_status=failed`.
+ */
+async function generateAndSaveCoverImage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  goalId: string,
+  topic: string,
+  goalType: GoalType,
+): Promise<void> {
+  try {
+    const b64 = await fetchCoverImageB64(topic, goalType);
+    if (!b64) return;
+    const publicUrl = await uploadCoverImage(supabase, b64, goalId);
+    if (!publicUrl) return;
+    await db
+      .update(learningGoals)
+      .set({ coverImageUrl: publicUrl })
+      .where(eq(learningGoals.id, goalId));
+  } catch (err) {
+    console.warn("[learn/start-v2] cover image generation failed:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -113,33 +149,75 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let skeleton: CourseSkeleton;
   try {
-    const [result, imageB64] = await Promise.all([
-      generateModularCourse({
-        ...parsed.data,
-        userId: user.id,
-        learnerProfile: null,
-      }),
-      fetchCoverImageB64(parsed.data.topic, parsed.data.goalType),
-    ]);
-
-    if (imageB64) {
-      const publicUrl = await uploadCoverImage(supabase, imageB64, result.goal.id);
-      if (publicUrl) {
-        await db
-          .update(learningGoals)
-          .set({ coverImageUrl: publicUrl })
-          .where(eq(learningGoals.id, result.goal.id));
-      }
-    }
-
-    return NextResponse.json({
-      goalId: result.goal.id,
-      moduleCount: result.moduleCount,
-      schemaVersion: 2,
+    skeleton = await generateCourseSkeleton({
+      ...parsed.data,
+      userId: user.id,
+      learnerProfile: null,
     });
   } catch (err) {
-    console.error("[learn/start-v2] Failed:", err);
-    return NextResponse.json({ error: "Failed to generate course" }, { status: 500 });
+    console.error("[learn/start-v2] skeleton (phase 1) failed:", err);
+    return NextResponse.json(
+      { error: "Failed to start course generation" },
+      { status: 500 },
+    );
   }
+
+  // Phase 2 runs AFTER the HTTP response has flushed. `after()` keeps the
+  // serverless function alive so we can finish Module 2..N's lessons, every
+  // remaining block outline, and the DALL-E cover image without blocking the
+  // client. A Phase 2 failure is recorded on the goal row (status='failed' +
+  // a *categorized* generation_error — never a raw SDK message, to avoid
+  // leaking prompts / schema details to the UI) so the UI can surface it.
+  // The cover image failure is non-fatal — `generateAndSaveCoverImage`
+  // swallows its own errors.
+  after(async () => {
+    const coverPromise = generateAndSaveCoverImage(
+      supabase,
+      skeleton.goalId,
+      skeleton.topic,
+      skeleton.goalType,
+    );
+    try {
+      await completeCourseGeneration(skeleton);
+    } catch (err) {
+      const correlationId = randomUUID().slice(0, 8);
+      const reason = categorizeGenerationError(err);
+      console.error(
+        `[learn/start-v2] phase 2 failed [${correlationId}] (${reason}):`,
+        err,
+      );
+      try {
+        await db
+          .update(learningGoals)
+          .set({
+            generationStatus: "failed",
+            generationError: formatStoredGenerationError(
+              reason,
+              correlationId,
+            ).slice(0, MAX_GENERATION_ERROR_LENGTH),
+          })
+          .where(eq(learningGoals.id, skeleton.goalId));
+      } catch (updateErr) {
+        console.error(
+          `[learn/start-v2] failed to record phase-2 error [${correlationId}]:`,
+          updateErr,
+        );
+      }
+    }
+    // Let the cover-image task finish before `after()` releases the
+    // invocation. Cover errors are already swallowed internally so this
+    // `await` never rejects. Note: the status flip to 'ready' happens at
+    // the tail of `completeCourseGeneration`, so a cover image uploaded
+    // here after the flip shows up on the next roadmap refetch — acceptable
+    // because the cover is decorative.
+    await coverPromise;
+  });
+
+  return NextResponse.json({
+    goalId: skeleton.goalId,
+    moduleCount: skeleton.moduleCount,
+    schemaVersion: 2,
+  });
 }

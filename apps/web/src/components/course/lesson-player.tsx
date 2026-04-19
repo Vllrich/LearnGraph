@@ -72,6 +72,16 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
       gcTime: 30 * 60_000,
       refetchInterval: (query) => {
         const blocks = query.state.data?.blocks ?? [];
+        const goalStatus = query.state.data?.lesson.goalGenerationStatus;
+        // If the upstream course generation (Phase 2) failed, stop polling —
+        // no amount of waiting will produce blocks. The UI surfaces a
+        // terminal error state below.
+        if (goalStatus === "failed") return false;
+        // When the course is still in Phase 2, the block outline for this
+        // lesson may not be persisted yet (blocks.length === 0). Poll
+        // slightly faster than the pending-content case because it's
+        // blocking first render of the lesson entirely.
+        if (blocks.length === 0) return 2_000;
         const anyPending = blocks.some(
           (b) =>
             (b.generatedContent as Record<string, unknown> | null)?._pending ===
@@ -79,6 +89,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
         );
         return anyPending ? 3_000 : false;
       },
+      refetchIntervalInBackground: false,
     },
   );
   const completeMutation = trpc.goals.completeBlock.useMutation({
@@ -393,7 +404,47 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
     );
   }
 
-  if (!data || blocks.length === 0) {
+  // Phase 2 failed upstream — blocks for this lesson will never arrive.
+  // Surface a terminal error state and send the user back to the roadmap
+  // where the failure banner explains the state.
+  if (data && blocks.length === 0 && data.lesson.goalGenerationStatus === "failed") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm font-medium">This lesson couldn&apos;t be prepared.</p>
+        <p className="text-xs text-muted-foreground">
+          Course generation didn&apos;t finish for the later lessons. Head back
+          to the course overview for details.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => router.push(`/course/${goalId}`)}>
+          Back to Course
+        </Button>
+      </div>
+    );
+  }
+
+  // During Phase 2, `data.lesson` exists (the lesson row was inserted in
+  // Phase 1 or by the fan-out), but `blocks` is an empty array until the
+  // block outline lands. The query is already polling (see `refetchInterval`
+  // above), so we just need a friendly waiting state.
+  if (data && blocks.length === 0) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+        <Loader2 className="size-6 animate-spin text-primary" />
+        <div>
+          <p className="text-sm font-medium">Preparing your first lesson…</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            We&apos;re shaping the activities for this lesson. It usually
+            takes a few seconds.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => router.push(`/course/${goalId}`)}>
+          Back to Course
+        </Button>
+      </div>
+    );
+  }
+
+  if (!data) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">No blocks found for this lesson.</p>

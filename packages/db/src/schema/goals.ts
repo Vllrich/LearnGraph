@@ -22,6 +22,14 @@ export const learningGoals = pgTable("learning_goals", {
   contextNote: text("context_note"),
   learningMode: text("learning_mode").default("understand_first"),
   schemaVersion: integer("schema_version").default(1),
+  // Progressive-generation lifecycle. See docs/modular-courses.md for the
+  // two-phase flow: 'generating' while Phase 2 (after()) is materializing the
+  // course, 'ready' once done, 'failed' with `generationError` populated if
+  // Phase 2 crashed. Default 'ready' so existing rows backfill cleanly.
+  // A CHECK constraint in 0002_goal_generation_status.sql pins the enum.
+  generationStatus: text("generation_status").notNull().default("ready"),
+  generationStartedAt: timestamp("generation_started_at", { withTimezone: true }),
+  generationError: text("generation_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

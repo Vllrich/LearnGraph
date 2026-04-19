@@ -15,6 +15,13 @@
       "when": 1776509339988,
       "tag": "0001_rls_and_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776509339989,
+      "tag": "0002_goal_generation_status",
+      "breakpoints": true
     }
   ]
 }

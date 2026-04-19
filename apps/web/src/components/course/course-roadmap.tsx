@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Lock,
   CheckCircle2,
@@ -16,7 +17,13 @@ import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { parseStoredGenerationError } from "@repo/shared";
 import { toast } from "sonner";
+
+// If generation stays in 'generating' for longer than this, stop polling and
+// show a "taking longer than usual" hint. The server-side cron sweeper (follow-
+// up work) uses the same window to flip stuck jobs to 'failed'.
+const GENERATION_POLL_MAX_MS = 15 * 60_000;
 
 
 
@@ -35,7 +42,42 @@ const MODULE_STATUS_STYLES: Record<string, { bg: string; border: string; icon: s
 export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.goals.getCourseRoadmap.useQuery({ goalId });
+  const [pollStartedAt] = useState(() => Date.now());
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const { data, isLoading, error } = trpc.goals.getCourseRoadmap.useQuery(
+    { goalId },
+    {
+      // Poll while the background course generation (Phase 2) is still
+      // running so new modules / lessons flow in without a manual refresh.
+      // Stop polling the moment the goal flips to 'ready' or 'failed', or
+      // after `GENERATION_POLL_MAX_MS` — whichever comes first. The hard cap
+      // stops a left-open tab from polling forever if Phase 2 genuinely
+      // hangs without updating the row (the cron sweeper will eventually
+      // flip it to 'failed', but we don't want to wait on that client-side).
+      refetchInterval: (query) => {
+        if (query.state.data?.goal.generationStatus !== "generating") return false;
+        if (Date.now() - pollStartedAt > GENERATION_POLL_MAX_MS) return false;
+        return 3_000;
+      },
+      refetchIntervalInBackground: false,
+    },
+  );
+
+  // Mirror the `refetchInterval` hard-cap into React state so the UI can
+  // switch messaging once we stop polling without the goal having moved.
+  useEffect(() => {
+    if (data?.goal.generationStatus !== "generating") return;
+    // Use `setTimeout` even for already-elapsed deadlines so the state
+    // update happens in a later tick rather than synchronously inside the
+    // effect body (avoids cascading renders flagged by
+    // `react-hooks/set-state-in-effect`).
+    const remaining = Math.max(
+      0,
+      GENERATION_POLL_MAX_MS - (Date.now() - pollStartedAt),
+    );
+    const timer = setTimeout(() => setPollingTimedOut(true), remaining);
+    return () => clearTimeout(timer);
+  }, [data?.goal.generationStatus, pollStartedAt]);
   const skipMutation = trpc.goals.skipModule.useMutation({
     onSuccess: () => {
       void utils.goals.getCourseRoadmap.invalidate({ goalId });
@@ -69,6 +111,11 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
   const totalLessons = modules.reduce((s, m) => s + m.totalLessons, 0);
   const completedLessons = modules.reduce((s, m) => s + m.completedLessons, 0);
   const overallProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+  const isGenerating = goal.generationStatus === "generating";
+  const generationFailed = goal.generationStatus === "failed";
+  const failureCopy = generationFailed
+    ? parseStoredGenerationError(goal.generationError)
+    : null;
 
   function handleStartLesson() {
     router.push(`/course/${goalId}/learn`);
@@ -90,6 +137,55 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
         </div>
         <Progress value={overallProgress} className="mt-3 h-2" />
       </div>
+
+      {/* Progressive-generation status banners */}
+      {isGenerating && !pollingTimedOut && (
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-primary">
+              Building the rest of your course…
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Your first lesson is ready — jump in now while we finish the other
+              modules in the background.
+            </p>
+          </div>
+        </div>
+      )}
+      {isGenerating && pollingTimedOut && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              This is taking longer than usual
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              We&apos;ve stopped checking for updates automatically. Refresh
+              the page to try again, or come back later.
+            </p>
+          </div>
+        </div>
+      )}
+      {generationFailed && failureCopy && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-destructive">
+              We couldn&apos;t finish generating this course
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {failureCopy.message} You can still work with the modules that
+              were created.
+            </p>
+            {failureCopy.supportCode && (
+              <p className="mt-1 text-[10px] font-mono text-muted-foreground/60">
+                Support code: {failureCopy.supportCode}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Module list */}
       <div className="space-y-3">
