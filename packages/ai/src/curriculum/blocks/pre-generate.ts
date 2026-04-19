@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, lessonBlocks } from "@repo/db";
 import type { BlockType, BloomLevel } from "@repo/shared";
 import { generateBlockContent } from "./generate-block";
@@ -27,13 +27,20 @@ const DEFAULT_CONCURRENCY = 3;
  * upstream LLM rate limits. Per-block failures are isolated: we log and skip,
  * so one bad block never poisons the rest of the lesson.
  *
- * Idempotent: rows whose `generatedContent._pending` flag has already been
- * cleared are skipped, so concurrent warm-up passes (e.g. lesson open + player
- * look-ahead firing at roughly the same time) will not re-generate the same
- * block. A final "still pending" re-check on the DB before writing would fully
- * close the race, but the cost is ~low (idempotent overwrite of identical
- * JSON) and not worth an extra round-trip per block.
+ * Race-safe: the `_pending` array filter is only a best-effort short-circuit.
+ * The actual `UPDATE` is guarded by a `WHERE generated_content->>'_pending' =
+ * 'true'` clause (see `preventOverwritePredicate`), so a row that has already
+ * been materialized by a concurrent writer (warm-up + look-ahead, or a
+ * synchronous in-line generation in `session-v2`) cannot be silently
+ * overwritten. The losing writer's generated content is discarded — we burn a
+ * wasted LLM call in that narrow window but never corrupt cached content.
  */
+
+// Matches a `lesson_blocks` row only while its JSONB payload still carries
+// the `_pending: true` sentinel. Used in `UPDATE … WHERE` so concurrent
+// writers can't clobber already-materialized rows.
+const preventOverwritePredicate = sql`${lessonBlocks.generatedContent}->>'_pending' = 'true'`;
+
 export async function preGeneratePendingBlocks(
   blocks: ReadonlyArray<PendingLessonBlock>,
   courseTopicFallback: string,
@@ -69,7 +76,12 @@ export async function preGeneratePendingBlocks(
         await db
           .update(lessonBlocks)
           .set({ generatedContent: generated })
-          .where(eq(lessonBlocks.id, row.id));
+          .where(
+            and(
+              eq(lessonBlocks.id, row.id),
+              preventOverwritePredicate,
+            ),
+          );
       } catch (err) {
         console.error(
           `[pre-generate] block ${row.id} (${row.blockType}) failed:`,

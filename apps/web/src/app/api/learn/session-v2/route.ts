@@ -4,7 +4,7 @@ import { streamText as aiStreamText, generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { generateBlockContent, preGeneratePendingBlocks, primaryModel } from "@repo/ai";
 import { db, learningGoals, lessonBlocks, courseLessons, courseModules } from "@repo/db";
-import { eq, and, gt, asc } from "drizzle-orm";
+import { eq, and, gt, asc, sql } from "drizzle-orm";
 import type { BlockType, BloomLevel } from "@repo/shared";
 
 export const maxDuration = 60;
@@ -130,6 +130,12 @@ export async function POST(req: NextRequest) {
   const block = ownershipRow;
   const conceptTitle = block.blockType;
 
+  // Revisits of already-completed blocks skip the fake "typing" animation.
+  // Derived from the ownership row's snapshot (status can't transition to
+  // "completed" while we hold the snapshot), so it's locally consistent with
+  // the content we're about to serve.
+  const instant = block.status === "completed";
+
   let content = block.generatedContent as Record<string, unknown>;
 
   if (content._pending) {
@@ -143,10 +149,19 @@ export async function POST(req: NextRequest) {
         courseTopic: (content.courseTopic as string) ?? goal.title,
       });
       content = generated as Record<string, unknown>;
+      // Guard against concurrent warm-up writers clobbering each other: only
+      // persist if the row is still pending. If we lose the race the already-
+      // materialized DB version stays, and we serve our local `content` for
+      // this request — subsequent requests pick up the winner's version.
       await db
         .update(lessonBlocks)
         .set({ generatedContent: content })
-        .where(eq(lessonBlocks.id, blockId));
+        .where(
+          and(
+            eq(lessonBlocks.id, blockId),
+            sql`${lessonBlocks.generatedContent}->>'_pending' = 'true'`,
+          ),
+        );
     } catch (err) {
       console.error("[session-v2] generateBlockContent failed:", err);
       return new Response(
@@ -163,14 +178,13 @@ export async function POST(req: NextRequest) {
   // naked fire-and-forget that could be torn down when the response closed.
   after(
     preGenerateNextBlock(block.lessonId, block.sequenceOrder, goal.title).catch(
-      (err) => console.error("[session-v2] preGenerateNextBlock failed:", err),
+      (err) =>
+        console.error(
+          `[session-v2] preGenerateNextBlock failed (lessonId=${block.lessonId}, fromSeq=${block.sequenceOrder}):`,
+          err,
+        ),
     ),
   );
-
-  // Revisits of already-completed blocks skip the fake "typing" animation.
-  // The content is cached and the learner has already seen it, so streaming
-  // word-by-word just adds latency with no pedagogical value.
-  const instant = block.status === "completed";
 
   // ─── Concept / Worked Example: stream pre-generated content ─────────
   if (action === "stream_concept" || action === "stream_worked_example") {

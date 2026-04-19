@@ -55,15 +55,37 @@ type StreamState = "idle" | "streaming" | "done";
 export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Lesson blocks are materialized once to Postgres and then effectively
-  // immutable for the duration of a session, so we can safely serve the
-  // cached result for much longer than the app-wide 30s default. This avoids
-  // a full refetch on back-navigation from course → lesson → course → lesson.
+  const utils = trpc.useUtils();
+  // Lesson blocks are effectively immutable once materialized, so we cache
+  // longer than the 30s app-wide default to avoid refetch churn on
+  // course ↔ lesson back-navigation. Two caveats that shape the options:
+  //   - `status` and certain fields (e.g. practice `exercise`) are read from
+  //     the cached response directly, so we must re-fetch once all blocks are
+  //     materialized server-side. `refetchInterval` polls while any block is
+  //     still `_pending` and stops as soon as warm-up completes.
+  //   - `completeBlock` mutates `status`; we invalidate below to keep the
+  //     cache consistent after completion.
   const { data, isLoading } = trpc.goals.getLessonBlocks.useQuery(
     { lessonId },
-    { staleTime: 5 * 60_000, gcTime: 30 * 60_000 },
+    {
+      staleTime: 5 * 60_000,
+      gcTime: 30 * 60_000,
+      refetchInterval: (query) => {
+        const blocks = query.state.data?.blocks ?? [];
+        const anyPending = blocks.some(
+          (b) =>
+            (b.generatedContent as Record<string, unknown> | null)?._pending ===
+            true,
+        );
+        return anyPending ? 3_000 : false;
+      },
+    },
   );
-  const completeMutation = trpc.goals.completeBlock.useMutation();
+  const completeMutation = trpc.goals.completeBlock.useMutation({
+    onSuccess: () => {
+      void utils.goals.getLessonBlocks.invalidate({ lessonId });
+    },
+  });
   const { readingMode, setReadingMode } = useReadingMode();
 
   // Enter reading mode by default when lesson player mounts
