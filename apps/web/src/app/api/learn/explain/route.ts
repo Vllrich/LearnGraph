@@ -35,18 +35,30 @@ const bodySchema = z.object({
 
 function sseStream(stream: AsyncIterable<string>) {
   const encoder = new TextEncoder();
+  // TEMP diag — remove once Explain/Ask pipeline is QA'd end-to-end.
+  const diag = process.env.NODE_ENV !== "production";
   return new ReadableStream({
     async start(controller) {
+      let chunkCount = 0;
+      let charCount = 0;
       try {
         for await (const chunk of stream) {
+          chunkCount++;
+          charCount += chunk.length;
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: "text", text: chunk })}\n\n`),
+          );
+        }
+        if (diag) {
+          console.info(
+            `[learn/explain] stream done chunks=${chunkCount} chars=${charCount}`,
           );
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
         controller.close();
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Stream failed";
+        if (diag) console.warn("[learn/explain] stream threw", msg);
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: "error", error: msg })}\n\n`),
         );

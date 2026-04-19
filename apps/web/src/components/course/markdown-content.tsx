@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import { Tooltip } from "@/components/ui/tooltip-card";
 import { CodeBlock } from "@/components/course/code-block";
 import { MusicScore } from "@/components/course/music-score";
@@ -61,16 +61,40 @@ function parseBlocks(text: string): Block[] {
     const line = lines[i]!;
 
     // Fenced code blocks: ```lang ... ```
+    //
+    // While streaming, we defer emitting the block until the closing fence
+    // has arrived. Rendering a partial block on every chunk caused expensive
+    // children (MermaidDiagram, MusicScore) to mount with ever-growing input
+    // and kick off a new async render per chunk — dozens of concurrent
+    // `mermaid.render()` / `abcjs.renderAbc()` calls piling up on the main
+    // thread. That stacked work caused the renderer to hang on subsequent
+    // interactions (e.g. clicking the Continue button right after reading a
+    // block containing a diagram). By skipping unclosed fences entirely, the
+    // diagram/score mounts exactly once with its final content when the last
+    // chunk (containing the closing ```) lands.
     if (/^```/.test(line)) {
       const lang = line.replace(/^```/, "").trim() || "text";
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !/^```\s*$/.test(lines[i]!)) {
+      let closed = false;
+      while (i < lines.length) {
+        if (/^```\s*$/.test(lines[i]!)) {
+          closed = true;
+          i++;
+          break;
+        }
         codeLines.push(lines[i]!);
         i++;
       }
-      if (i < lines.length) i++; // skip closing ```
-      blocks.push({ type: "code_block", lang, code: codeLines.join("\n") });
+      if (closed) {
+        blocks.push({ type: "code_block", lang, code: codeLines.join("\n") });
+      } else {
+        // Stream hasn't delivered the closing fence yet. Bail out entirely
+        // — the next parse (triggered by the next chunk) will re-evaluate
+        // once the full block is in hand. Everything already pushed to
+        // `blocks` (prose before the fence) is fine to keep.
+        break;
+      }
     } else if (/^## /.test(line)) {
       blocks.push({ type: "h2", nodes: parseInline(line.replace(/^## /, "")) });
       i++;
@@ -168,19 +192,23 @@ type MarkdownContentProps = {
   className?: string;
 };
 
-export function MarkdownContent({ text, className }: MarkdownContentProps) {
+export const MarkdownContent = React.memo(function MarkdownContent({
+  text,
+  className,
+}: MarkdownContentProps) {
   const blocks = useMemo(() => parseBlocks(text), [text]);
-  // Track previous text so we can derive which blocks are new.
-  // When text grows, blocks added after the previous parse count get the
-  // reveal animation. On first render everything animates in.
-  const [prevText, setPrevText] = useState(text);
-  const prevBlocks = useMemo(() => parseBlocks(prevText), [prevText]);
-  let newFromIndex = prevBlocks.length;
-  if (text !== prevText) {
-    setPrevText(text);
-  } else {
-    newFromIndex = blocks.length;
-  }
+
+  // Reveal-animation bookkeeping. We track the previous block count in a ref
+  // rather than state so we don't trigger a second render per chunk (the
+  // earlier `setPrevText` during-render pattern forced React to discard and
+  // re-run the whole parse on every streaming tick, compounding with heavy
+  // children like MermaidDiagram). The ref is updated during render which is
+  // safe here because the read happens strictly BEFORE the write and the
+  // stored value is used as a visual hint only — missing an animation frame
+  // is strictly preferable to blocking the main thread.
+  const prevBlockCountRef = useRef(0);
+  const newFromIndex = prevBlockCountRef.current;
+  prevBlockCountRef.current = blocks.length;
 
   return (
     <div
@@ -249,4 +277,4 @@ export function MarkdownContent({ text, className }: MarkdownContentProps) {
       })}
     </div>
   );
-}
+});

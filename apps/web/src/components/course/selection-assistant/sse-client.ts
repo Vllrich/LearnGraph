@@ -64,11 +64,19 @@ export async function streamSse(opts: StreamSseOptions): Promise<void> {
   const decoder = new TextDecoder();
   let buffer = "";
 
+  // TEMP diag: wire-level visibility into SSE framing. Remove once the
+  // Explain/Ask pipeline has been QA'd end-to-end.
+  const diag = process.env.NODE_ENV !== "production";
+  let chunkCount = 0;
+  let byteCount = 0;
+
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done || signal.aborted) break;
-      buffer += decoder.decode(value, { stream: true });
+      const decoded = decoder.decode(value, { stream: true });
+      byteCount += decoded.length;
+      buffer += decoded;
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
@@ -77,14 +85,21 @@ export async function streamSse(opts: StreamSseOptions): Promise<void> {
           const event = JSON.parse(line.slice(6)) as SseEvent;
           if (signal.aborted) return;
           if (event.type === "text") {
+            chunkCount++;
             onChunk(event.text);
           } else if (event.type === "error") {
+            if (diag) console.warn("[streamSse] server error", event.error);
             onError?.(event.error);
           }
-        } catch {
-          // Malformed frame — ignore and keep reading.
+        } catch (parseErr) {
+          if (diag) console.warn("[streamSse] bad frame", line, parseErr);
         }
       }
+    }
+    if (diag) {
+      console.info(
+        `[streamSse] ${url} ended: aborted=${signal.aborted} chunks=${chunkCount} bytes=${byteCount}`,
+      );
     }
     if (!signal.aborted) onDone?.();
   } catch (err) {
