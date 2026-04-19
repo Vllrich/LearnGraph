@@ -22,6 +22,7 @@ import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { MarkdownContent } from "@/components/course/markdown-content";
+import { SelectionAssistant } from "@/components/course/selection-assistant";
 import { useReadingMode } from "@/contexts/reading-mode";
 import type { BlockType } from "@repo/shared";
 
@@ -602,6 +603,18 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const BlockIcon = BLOCK_ICONS[blockType];
   const content = (currentBlock?.generatedContent ?? {}) as Record<string, unknown>;
 
+  // Short, LLM-facing hint about what the learner is currently studying. The
+  // selection assistant uses this so generic terms get explained in the
+  // context of THIS lesson (e.g. "gradient" means one thing in calculus and
+  // another in CSS). Falls back gracefully when the block doesn't carry a
+  // concept name.
+  const blockTopic = (() => {
+    const conceptName = typeof content.conceptName === "string" ? content.conceptName : null;
+    const label = BLOCK_LABELS[blockType];
+    if (conceptName) return `${label} — ${conceptName}`;
+    return label;
+  })();
+
   const renderCheckpointQuestions = () => {
     if (!feedback) return null;
     let questions: Array<{
@@ -760,6 +773,13 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <SelectionAssistant
+          goalId={goalId}
+          lessonId={lessonId}
+          blockId={currentBlock?.id}
+          lessonTitle={data.lesson.title}
+          blockTopic={blockTopic}
+        >
         <div className={cn(
           "mx-auto max-w-2xl px-6 py-12 sm:px-8 transition-all duration-300",
           blockTransition ? "translate-y-3 opacity-0" : "translate-y-0 opacity-100",
@@ -931,6 +951,7 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
             </div>
           )}
         </div>
+        </SelectionAssistant>
       </div>
     </div>
   );
