@@ -1,5 +1,5 @@
-import { generateObject } from "ai";
-import { primaryModel } from "../../models";
+import { generateObject, NoObjectGeneratedError } from "ai";
+import { structuredPrimaryModel, structuredFallbackModel } from "../../models";
 import { getProfilePrompt, getEducationStagePrompt } from "../method-defaults";
 import type { BlockType, BloomLevel, LearnerProfile } from "@repo/shared";
 import {
@@ -90,23 +90,54 @@ Learner profile:
 ${profilePrompt}
 ${groundingContext}`;
 
-  const MAX_RETRIES = 2;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  // Reasoning models (gpt-5*) spend tokens on internal reasoning before emitting
+  // output, so the budget must cover reasoning + JSON. Too small → empty output
+  // with finishReason: 'length'. 16k leaves plenty of headroom for both.
+  const MAX_TOKENS = 16000;
+
+  // Attempt 0: primary @ 0.5, Attempt 1: primary @ 0.3, Attempt 2: fallback @ 0.3.
+  const attempts: Array<{
+    model: typeof structuredPrimaryModel;
+    label: "primary" | "fallback";
+    temperature: number;
+  }> = [
+    { model: structuredPrimaryModel, label: "primary", temperature: 0.5 },
+    { model: structuredPrimaryModel, label: "primary", temperature: 0.3 },
+    { model: structuredFallbackModel, label: "fallback", temperature: 0.3 },
+  ];
+
+  let lastError: unknown;
+  for (let i = 0; i < attempts.length; i++) {
+    const { model, label, temperature } = attempts[i];
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { object } = await generateObject({
-        model: primaryModel,
+        model,
         output: "object",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         schema: schema as any,
         prompt,
-        temperature: attempt === 0 ? 0.5 : 0.3,
-        maxTokens: 4000,
+        temperature,
+        maxTokens: MAX_TOKENS,
       });
       return object as BlockContent;
     } catch (err) {
-      if (attempt === MAX_RETRIES) throw err;
+      lastError = err;
+      const diag =
+        err instanceof NoObjectGeneratedError
+          ? {
+              finishReason: err.finishReason,
+              usage: err.usage,
+              textLen: err.text?.length ?? 0,
+            }
+          : { message: err instanceof Error ? err.message : String(err) };
+      console.warn(
+        `[generateBlockContent] attempt ${i + 1}/${attempts.length} (${label}, blockType=${blockType}) failed:`,
+        diag,
+      );
     }
   }
 
-  throw new Error(`Block generation failed after ${MAX_RETRIES + 1} attempts`);
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Block generation failed after ${attempts.length} attempts`);
 }
