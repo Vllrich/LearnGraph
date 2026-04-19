@@ -55,7 +55,14 @@ type StreamState = "idle" | "streaming" | "done";
 export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { data, isLoading } = trpc.goals.getLessonBlocks.useQuery({ lessonId });
+  // Lesson blocks are materialized once to Postgres and then effectively
+  // immutable for the duration of a session, so we can safely serve the
+  // cached result for much longer than the app-wide 30s default. This avoids
+  // a full refetch on back-navigation from course → lesson → course → lesson.
+  const { data, isLoading } = trpc.goals.getLessonBlocks.useQuery(
+    { lessonId },
+    { staleTime: 5 * 60_000, gcTime: 30 * 60_000 },
+  );
   const completeMutation = trpc.goals.completeBlock.useMutation();
   const { readingMode, setReadingMode } = useReadingMode();
 

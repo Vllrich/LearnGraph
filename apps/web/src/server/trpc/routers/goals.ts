@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import {
   db,
@@ -459,10 +460,22 @@ export const goalsRouter = createTRPCRouter({
         .where(eq(lessonBlocks.lessonId, input.lessonId))
         .orderBy(asc(lessonBlocks.sequenceOrder));
 
-      // Fire-and-forget: pre-generate ALL pending blocks so they're ready when requested
-      const pendingBlocks = blocks.filter(
-        (b) => (b.generatedContent as Record<string, unknown>)?._pending,
-      );
+      // Lesson-open warm-up: materialize every still-pending block for this
+      // lesson so the player can stream from cached JSONB with no LLM latency.
+      //
+      // Scheduled via `after()` (runs once the tRPC response has flushed) so
+      // the caller isn't blocked and — critically — so the runtime reliably
+      // keeps the function alive until the writes land. The previous
+      // `import(...).then(...).catch(() => {})` was a true detached promise and
+      // could be killed mid-flight on serverless, leaving blocks pending.
+      const pendingBlocks = blocks
+        .filter((b) => (b.generatedContent as Record<string, unknown>)?._pending)
+        .map((b) => ({
+          id: b.id,
+          blockType: b.blockType,
+          generatedContent: b.generatedContent,
+        }));
+
       if (pendingBlocks.length > 0) {
         const [goalRow] = await db
           .select({ title: learningGoals.title })
@@ -472,26 +485,19 @@ export const goalsRouter = createTRPCRouter({
           .limit(1);
 
         if (goalRow) {
-          import("@repo/ai").then(async ({ generateBlockContent }) => {
-            for (const pending of pendingBlocks) {
-              const c = pending.generatedContent as Record<string, unknown>;
-              try {
-                const generated = await generateBlockContent({
-                  blockType: pending.blockType as import("@repo/shared").BlockType,
-                  conceptName: (c.conceptName as string) ?? pending.blockType,
-                  bloomLevel: (c.bloomLevel as import("@repo/shared").BloomLevel) ?? "understand",
-                  lessonTitle: (c.lessonTitle as string) ?? "",
-                  moduleTitle: (c.moduleTitle as string) ?? "",
-                  courseTopic: (c.courseTopic as string) ?? goalRow.title,
-                });
-                await db.update(lessonBlocks)
-                  .set({ generatedContent: generated })
-                  .where(eq(lessonBlocks.id, pending.id));
-              } catch (err) {
-                console.error("[pre-generate] block failed:", err);
-              }
+          const courseTopic = goalRow.title;
+          after(async () => {
+            try {
+              const { preGeneratePendingBlocks } = await import("@repo/ai");
+              // concurrency=3 keeps warm-up fast while staying well under
+              // Anthropic TPM limits for a single-user burst.
+              await preGeneratePendingBlocks(pendingBlocks, courseTopic, {
+                concurrency: 3,
+              });
+            } catch (err) {
+              console.error("[getLessonBlocks] warm-up failed:", err);
             }
-          }).catch(() => {});
+          });
         }
       }
 

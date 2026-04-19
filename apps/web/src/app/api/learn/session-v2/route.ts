@@ -1,8 +1,8 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { z } from "zod";
 import { streamText as aiStreamText, generateObject } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { generateBlockContent, primaryModel } from "@repo/ai";
+import { generateBlockContent, preGeneratePendingBlocks, primaryModel } from "@repo/ai";
 import { db, learningGoals, lessonBlocks, courseLessons, courseModules } from "@repo/db";
 import { eq, and, gt, asc } from "drizzle-orm";
 import type { BlockType, BloomLevel } from "@repo/shared";
@@ -156,8 +156,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Look-ahead: pre-generate the next pending block in this lesson
-  preGenerateNextBlock(block.lessonId, block.sequenceOrder, goal.title).catch(() => {});
+  // Look-ahead: pre-generate the next pending blocks in this lesson. Start
+  // the work immediately (in parallel with the SSE stream that follows) and
+  // register the promise with `after()` so the serverless runtime reliably
+  // keeps the function alive until the DB writes land. Previously this was a
+  // naked fire-and-forget that could be torn down when the response closed.
+  after(
+    preGenerateNextBlock(block.lessonId, block.sequenceOrder, goal.title).catch(
+      (err) => console.error("[session-v2] preGenerateNextBlock failed:", err),
+    ),
+  );
+
+  // Revisits of already-completed blocks skip the fake "typing" animation.
+  // The content is cached and the learner has already seen it, so streaming
+  // word-by-word just adds latency with no pedagogical value.
+  const instant = block.status === "completed";
 
   // ─── Concept / Worked Example: stream pre-generated content ─────────
   if (action === "stream_concept" || action === "stream_worked_example") {
@@ -166,7 +179,7 @@ export async function POST(req: NextRequest) {
         ? formatConceptContent(content)
         : formatWorkedExampleContent(content);
 
-    const stream = sseStream(streamText(text));
+    const stream = sseStream(streamText(text, { instant }));
     return sseResponse(stream);
   }
 
@@ -228,7 +241,7 @@ export async function POST(req: NextRequest) {
     const prompt = content.prompt as string ?? "Reflect on what you've learned.";
     const guiding = content.guidingQuestions as string[] ?? [];
     const text = `${prompt}\n\n${guiding.map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
-    return sseResponse(sseStream(streamText(text)));
+    return sseResponse(sseStream(streamText(text, { instant })));
   }
 
   // ─── Reflection submission ─────────────────────────────────────────
@@ -279,7 +292,7 @@ export async function POST(req: NextRequest) {
   if (action === "stream_mentor") {
     const opening = content.openingPrompt as string ?? "Let's explore this topic together.";
     if (!userAnswer) {
-      return sseResponse(sseStream(streamText(opening)));
+      return sseResponse(sseStream(streamText(opening, { instant })));
     }
     const result = streamFeedback({
       topic: goal.title,
@@ -372,7 +385,17 @@ function formatWorkedExampleContent(content: Record<string, unknown>): string {
   return parts.join("\n");
 }
 
-async function* streamText(text: string): AsyncIterable<string> {
+async function* streamText(
+  text: string,
+  options: { instant?: boolean } = {},
+): AsyncIterable<string> {
+  // Completed-block revisits: flush the whole payload in a single SSE event.
+  // The client appends it once and the typing cursor flicks off immediately.
+  if (options.instant) {
+    if (text.length > 0) yield text;
+    return;
+  }
+
   const words = text.split(/(\s+)/);
   for (let i = 0; i < words.length; i += 3) {
     yield words.slice(i, i + 3).join("");
@@ -380,7 +403,11 @@ async function* streamText(text: string): AsyncIterable<string> {
   }
 }
 
-async function preGenerateNextBlock(lessonId: string, currentSeq: number, courseTopic: string) {
+async function preGenerateNextBlock(
+  lessonId: string,
+  currentSeq: number,
+  courseTopic: string,
+): Promise<void> {
   const pending = await db
     .select({
       id: lessonBlocks.id,
@@ -397,25 +424,7 @@ async function preGenerateNextBlock(lessonId: string, currentSeq: number, course
     .orderBy(asc(lessonBlocks.sequenceOrder))
     .limit(2);
 
-  for (const row of pending) {
-    const c = row.generatedContent as Record<string, unknown>;
-    if (!c?._pending) continue;
-    try {
-      const generated = await generateBlockContent({
-        blockType: row.blockType as BlockType,
-        conceptName: (c.conceptName as string) ?? row.blockType,
-        bloomLevel: (c.bloomLevel as BloomLevel) ?? "understand",
-        lessonTitle: (c.lessonTitle as string) ?? "",
-        moduleTitle: (c.moduleTitle as string) ?? "",
-        courseTopic: (c.courseTopic as string) ?? courseTopic,
-      });
-      await db
-        .update(lessonBlocks)
-        .set({ generatedContent: generated })
-        .where(eq(lessonBlocks.id, row.id));
-    } catch (err) {
-      console.error("[pre-generate] block failed:", err);
-      break;
-    }
-  }
+  // Only 2 blocks in flight → concurrency=2 is both faster than serial and
+  // safely within upstream rate limits.
+  await preGeneratePendingBlocks(pending, courseTopic, { concurrency: 2 });
 }

@@ -17,7 +17,11 @@ export {
   type CatchUpSuggestion,
   type WelcomeBackResult,
 } from "./path-engine";
-export { generateBlockContent } from "./blocks";
+export {
+  generateBlockContent,
+  preGeneratePendingBlocks,
+  type PendingLessonBlock,
+} from "./blocks";
 export type {
   BlockContent,
   ConceptBlockContent,

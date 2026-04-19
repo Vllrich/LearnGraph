@@ -1,5 +1,9 @@
 export { generateBlockContent } from "./generate-block";
 export {
+  preGeneratePendingBlocks,
+  type PendingLessonBlock,
+} from "./pre-generate";
+export {
   conceptBlockSchema,
   checkpointBlockSchema,
   practiceBlockSchema,
