@@ -121,6 +121,24 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
     router.push(`/course/${goalId}/learn`);
   }
 
+  // Warm the tRPC cache for the two queries `/learn` fires in sequence
+  // (`getNextLesson` → `getLessonBlocks`). Triggered on hover/focus of the
+  // Start button so by the time `router.push` lands the client already has
+  // the block payload — including `generatedContent` — which shaves an
+  // extra round-trip off first-paint. Idempotent thanks to tRPC/TanStack
+  // Query's 30s default staleTime.
+  async function prefetchLesson() {
+    try {
+      await utils.goals.getNextLesson.prefetch({ goalId });
+      const next = utils.goals.getNextLesson.getData({ goalId });
+      if (next && next.type === "lesson") {
+        void utils.goals.getLessonBlocks.prefetch({ lessonId: next.lesson.id });
+      }
+    } catch {
+      /* best-effort; the real query will retry on the /learn page */
+    }
+  }
+
   function handleSkipModule(moduleId: string) {
     skipMutation.mutate({ moduleId });
   }
@@ -250,6 +268,8 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                       variant="default"
                       className="h-7 gap-1 text-[11px]"
                       onClick={() => handleStartLesson()}
+                      onMouseEnter={() => void prefetchLesson()}
+                      onFocus={() => void prefetchLesson()}
                     >
                       <Play className="size-3" />
                       {status === "in_progress" ? "Continue" : "Start"}

@@ -52,6 +52,60 @@ const BLOCK_LABELS: Record<BlockType, string> = {
 
 type StreamState = "idle" | "streaming" | "done";
 
+// Client-side mirrors of the server's `formatConceptContent` /
+// `formatWorkedExampleContent` in `api/learn/session-v2/route.ts`. Kept in
+// lockstep so a materialized block looks identical whether rendered from the
+// cached tRPC response or from the SSE stream. If either server formatter
+// changes, update the matching one here too.
+function formatConceptContentLocal(content: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (content.text) parts.push(content.text as string);
+  const keyTerms = content.keyTerms as Array<{ term: string; definition: string }> | undefined;
+  if (keyTerms?.length) {
+    parts.push("\n\n**Key Terms:**");
+    for (const kt of keyTerms) {
+      parts.push(`- **${kt.term}**: ${kt.definition}`);
+    }
+  }
+  if (content.mermaidDiagram) {
+    parts.push(`\n\n\`\`\`mermaid\n${content.mermaidDiagram}\n\`\`\``);
+  }
+  return parts.join("\n");
+}
+
+function formatWorkedExampleContentLocal(content: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (content.problemStatement) parts.push(`**Problem:** ${content.problemStatement}`);
+  const steps = content.steps as
+    | Array<{ title: string; explanation: string; keyInsight?: string }>
+    | undefined;
+  if (steps) {
+    for (let i = 0; i < steps.length; i++) {
+      parts.push(`\n### Step ${i + 1}: ${steps[i].title}\n${steps[i].explanation}`);
+      if (steps[i].keyInsight) parts.push(`> **Key insight:** ${steps[i].keyInsight}`);
+    }
+  }
+  if (content.finalAnswer) parts.push(`\n**Answer:** ${content.finalAnswer}`);
+  const mistakes = content.commonMistakes as string[] | undefined;
+  if (mistakes?.length) {
+    parts.push("\n**Common Mistakes to Avoid:**");
+    for (const m of mistakes) parts.push(`- ${m}`);
+  }
+  return parts.join("\n");
+}
+
+function formatReflectionPromptLocal(content: Record<string, unknown>): string {
+  const prompt = (content.prompt as string) ?? "Reflect on what you've learned.";
+  const guiding = (content.guidingQuestions as string[]) ?? [];
+  return guiding.length
+    ? `${prompt}\n\n${guiding.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    : prompt;
+}
+
+function isPending(content: Record<string, unknown> | null | undefined): boolean {
+  return !!content && (content as { _pending?: boolean })._pending === true;
+}
+
 export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -137,6 +191,53 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
   // effect) from interleaving into the same `streamedContent` state.
   const streamAbortRef = useRef<AbortController | null>(null);
 
+  // Cancels any in-flight local (client-side) typing animation. Mirrors the
+  // role of `streamAbortRef` for the network-streamed path: block change or
+  // unmount must halt the previous block's reveal before the next one starts.
+  const localStreamAbortRef = useRef<AbortController | null>(null);
+
+  // Client-side typing reveal for already-materialized content. Matches the
+  // server's `streamText` cadence (3-word chunks, 12 ms between) so UX is
+  // identical whether content comes from cache or SSE. Avoids a full
+  // round-trip through `/api/learn/session-v2` (auth + rate limit + ownership
+  // query + SSE framing) when the block's `generatedContent` is already on
+  // the client from `getLessonBlocks`.
+  const streamLocal = useCallback(
+    async (text: string, options: { instant?: boolean } = {}) => {
+      localStreamAbortRef.current?.abort();
+      const controller = new AbortController();
+      localStreamAbortRef.current = controller;
+      const { signal } = controller;
+
+      setStreamState("streaming");
+      setStreamedContent("");
+      setBlockError(null);
+
+      if (!text) {
+        if (!signal.aborted) setStreamState("done");
+        return;
+      }
+
+      if (options.instant) {
+        if (!signal.aborted) {
+          setStreamedContent(text);
+          setStreamState("done");
+        }
+        return;
+      }
+
+      const words = text.split(/(\s+)/);
+      for (let i = 0; i < words.length; i += 3) {
+        if (signal.aborted) return;
+        const chunk = words.slice(i, i + 3).join("");
+        setStreamedContent((prev) => prev + chunk);
+        await new Promise((r) => setTimeout(r, 12));
+      }
+      if (!signal.aborted) setStreamState("done");
+    },
+    [],
+  );
+
   // Stream content from the V2 session API
   const streamBlock = useCallback(
     async (action: string, extra?: Record<string, unknown>) => {
@@ -205,42 +306,81 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
   // Auto-start streaming for concept/worked_example blocks.
   //
-  // Strict Mode runs this effect twice on mount. That's OK: streamBlock aborts
-  // any in-flight previous stream before starting a new one, and the aborted
-  // stream's reader loop skips its remaining setState calls via `signal.aborted`.
-  // So the two passes end up with exactly one live stream (the second), with
-  // no interleaved chunks from the first.
+  // Strict Mode runs this effect twice on mount. That's OK: streamBlock /
+  // streamLocal both abort any in-flight previous stream before starting a
+  // new one, and the aborted reader loops skip their remaining setState
+  // calls via `signal.aborted`. So the two passes end up with exactly one
+  // live stream (the second), with no interleaved chunks from the first.
+  //
+  // Fast path: when `generatedContent` is already materialized (not
+  // `_pending`) on the tRPC cache, we render directly on the client via
+  // `streamLocal` and skip the `/api/learn/session-v2` round-trip entirely.
+  // That removes auth + rate-limit + ownership query + SSE setup (~1 RTT)
+  // from the common case where a user enters a lesson whose blocks are
+  // already warmed up — which is the path the UX pain is on.
+  // Cold path: if the block is still `_pending`, we fall through to
+  // `streamBlock` which also triggers server-side generation + look-ahead
+  // pre-gen for subsequent blocks via `after()`.
   useEffect(() => {
     if (!currentBlock) return;
 
     const type = currentBlock.blockType as BlockType;
+    const content = (currentBlock.generatedContent ?? {}) as Record<string, unknown>;
+    const pending = isPending(content);
+    // Completed-block revisits skip the typing animation — mirrors the
+    // server's `instant` branch so re-entering a finished lesson feels snappy.
+    const instant = currentBlock.status === "completed";
+
     if (type === "concept") {
-      void streamBlock("stream_concept");
+      if (pending) {
+        void streamBlock("stream_concept");
+      } else {
+        void streamLocal(formatConceptContentLocal(content), { instant });
+      }
     } else if (type === "worked_example") {
-      void streamBlock("stream_worked_example");
+      if (pending) {
+        void streamBlock("stream_worked_example");
+      } else {
+        void streamLocal(formatWorkedExampleContentLocal(content), { instant });
+      }
     } else if (type === "checkpoint") {
       // Checkpoints are JSON, not streamed
       void fetchCheckpoint();
     } else if (type === "reflection") {
-      void streamBlock("stream_reflection_prompt");
+      if (pending) {
+        void streamBlock("stream_reflection_prompt");
+      } else {
+        void streamLocal(formatReflectionPromptLocal(content), { instant });
+      }
     } else if (type === "scenario") {
       void fetchScenario();
     } else if (type === "mentor") {
-      void streamBlock("stream_mentor");
+      // The mentor "opening" is just `content.openingPrompt` reformatted —
+      // only the reply path (userAnswer submission) needs the LLM.
+      if (pending) {
+        void streamBlock("stream_mentor");
+      } else {
+        const opening =
+          (content.openingPrompt as string) ?? "Let's explore this topic together.";
+        void streamLocal(opening, { instant });
+      }
     } else if (type === "practice") {
-      const content = currentBlock.generatedContent as Record<string, unknown>;
-      setStreamedContent(content.exercise as string ?? "Complete this exercise.");
+      setStreamedContent((content.exercise as string) ?? "Complete this exercise.");
       setStreamState("done");
     }
 
     return () => {
       streamAbortRef.current?.abort();
+      localStreamAbortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBlock?.id]);
 
   async function fetchCheckpoint() {
     if (!currentBlock) return;
+    // Surface the shared "preparing content" loader while the JSON request
+    // is in flight — keeps parity with the streamed block types.
+    setStreamState("streaming");
     try {
       const res = await fetch("/api/learn/session-v2", {
         method: "POST",
@@ -265,6 +405,9 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
 
   async function fetchScenario() {
     if (!currentBlock) return;
+    // Same rationale as `fetchCheckpoint`: let the first-chunk loader
+    // render for scenarios too while we wait on the JSON payload.
+    setStreamState("streaming");
     try {
       const res = await fetch("/api/learn/session-v2", {
         method: "POST",
@@ -625,6 +768,26 @@ export function LessonPlayer({ goalId, lessonId }: LessonPlayerProps) {
           {blockError && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               {blockError}
+            </div>
+          )}
+
+          {/* First-chunk loader. Bridges the gap between "block mounted" and
+            * "first text arrives" for every stream-shaped block so the pane
+            * never sits blank. For the hot path (materialized content →
+            * `streamLocal`) this loader flashes for a frame or two; for the
+            * cold path (LLM generation, or mentor/practice replies) it's the
+            * visible progress indicator. */}
+          {!blockError && streamState === "streaming" && !streamedContent && (
+            blockType === "concept" ||
+            blockType === "worked_example" ||
+            blockType === "mentor" ||
+            blockType === "reflection" ||
+            blockType === "practice" ||
+            blockType === "scenario"
+          ) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground/70">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Preparing your content…</span>
             </div>
           )}
 
