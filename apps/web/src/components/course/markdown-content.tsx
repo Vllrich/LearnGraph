@@ -129,10 +129,10 @@ function RenderInline({ nodes, keyPrefix }: { nodes: InlineNode[]; keyPrefix: st
                 key={key}
                 content={
                   <div>
-                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                       Key Concept
-                    </p>
-                    <p className="font-semibold text-foreground">{node.content}</p>
+                    </div>
+                    <div className="font-semibold text-foreground">{node.content}</div>
                   </div>
                 }
               >
