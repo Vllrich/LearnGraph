@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GraduationCap } from "lucide-react";
 import type { TeaserCard as TeaserCardData } from "@repo/ai";
 import { TeaserCard } from "./teaser-card";
@@ -38,11 +38,16 @@ const ROTATE_MS = 4_000;
 const TICK_MS = 1_000;
 
 function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
+  // Lazy initializer reads the current value at mount (outside render),
+  // the effect then subscribes only to future *changes* — no synchronous
+  // setState inside the effect body.
+  const [reduced, setReduced] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
     const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
@@ -56,7 +61,10 @@ export function CourseGenerationCurtain(props: Props) {
   const [aiCards, setAiCards] = useState<TeaserCardData[]>([]);
   const [index, setIndex] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const startRef = useRef<number>(Date.now());
+  // `useState` initializer runs exactly once; keeps the mount time
+  // out of the render phase (where calling `Date.now()` would violate
+  // `react-hooks/purity`).
+  const [startedAt] = useState<number>(() => Date.now());
   const reducedMotion = useReducedMotion();
 
   const cards = useMemo<readonly TeaserCardData[]>(
@@ -78,11 +86,11 @@ export function CourseGenerationCurtain(props: Props) {
 
   useEffect(() => {
     const id = setInterval(
-      () => setElapsedMs(Date.now() - startRef.current),
+      () => setElapsedMs(Date.now() - startedAt),
       TICK_MS,
     );
     return () => clearInterval(id);
-  }, []);
+  }, [startedAt]);
 
   useEffect(() => {
     const controller = new AbortController();

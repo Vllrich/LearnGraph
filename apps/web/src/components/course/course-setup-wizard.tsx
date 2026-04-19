@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
+import { CourseGenerationCurtain } from "./course-generation-curtain";
 import type {
   GoalType,
   LearnerLevel,
@@ -188,14 +189,6 @@ function isCustomizeDefaultExpanded(stage: EducationStage): boolean {
 // Generation stage labels
 // ---------------------------------------------------------------------------
 
-const GENERATION_STAGES = [
-  "Mapping concepts...",
-  "Building modules...",
-  "Creating lessons...",
-  "Generating content...",
-  "Ready!",
-];
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -256,7 +249,6 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
 
   // Step 4: Generating
   const [generating, setGenerating] = useState(false);
-  const [genStage, setGenStage] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const [step, setStep] = useState<WizardStep>(0);
@@ -336,12 +328,7 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
   const handleGenerate = useCallback(async () => {
     if (!goalType || !level) return;
     setGenerating(true);
-    setGenStage(0);
     setError(null);
-
-    const stageInterval = setInterval(() => {
-      setGenStage((prev) => Math.min(prev + 1, GENERATION_STAGES.length - 2));
-    }, 8000);
 
     const selectedTopics = enabledTopics.length > 0
       ? enabledTopics.map((t) => ({ title: t.title, description: t.description }))
@@ -366,21 +353,15 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
         }),
       });
 
-      clearInterval(stageInterval);
-
       if (res.ok) {
         const data = await res.json();
-        setGenStage(GENERATION_STAGES.length - 1);
-        setTimeout(() => {
-          router.push(`/course/${data.goalId}`);
-        }, 800);
+        router.push(`/course/${data.goalId}`);
       } else {
         const errData = await res.json().catch(() => ({}));
         setError(errData.error ?? "Something went wrong. Please try again.");
         setGenerating(false);
       }
     } catch {
-      clearInterval(stageInterval);
       setError("Network error. Please check your connection.");
       setGenerating(false);
     }
@@ -432,7 +413,6 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
       setShowOnboarding(false);
       setOnboardingStage(null);
       setGenerating(false);
-      setGenStage(0);
       setError(null);
     }
   }, [open]);
@@ -864,36 +844,13 @@ export function CourseSetupWizard({ open, onOpenChange, topic }: CourseSetupWiza
           {/* Step 4: Review & Generate */}
           {!showOnboarding && step === 4 && (
             <div className="space-y-5">
-              {generating ? (
-                <div className="flex flex-col items-center gap-6 py-12">
-                  <div className="relative size-24">
-                    <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_8s_linear_infinite]">
-                      <circle cx="48" cy="8" r="5" className="fill-primary/80" />
-                      <circle cx="88" cy="48" r="4" className="fill-primary/50" />
-                      <circle cx="48" cy="88" r="5" className="fill-primary/80" />
-                      <circle cx="8" cy="48" r="4" className="fill-primary/50" />
-                    </svg>
-                    <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_4s_linear_infinite_reverse]">
-                      <circle cx="48" cy="48" r="36" fill="none" strokeWidth="1.5"
-                        className="stroke-primary/20" strokeDasharray="12 8"
-                      />
-                    </svg>
-                    <svg viewBox="0 0 96 96" className="absolute inset-0 size-full animate-[spin_12s_linear_infinite]">
-                      <circle cx="48" cy="48" r="22" fill="none" strokeWidth="1.5"
-                        className="stroke-primary/30" strokeDasharray="6 10"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <GraduationCap className="size-8 text-primary" />
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium">{GENERATION_STAGES[genStage]}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Creating a personalized course for {topic}
-                    </p>
-                  </div>
-                </div>
+              {generating && goalType && level ? (
+                <CourseGenerationCurtain
+                  topic={topic}
+                  goalType={goalType}
+                  currentLevel={level}
+                  educationStage={userStage ?? undefined}
+                />
               ) : (
                 <>
                   <div>

@@ -89,7 +89,6 @@ describe("POST /api/learn/teasers", () => {
     });
     // Stream that yields nothing and returns immediately.
     vi.mocked(generateTeaserCardsStream).mockImplementation(
-      // eslint-disable-next-line require-yield
       async function* () {
         return;
       } as never,
