@@ -658,6 +658,65 @@ export const goalsRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  /**
+   * Retry generation for a single failed module.
+   *
+   * The generation job runs under Next.js `after()` so the tRPC response
+   * flushes immediately and the client starts receiving SSE events as soon
+   * as the row flips to `generating`. Idempotent at the module row level:
+   * `regenerateSingleModule` short-circuits if the module is already
+   * `ready`, and `runSingleModuleJob` atomically bumps `generation_attempt`
+   * on entry so concurrent retries converge on a single in-flight job.
+   */
+  retryModuleGeneration: protectedProcedure
+    .input(z.object({ moduleId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [mod] = await db
+        .select({
+          id: courseModules.id,
+          goalId: courseModules.goalId,
+          generationStatus: courseModules.generationStatus,
+        })
+        .from(courseModules)
+        .innerJoin(learningGoals, eq(learningGoals.id, courseModules.goalId))
+        .where(
+          and(
+            eq(courseModules.id, input.moduleId),
+            eq(learningGoals.userId, ctx.userId),
+          ),
+        )
+        .limit(1);
+
+      if (!mod) throw new TRPCError({ code: "NOT_FOUND" });
+      if (mod.generationStatus === "ready") {
+        return { status: "ready" as const };
+      }
+      if (mod.generationStatus === "generating") {
+        // Already in flight — just reflect current state.
+        return { status: "generating" as const };
+      }
+
+      // Fire-and-forget the regeneration so this mutation returns fast and
+      // the client transitions to a "retrying..." state via SSE as soon as
+      // `runSingleModuleJob` flips the row to `generating`.
+      after(async () => {
+        try {
+          const { regenerateSingleModule } = await import("@repo/ai");
+          await regenerateSingleModule({
+            goalId: mod.goalId,
+            moduleId: mod.id,
+          });
+        } catch (err) {
+          // `regenerateSingleModule` already persists the failure reason on
+          // the module row and recomputes goal-level status. This catch is
+          // just a last-chance log so nothing silently swallows the error.
+          console.error("[goals.retryModuleGeneration] background job threw:", err);
+        }
+      });
+
+      return { status: "retrying" as const };
+    }),
+
   getCourseProgress: protectedProcedure
     .input(z.object({ goalId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   jsonb,
+  boolean,
   index,
   check,
 } from "drizzle-orm/pg-core";
@@ -28,6 +29,22 @@ export const courseModules = pgTable(
     status: text("status").default("locked"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    // Per-module generation lifecycle (migration 0003). Independent from
+    // `status` — `status` is the learner-path state (locked/available/...),
+    // `generation_status` is the content-production state
+    // (pending/generating/ready/failed). A module can only be `available` to
+    // the learner once `generation_status = 'ready'`.
+    generationStatus: text("generation_status").notNull().default("ready"),
+    generationAttempt: integer("generation_attempt").notNull().default(0),
+    generationResponseId: text("generation_response_id"),
+    generationError: text("generation_error"),
+    generationStartedAt: timestamp("generation_started_at", { withTimezone: true }),
+    generationCompletedAt: timestamp("generation_completed_at", { withTimezone: true }),
+    generationPromptTokens: integer("generation_prompt_tokens"),
+    generationCompletionTokens: integer("generation_completion_tokens"),
+    generationTotalLatencyMs: integer("generation_total_latency_ms"),
+    generationDegradedMode: boolean("generation_degraded_mode").notNull().default(false),
+    generationSchemaVersion: integer("generation_schema_version").notNull().default(1),
   },
   (table) => [
     index("idx_course_modules_goal").on(table.goalId, table.sequenceOrder),

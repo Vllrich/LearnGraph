@@ -12,18 +12,25 @@ import {
   AlertTriangle,
   Sparkles,
   Brain,
+  RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { parseStoredGenerationError } from "@repo/shared";
+import { parseStoredGenerationError, isProgressiveCourseGenEnabled } from "@repo/shared";
 import { toast } from "sonner";
+import { useCourseEvents } from "@/hooks/use-course-events";
 
 // If generation stays in 'generating' for longer than this, stop polling and
 // show a "taking longer than usual" hint. The server-side cron sweeper (follow-
 // up work) uses the same window to flip stuck jobs to 'failed'.
 const GENERATION_POLL_MAX_MS = 15 * 60_000;
+
+// Delay before auto-routing the learner into module 1's lesson 1 once that
+// module becomes ready. Short enough that it feels immediate, long enough that
+// the learner can hit "Stay on roadmap" if they want to preview the rest.
+const AUTO_REDIRECT_MS = 800;
 
 
 
@@ -44,33 +51,72 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
   const utils = trpc.useUtils();
   const [pollStartedAt] = useState(() => Date.now());
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const [autoRedirected, setAutoRedirected] = useState(false);
   const { data, isLoading, error } = trpc.goals.getCourseRoadmap.useQuery(
     { goalId },
     {
-      // Poll while the background course generation (Phase 2) is still
-      // running so new modules / lessons flow in without a manual refresh.
-      // Stop polling the moment the goal flips to 'ready' or 'failed', or
-      // after `GENERATION_POLL_MAX_MS` — whichever comes first. The hard cap
-      // stops a left-open tab from polling forever if Phase 2 genuinely
-      // hangs without updating the row (the cron sweeper will eventually
-      // flip it to 'failed', but we don't want to wait on that client-side).
+      // REST is the source of truth. While the course is still generating,
+      // fall back to a slower poll (10s) so a user who lost the SSE
+      // connection still converges on the correct state. The SSE event
+      // stream (below) provides the fast path — its events `invalidate`
+      // this query as they arrive, which is what keeps the UI snappy.
       refetchInterval: (query) => {
         if (query.state.data?.goal.generationStatus !== "generating") return false;
         if (Date.now() - pollStartedAt > GENERATION_POLL_MAX_MS) return false;
-        return 3_000;
+        return 10_000;
       },
       refetchIntervalInBackground: false,
     },
   );
 
-  // Mirror the `refetchInterval` hard-cap into React state so the UI can
-  // switch messaging once we stop polling without the goal having moved.
+  const goalStatus = data?.goal.generationStatus;
+  // Progressive UI behaviors (SSE subscription, skeleton pills, auto-redirect)
+  // are gated on a single flag so the rollout can be toggled instantly
+  // without a redeploy. When the flag is OFF the roadmap degrades to the
+  // pre-progressive UX: slow tRPC polling, no auto-redirect, no pills.
+  const progressiveUiEnabled = isProgressiveCourseGenEnabled();
+  const sseEnabled = progressiveUiEnabled && goalStatus === "generating";
+  const events = useCourseEvents(goalId, sseEnabled);
+
+  // Whenever an SSE event lands, invalidate the tRPC cache so the roadmap
+  // picks up the new per-module state from the source of truth. This keeps
+  // the rendered tree a pure function of the DB — the SSE events are just
+  // a "wake up" signal.
+  useEffect(() => {
+    if (!sseEnabled) return;
+    void utils.goals.getCourseRoadmap.invalidate({ goalId });
+  }, [events.modulesById, events.goalStatus, sseEnabled, utils, goalId]);
+
+  // Auto-redirect into lesson 1 the instant module 1's generation flips to
+  // `ready`. Spec behavior: as soon as the first lesson is playable the
+  // learner goes straight there — roadmap is still reachable via the back
+  // button + the toast offers a "Stay here" option.
+  const firstModule = data?.modules[0];
+  const firstModuleReady = firstModule?.generationStatus === "ready";
+  useEffect(() => {
+    if (!progressiveUiEnabled) return;
+    if (autoRedirected) return;
+    if (!firstModuleReady) return;
+    // Only auto-redirect on an in-flight course. If the user navigated
+    // back to the roadmap for an already-completed or already-ready
+    // course, don't hijack their navigation.
+    if (goalStatus !== "generating" && goalStatus !== "ready") return;
+    const completedAny = data?.modules.some((m) =>
+      m.lessons.some((l) => l.status === "completed"),
+    );
+    if (completedAny) return;
+
+    const t = setTimeout(() => {
+      setAutoRedirected(true);
+      router.push(`/course/${goalId}/learn`);
+    }, AUTO_REDIRECT_MS);
+    return () => clearTimeout(t);
+  }, [progressiveUiEnabled, autoRedirected, firstModuleReady, goalStatus, data?.modules, goalId, router]);
+
+  // Mirror the REST poll hard-cap into React state so the UI can switch
+  // messaging once we stop polling without the goal having moved.
   useEffect(() => {
     if (data?.goal.generationStatus !== "generating") return;
-    // Use `setTimeout` even for already-elapsed deadlines so the state
-    // update happens in a later tick rather than synchronously inside the
-    // effect body (avoids cascading renders flagged by
-    // `react-hooks/set-state-in-effect`).
     const remaining = Math.max(
       0,
       GENERATION_POLL_MAX_MS - (Date.now() - pollStartedAt),
@@ -85,6 +131,16 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
     },
     onError: (err) => {
       toast.error(err.message || "Failed to skip module");
+    },
+  });
+
+  const retryMutation = trpc.goals.retryModuleGeneration.useMutation({
+    onSuccess: () => {
+      void utils.goals.getCourseRoadmap.invalidate({ goalId });
+      toast.success("Retrying module…");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to retry module");
     },
   });
 
@@ -213,6 +269,27 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
           const isLocked = status === "locked";
           const isCompleted = status === "completed" || status === "skipped";
           const isActive = status === "in_progress" || status === "available";
+          // Per-module generation lifecycle (columns added in migration
+          // 0003). A module with `status=available` but
+          // `generationStatus != 'ready'` is *not yet playable* — its
+          // lesson block outlines haven't been persisted. The card
+          // renders as a skeleton until it catches up.
+          const generationStatus = mod.generationStatus as
+            | "pending"
+            | "generating"
+            | "ready"
+            | "failed"
+            | undefined;
+          // Per-module lifecycle UI (skeleton pill, retry affordance) is
+          // only surfaced when the progressive flag is ON. When OFF the
+          // roadmap falls back to the legacy all-or-nothing UX — generation
+          // state is communicated by the goal-level banner alone.
+          const isGeneratingModule =
+            progressiveUiEnabled &&
+            (generationStatus === "pending" || generationStatus === "generating");
+          const isFailedModule =
+            progressiveUiEnabled && generationStatus === "failed";
+          const isPlayable = !isGeneratingModule && !isFailedModule;
 
           return (
             <div
@@ -221,13 +298,19 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                 "rounded-xl border transition-all",
                 styles.border,
                 styles.bg,
-                isLocked && "opacity-60",
+                (isLocked || isGeneratingModule) && "opacity-60",
+                isGeneratingModule && "animate-pulse",
               )}
+              aria-busy={isGeneratingModule || undefined}
             >
               {/* Module header */}
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg border", styles.border)}>
-                  {isCompleted ? (
+                  {isGeneratingModule ? (
+                    <Loader2 className={cn("size-4 animate-spin", styles.icon)} />
+                  ) : isFailedModule ? (
+                    <AlertTriangle className="size-4 text-destructive" />
+                  ) : isCompleted ? (
                     <CheckCircle2 className={cn("size-4", styles.icon)} />
                   ) : isLocked ? (
                     <Lock className={cn("size-4", styles.icon)} />
@@ -246,12 +329,26 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                         {mod.moduleType}
                       </span>
                     )}
+                    {isGeneratingModule && (
+                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium uppercase text-primary">
+                        Generating
+                      </span>
+                    )}
+                    {isFailedModule && (
+                      <span className="rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-medium uppercase text-destructive">
+                        Failed
+                      </span>
+                    )}
                   </div>
-                  {mod.description && (
+                  {mod.description ? (
                     <p className="mt-0.5 text-[11px] text-muted-foreground/50 line-clamp-1">
                       {mod.description}
                     </p>
-                  )}
+                  ) : isGeneratingModule ? (
+                    // Placeholder bar while we don't yet have description
+                    // text. Maintains visual rhythm during skeleton state.
+                    <div className="mt-1 h-1.5 w-32 rounded bg-muted-foreground/15" />
+                  ) : null}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
@@ -262,7 +359,20 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                     </span>
                   )}
 
-                  {isActive && (
+                  {isFailedModule && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1 text-[11px]"
+                      onClick={() => retryMutation.mutate({ moduleId: mod.id })}
+                      disabled={retryMutation.isPending}
+                    >
+                      <RotateCw className={cn("size-3", retryMutation.isPending && "animate-spin")} />
+                      Retry
+                    </Button>
+                  )}
+
+                  {isActive && isPlayable && (
                     <Button
                       size="sm"
                       variant="default"
@@ -276,7 +386,7 @@ export function CourseRoadmap({ goalId }: CourseRoadmapProps) {
                     </Button>
                   )}
 
-                  {mod.skipEligible && !isCompleted && (
+                  {mod.skipEligible && !isCompleted && isPlayable && (
                     <Button
                       size="sm"
                       variant="outline"

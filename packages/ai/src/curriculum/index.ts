@@ -1,10 +1,15 @@
 export {
   generateCourseSkeleton,
   completeCourseGeneration,
+  regenerateSingleModule,
   rehydrateSkeletonFromDb,
+  findStuckGenerations,
+  findStuckModules,
+  claimStuckModuleForSweep,
   MAX_GENERATION_ERROR_LENGTH,
   type CourseSkeleton,
   type ModularCourseInput,
+  type StuckModule,
 } from "./generate-modular";
 export {
   getEducationStagePrompt,

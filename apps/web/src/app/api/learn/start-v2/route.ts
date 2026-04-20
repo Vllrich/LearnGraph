@@ -15,7 +15,11 @@ import {
   LEARNING_MODES,
   categorizeGenerationError,
   formatStoredGenerationError,
+  isProgressiveCourseGenEnabled,
+  createLogger,
 } from "@repo/shared";
+
+const log = createLogger("api/learn/start-v2");
 import type { GoalType } from "@repo/shared";
 
 export const maxDuration = 300;
@@ -148,6 +152,19 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Log which path this request follows so we can correlate rollout
+  // metrics (TTFL, failure rate) against flag state without grepping a
+  // separate source. The backend generation pipeline itself is currently
+  // identical whether or not the flag is on — the flag only controls the
+  // UX (SSE, skeletons, auto-redirect) — but this gives ops a single
+  // dimension to slice on during rollout.
+  const progressiveEnabled = isProgressiveCourseGenEnabled();
+  log.info("start.accept", {
+    goalType: parsed.data.goalType,
+    learningMode: parsed.data.learningMode,
+    progressiveEnabled,
+  });
 
   let skeleton: CourseSkeleton;
   try {
