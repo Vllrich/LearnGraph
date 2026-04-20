@@ -66,40 +66,43 @@ async function getGapSuggestions(
     mastery: number;
   }[]
 > {
-  const goalRows = await db
-    .select({ id: learningGoals.id, title: learningGoals.title })
-    .from(learningGoals)
-    .where(
-      and(eq(learningGoals.userId, userId), eq(learningGoals.status, "active"))
-    );
-
-  if (goalRows.length === 0) return [];
-
-  const states = await db
-    .select({
-      conceptId: userConceptState.conceptId,
-      mastery: userConceptState.masteryLevel,
-      conceptName: concepts.displayName,
-      domain: concepts.domain,
-    })
-    .from(userConceptState)
-    .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
-    .where(
-      and(
-        eq(userConceptState.userId, userId),
-        sql`COALESCE(${userConceptState.masteryLevel}, 0) <= 2`
+  const [goalRows, states] = await Promise.all([
+    db
+      .select({ id: learningGoals.id })
+      .from(learningGoals)
+      .where(
+        and(eq(learningGoals.userId, userId), eq(learningGoals.status, "active"))
       )
-    );
+      .limit(1),
+    db
+      .select({
+        conceptId: userConceptState.conceptId,
+        mastery: userConceptState.masteryLevel,
+        conceptName: concepts.displayName,
+        domain: concepts.domain,
+      })
+      .from(userConceptState)
+      .innerJoin(concepts, eq(userConceptState.conceptId, concepts.id))
+      .where(
+        and(
+          eq(userConceptState.userId, userId),
+          sql`COALESCE(${userConceptState.masteryLevel}, 0) <= 2`
+        )
+      ),
+  ]);
 
-  if (states.length === 0) return [];
+  if (goalRows.length === 0 || states.length === 0) return [];
 
   const weakIds = states.map((s) => s.conceptId);
-  const prereqEdges = await db
+
+  // Single joined query: prerequisite edges + target concept names
+  const prereqRows = await db
     .select({
       sourceId: conceptEdges.sourceId,
-      targetId: conceptEdges.targetId,
+      targetName: concepts.displayName,
     })
     .from(conceptEdges)
+    .innerJoin(concepts, eq(concepts.id, conceptEdges.targetId))
     .where(
       and(
         eq(conceptEdges.edgeType, "prerequisite"),
@@ -108,22 +111,10 @@ async function getGapSuggestions(
     );
 
   const prereqForMap = new Map<string, string[]>();
-  const targetConceptIds = new Set(prereqEdges.map((e) => e.targetId));
-  let targetNameMap = new Map<string, string>();
-
-  if (targetConceptIds.size > 0) {
-    const targetRows = await db
-      .select({ id: concepts.id, name: concepts.displayName })
-      .from(concepts)
-      .where(inArray(concepts.id, Array.from(targetConceptIds)));
-    targetNameMap = new Map(targetRows.map((r) => [r.id, r.name]));
-  }
-
-  for (const e of prereqEdges) {
-    const list = prereqForMap.get(e.sourceId) ?? [];
-    const name = targetNameMap.get(e.targetId);
-    if (name) list.push(name);
-    prereqForMap.set(e.sourceId, list);
+  for (const row of prereqRows) {
+    const list = prereqForMap.get(row.sourceId) ?? [];
+    list.push(row.targetName);
+    prereqForMap.set(row.sourceId, list);
   }
 
   return states
