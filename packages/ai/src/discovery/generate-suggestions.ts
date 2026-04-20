@@ -25,7 +25,7 @@ export async function generateTopicHook(
     schema: topicHookSchema,
     prompt: `Generate a curiosity-sparking hook for the topic "${conceptName}"${domain ? ` (domain: ${domain})` : ""}.
 The hook should make someone immediately want to learn more. Use a surprising fact, counterintuitive insight, or compelling question. Max 20 words.`,
-    maxTokens: 150,
+    maxOutputTokens: 150,
   });
 
   return object;

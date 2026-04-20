@@ -1,4 +1,4 @@
-import { streamText, tool } from "ai";
+import { streamText, tool, stepCountIs } from "ai";
 import { z } from "zod";
 import { primaryModel } from "../models";
 import { retrieveChunks } from "../rag";
@@ -155,7 +155,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
     tools: {
       retrieve_content: tool({
         description: "Search for more relevant content from the user's learning materials",
-        parameters: z.object({
+        inputSchema: z.object({
           query: z.string().max(500).describe("Search query to find relevant content"),
         }),
         execute: async ({ query }) => {
@@ -173,7 +173,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
       }),
       check_knowledge_state: tool({
         description: "Check the student's mastery level for a specific concept",
-        parameters: z.object({
+        inputSchema: z.object({
           conceptName: z.string().max(200).describe("Name of the concept to check"),
         }),
         execute: async ({ conceptName }) => {
@@ -215,7 +215,7 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
       generate_quiz: tool({
         description:
           "Generate an inline quiz question for a concept to test the student's understanding",
-        parameters: z.object({
+        inputSchema: z.object({
           conceptName: z.string().max(200).describe("Concept to quiz on"),
           difficulty: z.number().min(1).max(5).describe("Difficulty level 1-5, use 3 if unsure"),
         }),
@@ -253,8 +253,8 @@ export async function streamMentorResponse(opts: MentorStreamOpts) {
         },
       }),
     },
-    maxSteps: 8,
-    maxTokens: 1500,
+    stopWhen: stepCountIs(8),
+    maxOutputTokens: 1500,
     temperature: 0.4,
   });
 

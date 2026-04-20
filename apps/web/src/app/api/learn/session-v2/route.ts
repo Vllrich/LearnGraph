@@ -341,7 +341,7 @@ Respond in 2–4 short sentences: acknowledge what's correct, then point out the
   const result = aiStreamText({
     model: primaryModel,
     prompt,
-    maxTokens: 300,
+    maxOutputTokens: 300,
   });
   return { textStream: result.textStream };
 }
@@ -354,7 +354,7 @@ async function evaluateExplainBackScore(
   const result = await generateObject({
     model: primaryModel,
     schema,
-    maxTokens: 150,
+    maxOutputTokens: 150,
     prompt: `Rate the learner's reflection about "${conceptTitle}" on a 0–100 scale for accuracy, completeness, and clarity combined.
 
 <learner_response>${explanation}</learner_response>

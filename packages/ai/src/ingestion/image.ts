@@ -49,7 +49,7 @@ Return ONLY the extracted content, no commentary.`,
         ],
       },
     ],
-    maxTokens: 4096,
+    maxOutputTokens: 4096,
   });
 
   const trimmed = text.trim();

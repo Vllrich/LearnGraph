@@ -1,5 +1,5 @@
 import { generateObject, NoObjectGeneratedError } from "ai";
-import { structuredPrimaryModel, structuredFallbackModel } from "../../models";
+import { structuredPrimaryModel, structuredFallbackModel, structuredProviderOptions } from "../../models";
 import { getProfilePrompt, getEducationStagePrompt } from "../method-defaults";
 import type { BlockType, BloomLevel, LearnerProfile } from "@repo/shared";
 import {
@@ -117,7 +117,8 @@ ${groundingContext}`;
         schema: schema as any,
         prompt,
         temperature,
-        maxTokens: MAX_TOKENS,
+        maxOutputTokens: MAX_TOKENS,
+        providerOptions: structuredProviderOptions,
       });
       return object as BlockContent;
     } catch (err) {

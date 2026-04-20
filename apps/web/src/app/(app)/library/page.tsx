@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   FileText,
-  Youtube,
+  CirclePlay,
   Search,
   Loader2,
   Trash2,
@@ -179,7 +179,7 @@ function LibraryCard({ item, onDelete }: { item: ContentItem; onDelete: (id: str
     >
       <div className="flex h-28 items-center justify-center bg-muted/30">
         {item.sourceType === "youtube" ? (
-          <Youtube className="size-8 text-red-500/40" />
+          <CirclePlay className="size-8 text-red-500/40" />
         ) : item.sourceType === "pdf" ? (
           <FileType2 className="size-8 text-red-600/40" />
         ) : (
@@ -292,7 +292,7 @@ function LibraryListItem({
   const isReady = item.status === "ready";
   const isProcessing = item.status === "processing";
   const Icon =
-    item.sourceType === "youtube" ? Youtube : item.sourceType === "pdf" ? FileType2 : FileText;
+    item.sourceType === "youtube" ? CirclePlay : item.sourceType === "pdf" ? FileType2 : FileText;
   const iconColor =
     item.sourceType === "youtube"
       ? "text-red-500/80"

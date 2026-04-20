@@ -63,7 +63,7 @@ async function generateTitle(textSample: string): Promise<string | null> {
     const { text } = await generateText({
       model: openai("gpt-4.1-mini"),
       prompt: `Generate a short, descriptive title (max 10 words) for this audio transcription. Return ONLY the title, nothing else.\n\n${textSample}`,
-      maxTokens: 30,
+      maxOutputTokens: 30,
     });
     return text.trim().replace(/^["']|["']$/g, "") || null;
   } catch {

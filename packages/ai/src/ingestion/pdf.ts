@@ -1,5 +1,5 @@
 import { extractText, getMeta } from "unpdf";
-import { generateText, type CoreMessage } from "ai";
+import { generateText, type ModelMessage } from "ai";
 import { primaryModel } from "../models";
 
 export type PdfResult = {
@@ -64,7 +64,7 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfResult> {
 }
 
 async function extractTextViaLLM(buffer: Buffer): Promise<string> {
-  const messages: CoreMessage[] = [
+  const messages: ModelMessage[] = [
     {
       role: "user",
       content: [
@@ -75,7 +75,7 @@ async function extractTextViaLLM(buffer: Buffer): Promise<string> {
         {
           type: "file",
           data: buffer,
-          mimeType: "application/pdf",
+          mediaType: "application/pdf",
         },
       ],
     },
@@ -84,7 +84,7 @@ async function extractTextViaLLM(buffer: Buffer): Promise<string> {
   const { text } = await generateText({
     model: primaryModel,
     messages,
-    maxTokens: 16000,
+    maxOutputTokens: 16000,
   });
 
   return text;

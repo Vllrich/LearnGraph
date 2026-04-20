@@ -16,8 +16,8 @@
     "clean": "rm -rf dist .turbo"
   },
   "devDependencies": {
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
   },
   "dependencies": {
     "@upstash/ratelimit": "^2.0.8",

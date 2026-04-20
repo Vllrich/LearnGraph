@@ -3,6 +3,7 @@ export {
   fallbackModel,
   structuredPrimaryModel,
   structuredFallbackModel,
+  structuredProviderOptions,
   embeddingModel,
 } from "./models";
 export * from "./ingestion";

@@ -9,7 +9,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Presentation,
-  Youtube,
+  CirclePlay,
 } from "lucide-react";
 import { trpc } from "@/trpc/client";
 
@@ -43,7 +43,7 @@ export function RelatedContentTab({ learningObjectId }: { learningObjectId: stri
       {related.map((lo) => {
         const Icon =
           lo.sourceType === "youtube"
-            ? Youtube
+            ? CirclePlay
             : lo.sourceType === "url"
               ? Globe
               : lo.sourceType === "pptx"

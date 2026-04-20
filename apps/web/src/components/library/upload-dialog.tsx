@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Upload,
   FileText,
-  Youtube,
+  CirclePlay,
   X,
   Loader2,
   CheckCircle2,
@@ -323,7 +323,7 @@ export function UploadDialog({ open, onOpenChange, defaultTab }: UploadDialogPro
         <div className="mx-6 flex gap-1 rounded-xl bg-muted/60 p-1">
           {[
             { key: "file" as const, icon: Upload, label: "File" },
-            { key: "youtube" as const, icon: Youtube, label: "YouTube" },
+            { key: "youtube" as const, icon: CirclePlay, label: "YouTube" },
             { key: "web" as const, icon: Globe, label: "Web URL" },
           ].map(({ key, icon: Icon, label }) => (
             <button
@@ -456,7 +456,7 @@ export function UploadDialog({ open, onOpenChange, defaultTab }: UploadDialogPro
                 {isUploading ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
                 ) : (
-                  <Youtube className="mr-2 size-4" />
+                  <CirclePlay className="mr-2 size-4" />
                 )}
                 {isUploading ? "Processing..." : "Add Video"}
               </Button>

@@ -17,7 +17,7 @@ import {
   Search,
   Square,
   Volume2,
-  Youtube,
+  CirclePlay,
 } from "lucide-react";
 import { trpc } from "@/trpc/client";
 import { cn } from "@/lib/utils";
@@ -155,7 +155,7 @@ export default function ContentDetailPage({ params, searchParams }: Props) {
 
   const sourceIcon =
     data.sourceType === "youtube" ? (
-      <Youtube className="size-3.5 shrink-0 text-red-500/80" />
+      <CirclePlay className="size-3.5 shrink-0 text-red-500/80" />
     ) : data.sourceType === "url" ? (
       <Globe className="size-3.5 shrink-0 text-blue-500/80" />
     ) : data.sourceType === "pptx" ? (

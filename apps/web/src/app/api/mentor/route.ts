@@ -127,13 +127,13 @@ export async function POST(req: NextRequest) {
         for await (const part of result.fullStream) {
           if (part.type === "text-delta") {
             chunkCount++;
-            fullResponse += part.textDelta;
+            fullResponse += part.text;
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "text", text: part.textDelta })}\n\n`),
+              encoder.encode(`data: ${JSON.stringify({ type: "text", text: part.text })}\n\n`),
             );
           } else if (part.type === "tool-call") {
             toolCalls.push(part.toolName);
-            log.debug("Tool call", { tool: part.toolName, args: part.args });
+            log.debug("Tool call", { tool: part.toolName, args: part.input });
           } else if (part.type === "tool-result") {
             log.debug("Tool result", { tool: (part as Record<string, unknown>).toolName });
           } else if (part.type === "error") {

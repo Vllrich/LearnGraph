@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { streamObject } from "ai";
-import { structuredPrimaryModel } from "../models";
+import { structuredPrimaryModel, structuredProviderOptions } from "../models";
 
 /**
  * Schema for a single teaser card shown on the course-generation
@@ -74,6 +74,7 @@ export async function* generateTeaserCardsStream(
     output: "array",
     prompt: buildTeaserPrompt(input),
     abortSignal: options.signal,
+    providerOptions: structuredProviderOptions,
   });
 
   for await (const partial of elementStream) {

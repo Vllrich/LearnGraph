@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   FileText,
-  Youtube,
+  CirclePlay,
   Globe,
   Presentation,
   FileAudio,
@@ -56,7 +56,7 @@ export function LibraryCard({
     <div className="card-modern group relative flex gap-4 p-5">
       <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5">
         {sourceType === "youtube" ? (
-          <Youtube className="size-5 text-red-500" />
+          <CirclePlay className="size-5 text-red-500" />
         ) : sourceType === "url" ? (
           <Globe className="size-5 text-blue-500" />
         ) : sourceType === "pptx" ? (

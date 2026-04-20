@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
   const result = aiStreamText({
     model: primaryModel,
     prompt,
-    maxTokens: 400,
+    maxOutputTokens: 400,
   });
 
   return sseResponse(sseStream(result.textStream));

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { streamText as aiStreamText, type CoreMessage } from "ai";
+import { streamText as aiStreamText, type ModelMessage } from "ai";
 import { createClient } from "@/lib/supabase/server";
 import { primaryModel } from "@repo/ai";
 import { db, learningGoals, courseLessons, courseModules } from "@repo/db";
@@ -142,8 +142,8 @@ export async function POST(req: NextRequest) {
     surroundingText,
   });
 
-  const messages: CoreMessage[] = [
-    ...history.map<CoreMessage>((m) => ({ role: m.role, content: m.content })),
+  const messages: ModelMessage[] = [
+    ...history.map<ModelMessage>((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: message },
   ];
 
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
     model: primaryModel,
     system,
     messages,
-    maxTokens: 600,
+    maxOutputTokens: 600,
   });
 
   return sseResponse(sseStream(result.textStream));
